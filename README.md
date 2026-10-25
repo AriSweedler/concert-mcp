@@ -245,9 +245,12 @@ Register the server once on the gateway host; OpenClaw keeps a stdio server runn
 ```sh
 openclaw mcp set concert '{"command":"uv","args":["run","--project","/path/to/concert-mcp","concert-mcp","serve"],"env":{"CONCERT_MCP_OPERATOR_NAME":"${CONCERT_MCP_OPERATOR_NAME}","CONCERT_MCP_GWS_BIN":"${CONCERT_MCP_GWS_BIN}","CONCERT_MCP_OPENCLAW_BIN":"${CONCERT_MCP_OPENCLAW_BIN}"},"toolFilter":{"include":["concert_add","calendar_add","event_delete"]},"requestTimeoutMs":480000,"enabled":true}'
 openclaw mcp doctor concert --probe     # starts the server once and lists its tools
-openclaw mcp tools | grep concert__     # the three, as concert__concert_add and so on
+openclaw mcp probe concert              # the three, as concert__concert_add and so on
+openclaw config set tools.alsoAllow '["exec","read","concert__concert_add","concert__calendar_add","concert__event_delete"]'
 openclaw mcp reload                     # after changing the entry, without restarting the gateway
 ```
+
+The `tools.alsoAllow` line matters when the agent runs the `minimal` tool profile (the usual setup for a small local model): that profile hides every tool it does not name, MCP tools included, and the model then answers "I don't have a calendar tool". Keep whatever the list already holds and add the three `concert__` names; `openclaw config get tools.alsoAllow` shows it.
 
 The entry exposes three tools: `concert_add`, `calendar_add` and `event_delete`, the three jobs a chat message asks for. The other four (`teaser_playlist`, `setlist_find`, `queue_status`, `healthcheck`) are operator jobs the CLI already covers, and `concert_add` runs the first two itself; a 9B model given all seven is more likely to call one of them instead of `concert_add`. To expose them anyway, drop `toolFilter` from the entry: the server always registers all seven.
 

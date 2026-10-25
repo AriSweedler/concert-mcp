@@ -53,8 +53,9 @@ On the gateway host, with `$HOMELAB` the absolute path of the homelab checkout:
 HOMELAB=/path/to/homelab
 openclaw mcp set concert '{"command":"uv","args":["run","--project","'"$HOMELAB"'/apps/concert-mcp","concert-mcp","serve"],"cwd":"'"$HOMELAB"'/apps/concert-mcp","env":{"CONCERT_MCP_OPERATOR_NAME":"${CONCERT_MCP_OPERATOR_NAME}","CONCERT_MCP_TZ":"${CONCERT_MCP_TZ}","CONCERT_MCP_GWS_BIN":"${CONCERT_MCP_GWS_BIN}","CONCERT_MCP_OPENCLAW_BIN":"${CONCERT_MCP_OPENCLAW_BIN}","CONCERT_MCP_LOG_LEVEL":"info"},"toolFilter":{"include":["concert_add","calendar_add","event_delete"]},"requestTimeoutMs":480000,"enabled":true}'
 openclaw mcp doctor concert --probe
+openclaw config set tools.alsoAllow '["exec","read","concert__concert_add","concert__calendar_add","concert__event_delete"]'
 openclaw mcp reload
-openclaw mcp tools | grep concert__
+openclaw mcp probe concert
 ```
 
 - `cwd` is the submodule so `uv run` finds the project's lockfile and virtual environment without a `--project` lookup from wherever the gateway was started.
@@ -62,6 +63,7 @@ openclaw mcp tools | grep concert__
 - `requestTimeoutMs` is 480000: a cold `concert_add` typically takes 60 to 150 s (Liked Songs fetch, teaser cap, gws, Telegram) and about 8 minutes when every provider sits at its cap. The default 60 s cuts the call off after the calendar insert and before the reply.
 - `CONCERT_MCP_GWS_BIN` and `CONCERT_MCP_OPENCLAW_BIN` matter only when the gateway's PATH has neither binary and they live outside `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`; unset, the package searches those three after PATH.
 - The `${VAR}` placeholders expand from the gateway's environment at launch; an unset one expands to empty, which the package treats as "use the default" (`Admin`, `America/Los_Angeles`). Set them in the gateway's environment, or replace the placeholders with literal values, but keep the values out of this repository.
+- `tools.alsoAllow` is needed when the agent runs the `minimal` tool profile, which hides every tool it does not name, MCP tools included; keep what the list already holds and add the three `concert__` names (`openclaw config get tools.alsoAllow` shows it).
 - `openclaw mcp doctor concert --probe` starts the server once and lists its tools; `openclaw mcp reload` picks up a changed entry without restarting the gateway. Credentials added later (`concert-mcp spotify auth`, `setlist-auth`) need no reload: the server reads the files lazily on the next call.
 
 The same command without `cwd`, for a standalone checkout, is in the package README under "OpenClaw configuration".

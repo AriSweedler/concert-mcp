@@ -1065,7 +1065,7 @@ The scaffold writes the value dataclasses (`TeaserResult`, `SetlistResult`, `Can
 Integration (after every unit lands): `uv run ruff check . && uv run ruff format --check . && uv run pytest -q`, then
 on the laptop `uv run concert-mcp healthcheck --probe`, `uv run concert-mcp add --concert --dry-run --no-send --title
 'ZZZ Test Band' --start '2026-11-20 20:00' --location 'ZZZ Hall'`, `openclaw mcp doctor concert --probe`,
-`openclaw mcp tools | grep concert__`, then one real ticket in a Telegram topic: one message, NO_REPLY from the model,
+`openclaw mcp probe concert`, then one real ticket in a Telegram topic: one message, NO_REPLY from the model,
 topic renamed, the eventedit link opens the event on the phone.
 
 ## 9. pyproject essentials
