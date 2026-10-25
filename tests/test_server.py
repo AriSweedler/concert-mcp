@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("mcp")
 
-from concert_mcp.config import Settings  # noqa: E402
+from concert_mcp.config import Settings, load_settings  # noqa: E402
 from concert_mcp.flows.services import Services  # noqa: E402
 from concert_mcp.result import NEED_USER, NO_REPLY_TEXT  # noqa: E402
 from concert_mcp.server import (  # noqa: E402
@@ -23,7 +23,7 @@ from concert_mcp.server import (  # noqa: E402
     queue_status,
 )
 from concert_mcp.text.reply import NO_CANDIDATES_REPLY, WHICH_EVENT_REPLY  # noqa: E402
-from conftest import make_services  # noqa: E402
+from conftest import make_services, settings_env  # noqa: E402
 from fakes import FakeCalendar  # noqa: E402
 
 SEVEN = {
@@ -226,3 +226,19 @@ def test_event_delete_with_a_bare_number_picks_from_the_candidates_file(svc_cli:
     assert text.startswith("**Removed from Concerts**")
     assert cal.deleted == [("cal-concerts", second["id"])]
     assert svc_cli.state.read_json(svc_cli.settings.candidates_file, None) is None
+
+
+def test_dry_run_setting_makes_concert_add_change_nothing(
+    tmp_path, now: datetime, forum_route, ticket_text: str
+) -> None:
+    env = settings_env(tmp_path) | {"CONCERT_MCP_DRY_RUN": "1"}
+    svc = make_services(load_settings(env, home=tmp_path), now, route=forum_route, text=ticket_text)
+    build_server(svc)
+    text = concert_add(
+        artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry, San Francisco", source_text=ticket_text
+    )
+    assert text.startswith("**Would add to Concerts**")
+    assert text.endswith("NOT SENT: dry run")
+    assert svc.chat.sent == []  # type: ignore[attr-defined]
+    assert svc.calendar.inserted == []  # type: ignore[attr-defined]
+    assert svc.spotify.created == []  # type: ignore[attr-defined]

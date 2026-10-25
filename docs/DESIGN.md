@@ -211,6 +211,7 @@ redacted, with EXISTS / MISSING / LEGACY per path. No default carries personal d
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in "Admin: check `gws auth` on the host." |
 | `CONCERT_MCP_SEND` | `1` | `0` disables reply delivery and topic renames everywhere |
 | `CONCERT_MCP_RENAME_TOPICS` | `1` | |
+| `CONCERT_MCP_DRY_RUN` | `0` | `1` makes every tool change nothing and return the reply it would have sent, `NOT SENT: dry run` |
 | `CONCERT_MCP_LOG_LEVEL` | `info` | `debug` logs every subprocess argv (never tokens); stderr only |
 
 OpenClaw snippet (README, docs/homelab-integration.md):
@@ -966,7 +967,7 @@ def main() -> None                                  # build_server().run() over 
 
 Each tool: `run_tool(lambda: flow(...), svc, tool=name, guard=True)` → return text; the arguments arrive cleaned by
 `Param`'s `BeforeValidator(clean_param)`. The parameters carry `Annotated[Param, Field(description=...)]` so the schema
-has descriptions; the SDK import is the only one outside tests. `concert_add` passes `dry_run=False` always; the CLI owns `--dry-run`.
+has descriptions; the SDK import is the only one outside tests. Every mutating tool passes `dry_run=settings.dry_run` (`CONCERT_MCP_DRY_RUN`, default off), so a whole bot conversation can be rehearsed with nothing written; the CLI also has `--dry-run`.
 
 ### 6.32 `cli.py` — unit **cli**
 

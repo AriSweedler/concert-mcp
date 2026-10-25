@@ -64,6 +64,7 @@ class Settings:
     operator_name: str
     send: bool
     rename_topics: bool
+    dry_run: bool
     log_level: str
     legacy_in_use: frozenset[str]  # field names whose legacy path is the effective one
 
@@ -134,6 +135,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("operator_name", "Admin", "the name in 'Admin: check `gws auth` on the host.'"),
     ("send", "1", "0 disables reply delivery and topic renames everywhere"),
     ("rename_topics", "1", "0 keeps Telegram topic names as they are"),
+    ("dry_run", "0", "1 makes every tool change nothing and return the reply it would have sent, NOT SENT: dry run"),
     ("log_level", "info", "debug logs every subprocess argv (never tokens); stderr only"),
 )
 
@@ -351,6 +353,7 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         operator_name=str_of("operator_name", "Admin"),
         send=bool_of("send", True),
         rename_topics=bool_of("rename_topics", True),
+        dry_run=bool_of("dry_run", False),
         log_level=str_of("log_level", "info").lower(),
         legacy_in_use=frozenset(legacy_in_use),
     )

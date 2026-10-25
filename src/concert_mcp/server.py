@@ -175,6 +175,7 @@ def concert_add(
             source_text=a["source_text"],
             notes=a["notes"],
             svc=svc,
+            dry_run=svc.settings.dry_run,
         ),
         artist=artist,
         start=start,
@@ -211,6 +212,7 @@ def calendar_add(
             notes=a["notes"],
             calendar=a["calendar"],
             svc=svc,
+            dry_run=svc.settings.dry_run,
         ),
         title=title,
         start=start,
@@ -235,7 +237,9 @@ def event_delete(
     return _run(
         "event_delete",
         lambda svc, a: delete_event(
-            DeleteRequest(title=a["title"], date=a["date"] or None, pick=a["pick"] or None),
+            DeleteRequest(
+                title=a["title"], date=a["date"] or None, pick=a["pick"] or None, dry_run=svc.settings.dry_run
+            ),
             svc,
         ),
         title=title,
@@ -249,7 +253,12 @@ def teaser_playlist(
     date: Annotated[Param, Field(description="Concert date as YYYY-MM-DD.")] = "",
 ) -> str:
     """Make or top up the teaser playlist alone."""
-    return _run("teaser_playlist", lambda svc, a: teaser_outcome(a["artist"], a["date"], svc), artist=artist, date=date)
+    return _run(
+        "teaser_playlist",
+        lambda svc, a: teaser_outcome(a["artist"], a["date"], svc, dry_run=svc.settings.dry_run),
+        artist=artist,
+        date=date,
+    )
 
 
 def setlist_find(

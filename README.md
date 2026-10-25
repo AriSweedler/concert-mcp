@@ -143,6 +143,7 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in 'Admin: check `gws auth` on the host.' |
 | `CONCERT_MCP_SEND` | `1` | 0 disables reply delivery and topic renames everywhere |
 | `CONCERT_MCP_RENAME_TOPICS` | `1` | 0 keeps Telegram topic names as they are |
+| `CONCERT_MCP_DRY_RUN` | `0` | 1 makes every tool change nothing and return the reply it would have sent, marked `NOT SENT: dry run`; for rehearsing the bot end to end |
 | `CONCERT_MCP_LOG_LEVEL` | `info` | debug logs every subprocess argv (never tokens); stderr only |
 
 Booleans accept `1/0`, `true/false`, `yes/no`, `on/off`. A `config.toml` sets the same fields without the prefix:
