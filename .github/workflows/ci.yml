@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --locked --dev --python ${{ matrix.python }}
+      - run: uv run pytest -q
+
+  bare-healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked
+      - name: healthcheck on a bare machine lists what is missing and points at the README
+        run: |
+          set +e
+          uv run concert-mcp healthcheck | tee out.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          test $rc -ge 3
+          grep -q 'README.md#' out.txt
+
+  personal-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked --dev
+      - name: no email addresses, chat ids, bot tokens, calendar ids or hostnames in any text file
+        # The one pattern list lives in tests/test_readme.py, which scans every text file in the repository.
+        run: uv run pytest -q tests/test_readme.py -k personal_data

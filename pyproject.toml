@@ -1,0 +1,51 @@
+[project]
+name = "concert-mcp"
+version = "0.1.0"
+description = "Concert tools for a small-model Telegram bot: Google Calendar, Spotify teaser, setlist.fm, as one MCP server and CLI"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Ari Sweedler" }]
+keywords = ["mcp", "openclaw", "concert", "spotify", "setlist.fm", "google-calendar"]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+]
+dependencies = ["mcp>=2,<3", "pydantic>=2"]
+
+[project.scripts]
+concert-mcp = "concert_mcp.cli:main"
+
+[project.urls]
+Repository = "https://github.com/AriSweedler/concert-mcp"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/concert_mcp"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: spawns the server process"]
