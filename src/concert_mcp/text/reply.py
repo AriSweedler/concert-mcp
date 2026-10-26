@@ -252,6 +252,10 @@ def provider_reply(provider: str, operator: str, *, what: str = "request") -> st
             return f"Spotify refused the request. {operator}: check the host log."
         case "setlistfm":
             return f"setlist.fm refused the request. {operator}: check the host log."
+        case "places-unconfigured":
+            return f"Google Places is not set up on this machine. {operator}: run `concert-mcp venues auth`."
+        case "places" | "nominatim":
+            return f"The venue lookup failed; the event keeps the venue as written. {operator}: check the host log."
         case "op":
             return f"1Password did not answer. {operator}: run the auth command with --manual."
         case _:

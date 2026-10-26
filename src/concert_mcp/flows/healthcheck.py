@@ -39,6 +39,7 @@ CHECK_NAMES = (
     "liked-cache",
     "setlistfm-key",
     "setlistfm-auth",
+    "places-key",
     "openclaw-binary",
     "openclaw-config",
     "openclaw-session-db",
@@ -292,6 +293,16 @@ def _check_setlistfm_auth(ctx: _Ctx) -> Check:
     return Check("setlistfm-auth", "PASS", f"{total} setlists for the probe artist")
 
 
+def _check_places_key(ctx: _Ctx) -> Check:
+    """Optional: SKIP when no key is stored (Nominatim answers venue lookups), the credential-file rules otherwise."""
+    path = ctx.settings.places_credentials
+    if not path.exists():
+        return Check("places-key", "SKIP", "optional: concert-mcp venues auth stores a Google Places key")
+    return _credential_file(
+        "places-key", path, ("api_key",), legacy=False, anchor="configuration", auth_cmd="concert-mcp venues auth"
+    )
+
+
 def _check_openclaw_binary(ctx: _Ctx) -> Check:
     if not ctx.settings.send:
         return Check("openclaw-binary", "SKIP", SKIP_DELIVERY_OFF)
@@ -356,6 +367,7 @@ CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "liked-cache": (_check_liked_cache, "spotify"),
     "setlistfm-key": (_check_setlistfm_key, "setlistfm"),
     "setlistfm-auth": (_check_setlistfm_auth, "setlistfm"),
+    "places-key": (_check_places_key, "configuration"),
     "openclaw-binary": (_check_openclaw_binary, "openclaw"),
     "openclaw-config": (_check_openclaw_config, "openclaw"),
     "openclaw-session-db": (_check_openclaw_session_db, "openclaw"),

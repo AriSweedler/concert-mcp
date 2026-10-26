@@ -1,4 +1,4 @@
-"""The seven side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
+"""The eight side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 from concert_mcp.text.routes import ChatTarget
+from concert_mcp.text.venues import VenueHit
 
 T = TypeVar("T")
 
@@ -78,6 +79,10 @@ class SetlistFmApi(Protocol):
         year: str | None = None,
         page: int = 1,
     ) -> dict[str, Any] | None: ...
+
+
+class VenueLookup(Protocol):
+    def find_venue(self, query: str) -> VenueHit | None: ...
 
 
 class Chat(Protocol):

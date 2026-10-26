@@ -21,7 +21,17 @@ from concert_mcp.flows.concert_add import (
 from concert_mcp.flows.queue import queue_list
 from concert_mcp.flows.services import Services
 from concert_mcp.result import NEED_USER, FixInput, Kind
-from fakes import FakeCalendar, FakeChat, FakeClock, FakeContext, FakeSetlistFm, FakeSpotify, MemoryState
+from concert_mcp.text.venues import VenueHit
+from fakes import (
+    FakeCalendar,
+    FakeChat,
+    FakeClock,
+    FakeContext,
+    FakeSetlistFm,
+    FakeSpotify,
+    FakeVenueLookup,
+    MemoryState,
+)
 
 LA = ZoneInfo("America/Los_Angeles")
 ARTIST = "Zed Fox with special guest Zork."
@@ -93,10 +103,12 @@ def services(
     spotify: FakeSpotify | None | str = "default",
     setlistfm: FakeSetlistFm | None = None,
     chat: FakeChat | None = None,
+    places: Any = None,
 ) -> Services:
     clock = FakeClock(now)
     return Services(
         settings=settings,
+        places=places,
         calendar=calendar
         or FakeCalendar(
             calendars=[{"id": "cal-concerts", "summary": "Concerts"}, {"id": "primary", "summary": "Personal"}]
@@ -782,3 +794,51 @@ class TestResolveCalendar:
             resolve_calendar("Concerts", svc, dry_run=False)
         assert exc.value.error == "calendar 'Concerts' matched 2 calendars"
         assert exc.value.fix == "use one of: Concerts, Concerts (old), Personal"
+
+
+class TestVenueRegistry:
+    QUARRY = VenueHit(
+        "The Quarry",
+        ("1 Rock Rd", "San Francisco CA 94110", "United States"),
+        website="https://thequarry.example",
+        source="places",
+    )
+
+    def test_a_found_venue_writes_the_maps_form_and_a_venue_line(self, settings, now, forum_route, ticket_text):
+        places = FakeVenueLookup({"the quarry": self.QUARRY})
+        svc = services(settings, now, route=forum_route, text=ticket_text, places=places)
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.OK, out
+        [ins] = svc.calendar.inserted
+        assert ins["location"] == "The Quarry\n1 Rock Rd\nSan Francisco CA 94110\nUnited States"
+        assert "Venue: https://thequarry.example" in ins["description"].split("\n")
+        assert out.data["location"] == ins["location"]
+        assert out.data["venue"]["visits"] == ["2026-11-14"]
+        # The reply, the topic and the setlist tie-break use the short form, never the address block.
+        assert "• **Where:** The Quarry, San Francisco\n" in out.reply
+        assert "• **Venue:** https://thequarry.example\n" in out.reply
+        assert out.data["topic"] == "2026-11-14 | Zed Fox | The Quarry"
+        assert places.queries == ["The Quarry, San Francisco"]
+
+    def test_the_second_show_needs_no_lookup(self, settings, now, forum_route, ticket_text):
+        places = FakeVenueLookup({"the quarry": self.QUARRY})
+        svc = services(settings, now, route=forum_route, text=ticket_text, places=places)
+        assert concert(svc, source_text=ticket_text).kind is Kind.OK
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="")
+        assert out.kind is Kind.OK, out
+        assert places.queries == ["The Quarry, San Francisco"]
+        assert out.data["venue"]["visits"] == ["2026-11-14", "2026-12-01"]
+        assert svc.calendar.inserted[1]["location"] == svc.calendar.inserted[0]["location"]
+
+    def test_no_address_anywhere_keeps_the_location_as_written(self, svc, ticket_text):
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.OK
+        assert svc.calendar.inserted[0]["location"] == VENUE
+        assert "Venue:" not in svc.calendar.inserted[0]["description"]
+        assert out.data["venue"]["source"] == "caller" and out.data["venue"]["visits"] == ["2026-11-14"]
+
+    def test_a_plain_event_never_touches_the_registry(self, svc):
+        out = add_plain(title="[Dinner] Team dinner", start=START, location="ZZZ Bistro, San Francisco", svc=svc)
+        assert out.kind is Kind.OK, out
+        assert out.data["venue"] is None
+        assert svc.state.read_json(svc.settings.venues_file, {}) == {}

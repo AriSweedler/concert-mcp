@@ -21,6 +21,7 @@ from typing import Any
 
 from concert_mcp.adapters.clock import SystemClock
 from concert_mcp.adapters.onepassword import OP_PLACEHOLDER, op_available, op_read, op_store_field
+from concert_mcp.adapters.places_http import PROBE_VENUE, GooglePlacesClient, save_places_key
 from concert_mcp.adapters.protocols import Clock, StateStore
 from concert_mcp.adapters.setlistfm_http import SetlistFmClient, save_api_key
 from concert_mcp.adapters.spotify_http import ACCOUNTS, SpotifyClient, SpotifyCredentials
@@ -274,3 +275,43 @@ def setlistfm_auth(
     client = SetlistFmClient(settings, clock or SystemClock(), urlopen=urlopen, api_key=key)
     probe = client.search_setlists(PROBE_ARTIST, page=1)
     return {"ok": True, "config": str(path), "probe_total": (probe or {}).get("total", 0)}
+
+
+PLACES_KEY_MIN_LEN = 30
+
+
+def places_auth(
+    settings: Settings,
+    state: StateStore,
+    *,
+    manual: bool = False,
+    force: bool = False,
+    runner: Runner = run,
+    urlopen: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    """Copy the Google Places key from 1Password (or the terminal) into the config dir and probe one search."""
+    path = settings.places_credentials
+    if path.exists() and not force:
+        raise ProviderError(
+            "places", f"Places key already stored | path='{path}' hint='pass --force to replace it'", ""
+        )
+    if manual:
+        if not _stdin_is_tty():
+            raise ProviderError("places", "--manual needs a terminal to type into | stdin='not a tty'", "")
+        key = _getpass("Google Places API key (hidden): ").strip()
+    else:
+        if not op_available():
+            raise ProviderError("op", "missing prerequisite | missing='op' hint='or pass --manual'", "")
+        log_info(f"reading the key from 1Password | item='{settings.op_places_item}' vault='{settings.op_vault}'")
+        key = op_read(settings.op_vault, settings.op_places_item, "credential", runner).strip()
+    if not key or key == OP_PLACEHOLDER or len(key) < PLACES_KEY_MIN_LEN:
+        raise ProviderError(
+            "places",
+            f"that is not a Places API key | length='{len(key)}' "
+            "hint='create one in Google Cloud with the Places API (New) enabled and paste it'",
+            "",
+        )
+    save_places_key(path, key, state)
+    client = GooglePlacesClient(settings, urlopen=urlopen, api_key=key)
+    probe = client.find_venue(PROBE_VENUE)
+    return {"ok": True, "config": str(path), "probe": probe.name if probe else None}

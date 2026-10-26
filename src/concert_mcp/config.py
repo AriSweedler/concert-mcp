@@ -61,6 +61,10 @@ class Settings:
     op_vault: str
     op_spotify_item: str
     op_setlistfm_item: str
+    venues_file: Path
+    places_credentials: Path
+    venue_lookup: bool
+    op_places_item: str
     operator_name: str
     send: bool
     rename_topics: bool
@@ -132,6 +136,10 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("op_vault", "Private", "1Password vault, auth commands only"),
     ("op_spotify_item", "Spotify - concert-mcp", "fields username (client id), credential (secret), refresh token"),
     ("op_setlistfm_item", "setlist.fm - API key", "field credential"),
+    ("venues_file", "<config_dir>/venues.json", "the venue registry: address lines, website, dates visited"),
+    ("places_credentials", "<config_dir>/places.json", "optional Google Places key; without it Nominatim answers"),
+    ("venue_lookup", "1", "0 skips every network venue lookup; the ticket's address block is still used"),
+    ("op_places_item", "Google Places - API key", "field credential, `venues auth` only"),
     ("operator_name", "Admin", "the name in 'Admin: check `gws auth` on the host.'"),
     ("send", "1", "0 disables reply delivery and topic renames everywhere"),
     ("rename_topics", "1", "0 keeps Telegram topic names as they are"),
@@ -350,6 +358,10 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         op_vault=str_of("op_vault", "Private"),
         op_spotify_item=str_of("op_spotify_item", "Spotify - concert-mcp"),
         op_setlistfm_item=str_of("op_setlistfm_item", "setlist.fm - API key"),
+        venues_file=path_of("venues_file", config_dir / "venues.json"),
+        places_credentials=path_of("places_credentials", config_dir / "places.json"),
+        venue_lookup=bool_of("venue_lookup", True),
+        op_places_item=str_of("op_places_item", "Google Places - API key"),
         operator_name=str_of("operator_name", "Admin"),
         send=bool_of("send", True),
         rename_topics=bool_of("rename_topics", True),

@@ -84,6 +84,9 @@ def test_bare_tmp_settings_table(bare: Settings) -> None:
         "setlistfm-key", "FAIL", "missing", "setlistfm", "concert-mcp spotify setlist-auth"
     )
     assert rows["setlistfm-auth"] == Check("setlistfm-auth", "SKIP", "pass --probe")
+    assert rows["places-key"] == Check(
+        "places-key", "SKIP", "optional: concert-mcp venues auth stores a Google Places key"
+    )
 
     assert rows["openclaw-binary"].status == "FAIL"
     assert rows["openclaw-binary"].anchor == "openclaw"
@@ -378,7 +381,7 @@ def test_a_check_raising_becomes_a_fail_with_the_type_name(bare: Settings, monke
 
 def test_check_names_and_registry_agree() -> None:
     assert tuple(mod.CHECKS) == CHECK_NAMES
-    assert len(CHECK_NAMES) == 17
+    assert len(CHECK_NAMES) == 18
 
 
 # ---------- the outcome ----------
@@ -404,3 +407,12 @@ def test_healthcheck_outcome_ok_when_nothing_fails(svc: Services, monkeypatch: p
         "failures": 0,
         "checks": [{"name": n, "status": "PASS", "evidence": "ok", "anchor": None, "fix": None} for n in CHECK_NAMES],
     }
+
+
+def test_places_key_rows(bare: Settings) -> None:
+    _write(bare.places_credentials, json.dumps({"api_key": "k" * 39}))
+    assert by_name(run_healthcheck(bare))["places-key"] == Check("places-key", "PASS", "present, mode 600")
+    _write(bare.places_credentials, json.dumps({}), mode=0o644)
+    assert by_name(run_healthcheck(bare))["places-key"] == Check(
+        "places-key", "FAIL", "mode 0o644, want 600", "configuration", f"chmod 600 {bare.places_credentials}"
+    )

@@ -17,6 +17,7 @@ from concert_mcp.flows.queue import make_entry, queue_add
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
 from concert_mcp.flows.teaser import make_teaser
+from concert_mcp.flows.venues import resolve_venue
 from concert_mcp.log import log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
 from concert_mcp.text.candidates import duplicate_of, missing_link_lines, patched_description
@@ -54,6 +55,7 @@ from concert_mcp.text.reply import (
 )
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.titles import split_openers, squash, strip_concert_prefix
+from concert_mcp.text.venues import venue_line
 
 ALIASES = {
     "artist": "title",
@@ -302,17 +304,26 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     cal_id, cal_name = resolve_calendar(s.concerts_calendar if req.concert else req.calendar, svc, dry_run=req.dry_run)
     date = p.start.strftime("%Y-%m-%d")
 
+    # The venue registry: the Maps-form address for the calendar, the website for the description, the visit for
+    # the record. A plain event keeps the location as written.
+    resolved = resolve_venue(p.location, p.raw_source, svc, date=date, dry_run=req.dry_run) if req.concert else None
+    venue = resolved.venue if resolved else None
+    placed = venue is not None and bool(venue.address_lines)  # an address was found; otherwise the caller's words stand
+    where = venue.short() if placed and venue else p.location  # the reply, the topic name, the setlist.fm tie-break
+    location = venue.location_text(p.location) if venue else p.location  # the calendar's location string
+    topic = topic_name(p.start, p.title, where) if placed else p.topic
+
     # The teaser runs before the insert so one insert carries its link; neither it nor the lookup is ever fatal.
     teaser = make_teaser(p.title, date, svc, dry_run=req.dry_run) if (req.concert and req.teaser) else None
-    setlist = find_setlist(p.title, date, p.location, svc) if req.concert else None
-    t_line, s_line = teaser_line(teaser), setlist_line(setlist)
-    lines = list(p.lines) + [ln for ln in (t_line, s_line) if ln]
+    setlist = find_setlist(p.title, date, where, svc) if req.concert else None
+    t_line, s_line, v_line = teaser_line(teaser), setlist_line(setlist), venue_line(venue)
+    lines = list(p.lines) + [ln for ln in (v_line, t_line, s_line) if ln]
 
     when = fmt_range(p.start, p.end) + (" (end assumed)" if p.end_assumed else "")
     body = render_body(
         p.title,
         when,
-        p.location,
+        where,
         lines,
         [teaser_bullet(teaser, timeout_s=s.teaser_timeout_s, dry=req.dry_run), setlist_bullet(setlist)],
     )
@@ -322,12 +333,13 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         "summary": p.title,
         "start": p.start.isoformat(),
         "end": p.end.isoformat(),
-        "location": p.location,
+        "location": location,
         "description": lines,
         "dropped": list(p.dropped),
         "teaser": teaser.to_json() if teaser else None,
         "setlist": setlist.to_json() if setlist else None,
-        "topic": p.topic,
+        "topic": topic,
+        "venue": venue.to_json() if venue else None,
     }
     if req.dry_run:
         return Outcome(Kind.DRY_RUN, reply=render_dry_add(cal_name, body, notes), data=common)
@@ -342,7 +354,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 calendar_id=cal_id,
                 artist=p.title,
                 start=p.start,
-                venue=p.location,
+                venue=where,
                 setlist=setlist,
                 now=now,
                 days=s.setlist_queue_days,
@@ -355,7 +367,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 more_notes.append(f"Not queued for the setlist check: {type(e).__name__}")
         if req.concert and route and s.send and s.rename_topics:
             ft = forum_target(chat_target(route))
-            topic_status = svc.chat.rename_topic(ft[0], ft[1], p.topic) if ft else NOT_FORUM_TOPIC
+            topic_status = svc.chat.rename_topic(ft[0], ft[1], topic) if ft else NOT_FORUM_TOPIC
         else:
             topic_status = NO_LIVE_CHAT
         reply = render_added(calendar=cal_name, body=body, notes=more_notes, html_link=html_link, duplicate=duplicate)
@@ -380,7 +392,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         summary=p.title,
         start=p.start,
         end=p.end,
-        location=p.location,
+        location=location,
         description="\n".join(lines) if lines else None,
         attendees=p.attendees,
     )

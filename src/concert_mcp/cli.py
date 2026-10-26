@@ -28,6 +28,7 @@ from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist, setlist_outcome
 from concert_mcp.flows.teaser import make_teaser, teaser_outcome
+from concert_mcp.flows.venues import refresh_venue, venues_outcome
 from concert_mcp.log import log_err, set_level
 from concert_mcp.result import Delivery, FixInput, Kind, Outcome, ProviderError, need, outcome_from
 from concert_mcp.text.health import render_health
@@ -117,6 +118,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--songs", action="store_true", help="include the song list in the --json record")
 
     add("queue", "the concerts waiting for the weekly setlist check")
+
+    p = add("venues", "the venue registry: every venue seen, its visits, address and website")
+    vsub = p.add_subparsers(dest="venues_command", metavar="<command>")
+    q = vsub.add_parser("lookup", help="look one venue up again and store it", allow_abbrev=False)
+    _add_globals(q, suppress=True)
+    q.add_argument("--name", required=True, help="the venue's name as the registry (or a ticket) spells it")
+    q = vsub.add_parser("auth", help="store a Google Places API key, once (optional)", allow_abbrev=False)
+    _add_globals(q, suppress=True)
+    q.add_argument("--force", action="store_true", help="replace a stored key")
+    q.add_argument("--manual", action="store_true", help="type the key instead of reading 1Password")
 
     p = add("healthcheck", "which credentials and tools are present; exit code = number of FAIL rows")
     p.add_argument("--probe", action="store_true", help="make one real call per provider")
@@ -325,6 +336,32 @@ def _cmd_queue(args: argparse.Namespace, settings: Settings) -> int:
     return emit(outcome, delivery, text, json_mode=args.json_mode)
 
 
+def _cmd_venues(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    sub = getattr(args, "venues_command", None)
+    if sub == "auth":
+        try:
+            record = auth.places_auth(settings, svc.state, manual=args.manual, force=args.force)
+        except ProviderError as e:
+            log_err(e.error)
+            return 1
+        print(json.dumps(record, ensure_ascii=False))
+        return 0
+    if sub == "lookup":
+        venue = refresh_venue(args.name, svc)
+        if venue is None:
+            print(f"no venue found for {args.name!r}")
+            return 1
+        print(
+            json.dumps(venue.to_json(), ensure_ascii=False)
+            if args.json_mode
+            else "\n".join([venue.name, *venue.address_lines, venue.website or "no website"])
+        )
+        return 0
+    outcome, delivery, text = run_tool(lambda: venues_outcome(svc), svc, send=False)
+    return emit(outcome, delivery, text, json_mode=args.json_mode)
+
+
 def _cmd_healthcheck(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings) if args.probe else None
     report = run_healthcheck(settings, probe=args.probe, svc=svc, only=tuple(args.only))
@@ -437,6 +474,8 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_setlist_find(args, settings)
     if command == "queue":
         return _cmd_queue(args, settings)
+    if command == "venues":
+        return _cmd_venues(args, settings)
     if command == "healthcheck":
         return _cmd_healthcheck(args, settings)
     if command == "config":

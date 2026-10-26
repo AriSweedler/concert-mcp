@@ -15,6 +15,9 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `teaser` | `concert-mcp teaser --artist 'Zed Fox' --date 2026-11-14 [--description TEXT]` |
 | `setlist-find` | `concert-mcp setlist-find --artist 'Zed Fox' --date 2026-11-14 --venue 'The Quarry' --songs` (`--songs` adds the song list to the `--json` record) |
 | `queue` | `concert-mcp queue` |
+| `venues` | `concert-mcp venues` (every venue seen: visits, address, website) |
+| `venues lookup` | `concert-mcp venues lookup --name 'Cafe Du Nord'` (look it up again and store it) |
+| `venues auth` | `concert-mcp venues auth [--force] [--manual]` (optional Google Places key) |
 | `healthcheck` | `concert-mcp healthcheck --probe`, `concert-mcp healthcheck --only gws-keyfile --only spotify-credentials` |
 | `config` | `concert-mcp config` |
 | `migrate` | `concert-mcp migrate --dry-run`, then `concert-mcp migrate` |

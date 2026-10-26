@@ -8,7 +8,17 @@ from zoneinfo import ZoneInfo
 from concert_mcp.adapters.clock import SystemClock
 from concert_mcp.adapters.gws import GwsCalendar
 from concert_mcp.adapters.openclaw import OpenClawChat, OpenClawContext
-from concert_mcp.adapters.protocols import Calendar, Chat, Clock, LiveContext, SetlistFmApi, SpotifyApi, StateStore
+from concert_mcp.adapters.places_http import GooglePlacesClient, NominatimClient
+from concert_mcp.adapters.protocols import (
+    Calendar,
+    Chat,
+    Clock,
+    LiveContext,
+    SetlistFmApi,
+    SpotifyApi,
+    StateStore,
+    VenueLookup,
+)
 from concert_mcp.adapters.setlistfm_http import SetlistFmClient
 from concert_mcp.adapters.spotify_http import SpotifyClient
 from concert_mcp.adapters.state import JsonState
@@ -19,7 +29,8 @@ from concert_mcp.log import set_level
 class Services:
     """Settings plus one adapter per side effect.
 
-    `spotify` and `setlistfm` are None while their provider is not set up. When a factory is given, a None is
+    `spotify`, `setlistfm` and `places` are None while their provider is not set up; `geocoder` is the keyless
+    Nominatim lookup, None when venue lookups are off. When a factory is given, a None is
     re-resolved on every read, so a long-running server picks up `concert-mcp spotify auth` (or `setlist-auth`)
     without a restart: the factory is one `Path.exists()` until the credentials file appears, then the client is
     kept. Tests pass fakes (or None) and no factory.
@@ -38,6 +49,9 @@ class Services:
         setlistfm: SetlistFmApi | None = None,
         spotify_factory: Callable[[], SpotifyApi | None] | None = None,
         setlistfm_factory: Callable[[], SetlistFmApi | None] | None = None,
+        places: VenueLookup | None = None,
+        geocoder: VenueLookup | None = None,
+        places_factory: Callable[[], VenueLookup | None] | None = None,
     ) -> None:
         self.settings = settings
         self.calendar = calendar
@@ -49,6 +63,9 @@ class Services:
         self._setlistfm = setlistfm
         self._spotify_factory = spotify_factory
         self._setlistfm_factory = setlistfm_factory
+        self._places = places
+        self._places_factory = places_factory
+        self.geocoder = geocoder
 
     @property
     def spotify(self) -> SpotifyApi | None:
@@ -71,6 +88,16 @@ class Services:
         self._setlistfm = value
 
     @property
+    def places(self) -> VenueLookup | None:
+        if self._places is None and self._places_factory is not None:
+            self._places = self._places_factory()
+        return self._places
+
+    @places.setter
+    def places(self, value: VenueLookup | None) -> None:
+        self._places = value
+
+    @property
     def tz(self) -> ZoneInfo:
         return ZoneInfo(self.settings.tz)
 
@@ -90,6 +117,8 @@ def build_services(settings: Settings | None = None) -> Services:
         calendar=GwsCalendar(settings),
         spotify_factory=lambda: SpotifyClient.if_configured(settings, clock, state),
         setlistfm_factory=lambda: SetlistFmClient.if_configured(settings, clock),
+        places_factory=lambda: GooglePlacesClient.if_configured(settings),
+        geocoder=NominatimClient(settings) if settings.venue_lookup else None,
         chat=OpenClawChat(settings, clock),
         context=OpenClawContext(settings),
         state=state,

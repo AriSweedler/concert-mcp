@@ -40,6 +40,10 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_OP_VAULT` | `Private` | 1Password vault, auth commands only |
 | `CONCERT_MCP_OP_SPOTIFY_ITEM` | `Spotify - concert-mcp` | fields username (client id), credential (secret), refresh token |
 | `CONCERT_MCP_OP_SETLISTFM_ITEM` | `setlist.fm - API key` | field credential |
+| `CONCERT_MCP_VENUES_FILE` | `<config_dir>/venues.json` | the venue registry: address lines, website, dates visited |
+| `CONCERT_MCP_PLACES_CREDENTIALS` | `<config_dir>/places.json` | optional Google Places key; without it Nominatim answers |
+| `CONCERT_MCP_VENUE_LOOKUP` | `1` | 0 skips every network venue lookup; the ticket's address block is still used |
+| `CONCERT_MCP_OP_PLACES_ITEM` | `Google Places - API key` | field credential, `venues auth` only |
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in 'Admin: check `gws auth` on the host.' |
 | `CONCERT_MCP_SEND` | `1` | 0 disables reply delivery and topic renames everywhere |
 | `CONCERT_MCP_RENAME_TOPICS` | `1` | 0 keeps Telegram topic names as they are |
@@ -85,6 +89,7 @@ SKIP  spotify-auth     pass --probe
 SKIP  liked-cache      absent: the first teaser will be slow (~40 s)
 FAIL  setlistfm-key    missing
 SKIP  setlistfm-auth   pass --probe
+SKIP  places-key       optional: concert-mcp venues auth stores a Google Places key
 FAIL  openclaw-binary  openclaw not found
 SKIP  openclaw-config  absent
 SKIP  openclaw-session-db absent or unreadable: replies are not delivered

@@ -521,3 +521,12 @@ def test_build_parser_subcommands() -> None:
     args, extras = parser.parse_known_args(["--json", "spotify", "liked", "--artist", "X", "--dry-run"])
     assert args.spotify_command == "liked" and args.json_mode is True and args.dry_run is True
     assert extras == []
+
+
+def test_venues_text_and_json(cli_env: Services, monkeypatch, capsys) -> None:
+    code, out, _ = run(monkeypatch, capsys, ["venues"])
+    assert code == 0 and out.startswith("No venues yet")
+    code, out, _ = run(monkeypatch, capsys, ["venues", "--json"])
+    assert code == 0
+    rec = json.loads(out)
+    assert rec["count"] == 0 and rec["venues"] == []

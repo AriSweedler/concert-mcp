@@ -69,6 +69,20 @@ For the topic rename the bot must be an administrator of the Telegram group with
 
 Every one of these paths is a setting (`CONCERT_MCP_OPENCLAW_HOME` moves all three). `CONCERT_MCP_SEND=0` turns delivery and renames off everywhere and makes the healthcheck skip the three `openclaw-*` rows, which is what the tests, a development machine and the CI healthcheck use.
 
+## Venues (optional)
+
+Every concert's venue is looked up once and kept in `~/.config/concert-mcp/venues.json`: the Maps-form address that Google Calendar turns into a place card, the website, and the dates visited. Nothing to set up: without a key the lookup goes to OpenStreetMap's Nominatim (free, one request per new venue, no account), and when that finds nothing the address block printed on the ticket is used.
+
+A Google Places API key makes the lookup more exact and adds the website more often. Create a key in Google Cloud with the Places API (New) enabled, then store it:
+
+```sh
+concert-mcp venues auth --manual      # type the key hidden; or without --manual, read it from 1Password
+concert-mcp venues                    # the registry
+concert-mcp venues lookup --name 'Cafe Du Nord'
+```
+
+The key file is `<config_dir>/places.json`, mode 600. The address fields bill at the Pro SKU (5,000 free calls a month) and the website field at Enterprise (1,000 free); a few venues a month costs nothing. `CONCERT_MCP_VENUE_LOOKUP=0` turns every network lookup off.
+
 ## Registering the server with OpenClaw
 
 Register the server once on the gateway host; OpenClaw keeps a stdio server running and restarts it with backoff:

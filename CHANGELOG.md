@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- A venue registry (`<config_dir>/venues.json`): every concert's venue is looked up once (Google Places when a key is stored, else OpenStreetMap's Nominatim, else the address block printed on the ticket) and kept with its Maps-form address, website, coordinates and the dates visited. The event's `location` becomes the form Google Calendar turns into a place card, the description gains `Venue: <website>` when known, and a second show at the same venue needs no lookup. `concert-mcp venues`, `venues lookup --name`, `venues auth`; the `places-key` healthcheck row is `SKIP` without a key; `CONCERT_MCP_VENUE_LOOKUP=0` turns the network lookups off.
+- A `Headliner: <title>` description line before the `Opener:` lines when a concert has openers.
+
+### Fixed
+
+- The `Purchased:` line takes the amount after a receipt's `TOTAL` label (not `SUBTOTAL`), else the largest amount; the count also reads `1 General Admission`, `Qty: 2` and `2 x $20.00`.
+- `concert_add` asks the user for the headliner when the artist is a ticket platform (`DICE`, `Ticketweb`, ...) or the venue, and drops a caller-named opener the source text does not contain.
+
 ## [0.1.0] - 2026-10-25
 
 The first release extracts the concert stack from three dotfiles scripts (`cal-add.py`, `cal-del.py`, `spotify.py`) into one package. Every reply string, FIX text, record key, path default and guard those scripts implemented is carried over; the deliberate wording changes are listed under Changed and mirror `docs/DESIGN.md` §10.

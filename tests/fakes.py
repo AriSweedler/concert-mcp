@@ -576,3 +576,22 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 def plain(s: str) -> str:
     """Strip ANSI escapes from captured stderr."""
     return _ANSI_RE.sub("", s)
+
+
+class FakeVenueLookup:
+    """VenueLookup with canned hits keyed by a lowercase substring of the query; records every query."""
+
+    def __init__(self, hits: Mapping[str, Any] | None = None, *, error: Exception | None = None) -> None:
+        self.hits = dict(hits or {})
+        self.error = error
+        self.queries: list[str] = []
+
+    def find_venue(self, query: str) -> Any:
+        self.queries.append(query)
+        if self.error is not None:
+            raise self.error
+        q = query.lower()
+        for needle, hit in self.hits.items():
+            if needle.lower() in q:
+                return hit
+        return None
