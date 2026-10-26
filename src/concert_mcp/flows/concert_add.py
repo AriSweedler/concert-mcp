@@ -32,11 +32,13 @@ from concert_mcp.text.dates import (
     validate_tz,
 )
 from concert_mcp.text.derive import (
+    PLATFORMS,
     build_source,
     check_attendees,
     coerce_description,
     derived_lines,
     merge_lines,
+    norm_claims,
     openers_from_text,
 )
 from concert_mcp.text.naming import topic_name
@@ -165,6 +167,22 @@ class PreparedEvent:
     source_norm: str | None
 
 
+def check_headliner(title: str, location: str) -> None:
+    """A ticket platform or the venue is not the artist: ask the user for the headliner (NeedUser)."""
+    t = title.lower()
+    venue = location.split(",")[0].strip().lower()
+    what = None
+    if any(t == pl.lower() for pl in PLATFORMS):
+        what = "a ticket platform"
+    elif t == venue or t == location.lower():
+        what = "the venue"
+    if what:
+        raise NeedUser(
+            f"artist {title!r} is {what}, not the headliner",
+            f"{title} is {what}, not the artist. Reply with the headliner's name and I will add the event.",
+        )
+
+
 def prepare_event(req: AddRequest, *, context_text: str, now: datetime, settings: Settings) -> PreparedEvent:
     """Pure validation and derivation in the legacy order; raises FixInput / NeedUser."""
     raw_source, source_norm = build_source(req.source, context_text)
@@ -202,8 +220,11 @@ def prepare_event(req: AddRequest, *, context_text: str, now: datetime, settings
     location = squash(req.location)
     if not location:
         raise need("venue")
+    if req.concert:
+        check_headliner(title, location)
 
     derived: list[str] = []
+    dropped_openers: list[str] = []
     if req.concert:
         # The ticket parsers read the live context (the last OCR, the recent chat), which a plain event added minutes
         # after a ticket must not inherit: no show-time check, no Doors/Purchased/Opener lines. The caller's own lines
@@ -211,6 +232,10 @@ def prepare_event(req: AddRequest, *, context_text: str, now: datetime, settings
         start, end, more = apply_show_time(start, end, end_assumed, raw_source)
         notes += more
         derived = derived_lines(raw_source)
+        if openers:
+            # An opener the caller named is a claim like any other: it must appear in the text.
+            dropped_openers = [o for o in openers if source_norm is None or norm_claims(o) not in source_norm]
+            openers = [o for o in openers if o not in dropped_openers]
         if not openers:
             openers = openers_from_text(raw_source)
     lines, dropped = merge_lines(
@@ -220,6 +245,7 @@ def prepare_event(req: AddRequest, *, context_text: str, now: datetime, settings
         source_norm=source_norm,
         title=title,
     )
+    dropped = [f"Opener: {o}" for o in dropped_openers] + dropped
     return PreparedEvent(
         title=title,
         openers=tuple(openers),

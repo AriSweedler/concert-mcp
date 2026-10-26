@@ -349,6 +349,30 @@ class TestRequiredFields:
         assert out.reply == NEED_USER.format(what="venue")
         assert svc.calendar.inserted == []
 
+    def test_a_ticket_platform_as_the_artist_is_needed(self, svc, ticket_text):
+        out = concert(svc, artist="DICE", source_text=ticket_text)
+        assert out.kind is Kind.NEED_USER
+        assert out.error == "artist 'DICE' is a ticket platform, not the headliner"
+        assert (
+            out.reply
+            == "DICE is a ticket platform, not the artist. Reply with the headliner's name and I will add the event."
+        )
+        assert svc.calendar.inserted == []
+
+    def test_the_venue_as_the_artist_is_needed(self, svc, ticket_text):
+        out = concert(svc, artist="The Quarry", venue="The Quarry, San Francisco", source_text=ticket_text)
+        assert out.kind is Kind.NEED_USER
+        assert out.error == "artist 'The Quarry' is the venue, not the headliner"
+        assert svc.calendar.inserted == []
+
+    def test_an_opener_not_in_the_text_is_dropped(self, svc, ticket_text):
+        out = concert(svc, artist="Zed Fox with The Back Alley", source_text=ticket_text)
+        assert out.kind is Kind.OK, out
+        assert out.data["dropped"] == ["Opener: The Back Alley"]
+        # Zork. is on the ticket's own "with special guest" line, so the text supplies the opener instead.
+        assert "Opener: Zork." in svc.calendar.inserted[0]["description"]
+        assert "Back Alley" not in svc.calendar.inserted[0]["description"]
+
     def test_garbage_start_is_a_fix(self, svc):
         out = concert(svc, start="tomorrow night")
         assert out.kind is Kind.FIX
@@ -384,9 +408,9 @@ class TestNotes:
         svc = services(settings, now, route=None, text="")
         out = concert(svc, notes="Doors: 7:30 PM\nSeat: GA")
         assert out.kind is Kind.OK
-        assert out.data["dropped"] == ["Doors: 7:30 PM"]
-        # The opener still comes from the title; the claim-free note survives; the clock-time note does not.
-        assert out.data["description"][:3] == ["Headliner: Zed Fox", "Opener: Zork.", "Seat: GA"]
+        assert out.data["dropped"] == ["Opener: Zork.", "Doors: 7:30 PM"]
+        # With no text nothing verifies: the title's opener and the clock-time note go; the claim-free note survives.
+        assert out.data["description"][:1] == ["Seat: GA"]
 
 
 class TestTeaserAndSetlist:
