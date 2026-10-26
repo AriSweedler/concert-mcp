@@ -28,7 +28,7 @@ from concert_mcp.flows.setlist import setlist_outcome
 from concert_mcp.flows.teaser import teaser_outcome
 from concert_mcp.log import set_level
 from concert_mcp.result import Outcome, crash_outcome
-from concert_mcp.text.titles import clean_param
+from concert_mcp.text.titles import clean_param, is_yes
 
 # Every tool parameter: the schema stays {"type": "string"}, and 2 -> "2", None -> "", "\"x\"" -> "x" before validation.
 Param = Annotated[str, BeforeValidator(clean_param)]
@@ -42,7 +42,9 @@ INSTRUCTIONS = (
     "If it fails again, tell the user in one sentence what you need from them.\n"
     "4. Any other result: send its text to the user unchanged. Never invent a link, time or price.\n"
     "5. Ticket screenshot or ticket text -> concert_add with artist, start (the show time, not doors; "
-    "a bare date is fine when the text has the show time), venue, and the whole text in source_text.\n"
+    "a bare date is fine when the text has the show time), venue, and the whole text in source_text. "
+    "A repeat in the same topic updates that topic's event; pass another=yes only when the user asks for a "
+    "second event there.\n"
     "6. Plain event (dinner, flight, appointment) -> calendar_add. Keep the user's [Type] prefix.\n"
     '7. "delete"/"remove" an event -> event_delete. '
     "If the user answers a numbered list with a number, call event_delete with pick=that number.\n"
@@ -164,6 +166,13 @@ def concert_add(
             "Opener lines are found in the text automatically."
         ),
     ] = "",
+    another: Annotated[
+        Param,
+        Field(
+            description='"yes" only when the user asks for a second, separate event in this chat topic. Leave empty '
+            "otherwise: a repeat call in a topic updates the topic's event."
+        ),
+    ] = "",
 ) -> str:
     """Add a concert and everything that goes with it; returns the output-contract string."""
     return _run(
@@ -174,6 +183,7 @@ def concert_add(
             venue=a["venue"],
             source_text=a["source_text"],
             notes=a["notes"],
+            another=is_yes(a["another"]),
             svc=svc,
             dry_run=svc.settings.dry_run,
         ),
@@ -182,6 +192,7 @@ def concert_add(
         venue=venue,
         source_text=source_text,
         notes=notes,
+        another=another,
     )
 
 

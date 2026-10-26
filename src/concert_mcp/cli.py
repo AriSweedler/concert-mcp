@@ -98,6 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--concert", action="store_true", help="the Concerts calendar, teaser playlist, setlist lookup")
     p.add_argument("--no-teaser", dest="no_teaser", action="store_true", help="skip the teaser playlist")
+    p.add_argument(
+        "--another", action="store_true", help="a second event in the live topic instead of updating the topic's event"
+    )
 
     add(
         "del",
@@ -282,7 +285,9 @@ def _cmd_add(args: argparse.Namespace, extras: list[str], settings: Settings, st
     svc = services.build_services(settings)
     try:
         raw = read_request(extras, stdin, known=KNOWN, aliases=ALIASES, json_hint=ADD_JSON_HINT)
-        req = AddRequest.from_mapping(raw, concert=args.concert, teaser=not args.no_teaser, dry_run=args.dry_run)
+        req = AddRequest.from_mapping(
+            raw, concert=args.concert, teaser=not args.no_teaser, another=args.another, dry_run=args.dry_run
+        )
     except FixInput as e:
         outcome, delivery, text = _fix_result(e, svc)
     else:

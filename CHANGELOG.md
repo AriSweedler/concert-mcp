@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - A venue registry (`<config_dir>/venues.json`): every concert's venue is looked up once (Google Places when a key is stored, else OpenStreetMap's Nominatim, else the address block printed on the ticket) and kept with its Maps-form address, website, coordinates and the dates visited. The event's `location` becomes the form Google Calendar turns into a place card, the description gains `Venue: <website>` when known, and a second show at the same venue needs no lookup. `concert-mcp venues`, `venues lookup --name`, `venues auth`; the `places-key` healthcheck row is `SKIP` without a key; `CONCERT_MCP_VENUE_LOOKUP=0` turns the network lookups off.
 - A `Headliner: <title>` description line before the `Opener:` lines when a concert has openers.
+- One event per Telegram topic (`<state_dir>/topics.json`): a repeat `concert_add` in the topic that already owns an event updates it in place (title, time, venue, description; links the new text lacks are kept) and replies `**Updated on Concerts**` with what changed, so a wrong title is fixed by replying with the right one. `another=yes` (CLI `--another`) adds a second event; `event_delete` frees the topic. `Calendar.patch_event` replaces `patch_description`.
 
 ### Fixed
 

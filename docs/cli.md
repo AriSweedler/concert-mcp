@@ -33,7 +33,7 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `spotify search-artist` | `concert-mcp spotify search-artist --name 'Zed Fox'` |
 | `spotify setlist-auth` | `concert-mcp spotify setlist-auth [--force] [--manual]` |
 
-`add` and `del` also take one JSON object as the positional argument or on stdin, with the legacy aliases folded (`artist` and `summary` for `title`, `venue` for `location`, `notes` for `description`, `datetime` for `start`, `text` for `source`; `del` also takes `event`, `name`, `when`, `day`, `cal`, `eventId`, `number`, `choice`); an unknown key or flag is a `FIX:` line, never a traceback. `add` takes `--concert` (the Concerts calendar, teaser, setlist lookup, queue, rename) and `--no-teaser`. The `spotify` subcommands print one JSON record in the legacy shape.
+`add` and `del` also take one JSON object as the positional argument or on stdin, with the legacy aliases folded (`artist` and `summary` for `title`, `venue` for `location`, `notes` for `description`, `datetime` for `start`, `text` for `source`; `del` also takes `event`, `name`, `when`, `day`, `cal`, `eventId`, `number`, `choice`); an unknown key or flag is a `FIX:` line, never a traceback. `add` takes `--concert` (the Concerts calendar, teaser, setlist lookup, queue, rename), `--no-teaser` and `--another` (a second event in the live topic instead of an update of the topic's event; the JSON key is `another`). The `spotify` subcommands print one JSON record in the legacy shape.
 
 Flags:
 

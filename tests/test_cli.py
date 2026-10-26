@@ -188,7 +188,7 @@ def test_add_unknown_flag_json_is_the_retry_record(cli_env: Services, monkeypatc
     assert code == 1
     assert rec["ok"] is False and rec["retry"] is True
     assert rec["error"] == "unknown flag --bogus"
-    assert rec["fix"].startswith("allowed flags: --allowPast, --attendees, --calendar")
+    assert rec["fix"].startswith("allowed flags: --allowPast, --another, --attendees, --calendar")
     assert "sent" in rec
 
 

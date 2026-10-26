@@ -40,7 +40,17 @@ class Calendar(Protocol):
         attendees: Sequence[str],
     ) -> dict[str, Any]: ...
 
-    def patch_description(self, calendar_id: str, event_id: str, description: str) -> None: ...
+    def patch_event(
+        self,
+        calendar_id: str,
+        event_id: str,
+        *,
+        summary: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        location: str | None = None,
+        description: str | None = None,
+    ) -> None: ...
 
     def delete_event(self, calendar_id: str, event_id: str) -> None: ...
 

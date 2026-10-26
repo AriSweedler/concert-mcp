@@ -90,15 +90,33 @@ def _notes(notes: Sequence[str]) -> str:
     return "".join("\n" + n for n in notes)
 
 
-def render_added(*, calendar: str, body: str, notes: Sequence[str], html_link: str | None, duplicate: bool) -> str:
-    """'**Added to X**' or '**Already on X** (nothing new created)' + body + notes + the calendar link."""
-    head = f"**Already on {calendar}** (nothing new created)" if duplicate else f"**Added to {calendar}**"
+def render_added(
+    *,
+    calendar: str,
+    body: str,
+    notes: Sequence[str],
+    html_link: str | None,
+    duplicate: bool,
+    updated: bool = False,
+) -> str:
+    """'**Added to X**', '**Already on X** (nothing new created)' or '**Updated on X**' + body + notes + link."""
+    if duplicate:
+        head = f"**Already on {calendar}** (nothing new created)"
+    elif updated:
+        head = f"**Updated on {calendar}**"
+    else:
+        head = f"**Added to {calendar}**"
     return f"{head}\n{body}{_notes(notes)}\n[Open in Google Calendar]({event_link(html_link)})"
 
 
 def render_dry_add(calendar: str, body: str, notes: Sequence[str]) -> str:
     """'**Would add to X**' + body + notes."""
     return f"**Would add to {calendar}**\n{body}{_notes(notes)}"
+
+
+def changed_note(changed: Sequence[str]) -> str:
+    """'Changed: title DICE -> Zed Fox; when' or 'Nothing changed; the description was refreshed'."""
+    return f"Changed: {'; '.join(changed)}" if changed else "Nothing changed; the description was refreshed"
 
 
 def dropped_note(dropped: Sequence[str]) -> str:

@@ -16,7 +16,7 @@ Three layers, each importable without the one above it:
 
 - `text/`: pure functions. No I/O, no clock, no environment. Date parsing, title and opener split, the derived Doors/Purchased lines, the hallucination filter, playlist naming, every reply string, candidate matching, the health table.
 - `adapters/`: one class per side effect, each behind a `Protocol` so tests use fakes: `GwsCalendar` (subprocess), `SpotifyClient`, `SetlistFmClient`, `GooglePlacesClient` and `NominatimClient` (urllib), `OpenClawChat` and `OpenClawContext` (subprocess, sqlite, Bot API), `JsonState`, `SystemClock`.
-- `flows/`: the policy. `concert_add`, `event_delete`, `queue`, `venues`, `teaser`, `setlist`, `playlists`, `auth`, `deliver`, `healthcheck`. A flow returns an `Outcome`; it never prints and never exits. `server.py` (MCP over stdio) and `cli.py` are thin shells over the same flows.
+- `flows/`: the policy. `concert_add`, `event_delete`, `queue`, `topics`, `venues`, `teaser`, `setlist`, `playlists`, `auth`, `deliver`, `healthcheck`. A flow returns an `Outcome`; it never prints and never exits. `server.py` (MCP over stdio) and `cli.py` are thin shells over the same flows.
 
 The output contract, which every tool and every CLI subcommand ends in:
 
@@ -30,7 +30,7 @@ The seven tools. Every parameter is a string with default `""`; a missing requir
 
 | Tool | Parameters | What it does |
 |---|---|---|
-| `concert_add` | `artist`, `start`, `venue`, `source_text`, `notes` | the whole concert flow: venue resolved through the registry (Maps-form address, website, visit), event on the Concerts calendar, teaser playlist, setlist.fm lookup, weekly queue, topic rename, reply delivery |
+| `concert_add` | `artist`, `start`, `venue`, `source_text`, `notes`, `another` | the whole concert flow: venue resolved through the registry (Maps-form address, website, visit), event on the Concerts calendar (updated in place when the Telegram topic already owns one, unless `another` is `yes`), teaser playlist, setlist.fm lookup, weekly queue, topic rename, reply delivery |
 | `calendar_add` | `title`, `start`, `location`, `notes`, `calendar` | a plain event on the personal calendar, title kept as the user wrote it (`[Dinner] ...`) |
 | `event_delete` | `title`, `date`, `pick` | delete one event by title; several matches become a numbered list, and `pick` (or a bare number as the title) chooses from it |
 | `teaser_playlist` | `artist`, `date` | the Spotify teaser alone: every liked song by the artist, oldest first, named `YYYY-MM-DD \| Artist` |
@@ -39,6 +39,8 @@ The seven tools. Every parameter is a string with default `""`; a missing requir
 | `healthcheck` | none | which credentials and tools are present and what fixes each missing one |
 
 `event_delete` carries `destructiveHint`; `setlist_find`, `queue_status` and `healthcheck` carry `readOnlyHint`.
+
+**One event per topic.** A Telegram forum topic is the conversation about one show, so it owns one event. `<state_dir>/topics.json` maps `<chat>:<thread>` to the event last added from that topic. A `concert_add` whose live route is that topic patches the event (title, start, end, location, description) instead of inserting, keeps a `Teaser playlist:`, `Setlist:` or `Venue:` line the new text could not supply, rewrites the queue row, and replies `**Updated on Concerts**` with a `Changed:` note. `another=yes` inserts a second event and makes it the topic's current one; `event_delete` frees the topic; a DM or the General topic has no key and falls back to the title-and-minute duplicate guard.
 
 ## Design principles
 

@@ -31,6 +31,7 @@ from fakes import (
     FakeSpotify,
     FakeVenueLookup,
     MemoryState,
+    ms,
 )
 
 LA = ZoneInfo("America/Los_Angeles")
@@ -222,7 +223,9 @@ class TestDuplicate:
         out = concert(svc, source_text=ticket_text)
         assert out.kind is Kind.DUPLICATE
         assert svc.calendar.inserted == []
-        assert svc.calendar.patched == [("cal-concerts", e["id"], f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}")]
+        assert svc.calendar.patched == [
+            ("cal-concerts", e["id"], {"description": f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}"})
+        ]
         assert out.reply.startswith("**Already on Concerts** (nothing new created)\n• **Artist:** Zed Fox\n")
         assert out.reply.endswith(f"[Open in Google Calendar]({eventedit(e['id'])})")
         assert out.data["id"] == e["id"]
@@ -655,7 +658,7 @@ class TestFromMapping:
             AddRequest.from_mapping({"title": "X", "foo": 1})
         assert exc.value.error == "unknown keys: foo"
         assert exc.value.fix == (
-            "allowed keys: allowPast, attendees, calendar, description, end, location, source, start, title, tz"
+            "allowed keys: allowPast, another, attendees, calendar, description, end, location, source, start, title, tz"
         )
         assert exc.value.fix == f"allowed keys: {', '.join(sorted(KNOWN - {'date', 'time'}))}"
 
@@ -824,7 +827,8 @@ class TestVenueRegistry:
         places = FakeVenueLookup({"the quarry": self.QUARRY})
         svc = services(settings, now, route=forum_route, text=ticket_text, places=places)
         assert concert(svc, source_text=ticket_text).kind is Kind.OK
-        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="")
+        # The same topic: `another` asks for a second event instead of an update of the first.
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="", another=True)
         assert out.kind is Kind.OK, out
         assert places.queries == ["The Quarry, San Francisco"]
         assert out.data["venue"]["visits"] == ["2026-11-14", "2026-12-01"]
@@ -842,3 +846,125 @@ class TestVenueRegistry:
         assert out.kind is Kind.OK, out
         assert out.data["venue"] is None
         assert svc.state.read_json(svc.settings.venues_file, {}) == {}
+
+
+class TestTopicRegistry:
+    """A Telegram forum topic owns one event: a repeat add there updates it unless `another` asks for a second."""
+
+    def test_the_insert_registers_the_topic(self, svc, ticket_text):
+        out = concert(svc, source_text=ticket_text)
+        rows = svc.state.read_json(svc.settings.topics_file, {})
+        assert rows == {
+            "-1001234567890:7": {
+                "event_id": out.data["id"],
+                "calendar_id": "cal-concerts",
+                "summary": "Zed Fox",
+                "date": "2026-11-14",
+                "updated": svc.clock.now().isoformat(timespec="seconds"),
+            }
+        }
+
+    def test_a_repeat_in_the_topic_updates_the_event(self, svc, ticket_text):
+        first = concert(svc, artist="DICE with The Back Alley", source_text="", start="2026-11-14 20:00")
+        assert first.kind is Kind.NEED_USER  # the platform guard; nothing registered yet
+        first = concert(svc, artist="Wrong Name", source_text="", start="2026-11-14 20:00")
+        assert first.kind is Kind.OK, first
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.OK, out
+        assert out.data["updated"] is True
+        assert out.data["id"] == first.data["id"]
+        assert len(svc.calendar.inserted) == 1
+        [(cal, eid, fields)] = svc.calendar.patched
+        assert (cal, eid) == ("cal-concerts", first.data["id"])
+        assert fields["summary"] == "Zed Fox"
+        assert fields["start"] == {"dateTime": datetime(2026, 11, 14, 20, 30, tzinfo=LA).isoformat()}
+        assert fields["end"] == {"dateTime": datetime(2026, 11, 14, 22, 30, tzinfo=LA).isoformat()}
+        assert fields["location"] == VENUE
+        assert fields["description"].startswith("Doors: 7:30 PM\nPurchased: 2 tickets, $42.00 on Ticketweb\n")
+        assert out.reply.startswith("**Updated on Concerts**\n• **Artist:** Zed Fox\n")
+        assert "\nChanged: title Wrong Name -> Zed Fox\n" in out.reply  # the live text already set the show time
+        assert out.reply.endswith(f"[Open in Google Calendar]({eventedit(first.data['id'])})")
+        assert out.data["changed"] == ["title Wrong Name -> Zed Fox"]
+        # The queue row and the topic name follow the new facts.
+        [q] = queue_list(svc)
+        assert (q.event_id, q.artist, q.date) == (first.data["id"], "Zed Fox", "2026-11-14")
+        assert svc.chat.renamed[-1][2] == "2026-11-14 | Zed Fox | The Quarry"
+
+    def test_an_update_keeps_a_link_the_new_run_could_not_make(self, settings, now, forum_route, ticket_text):
+        svc = services(settings, now, route=forum_route, text=ticket_text)
+        first = concert(svc, source_text=ticket_text)
+        assert f"Teaser playlist: {TEASER_URL}" in svc.calendar.inserted[0]["description"]
+        svc.spotify = None  # Spotify is down for the update
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.OK and out.data["updated"] is True
+        assert svc.calendar.patched[-1][2]["description"].endswith(f"Teaser playlist: {TEASER_URL}")
+        assert "Nothing changed; the description was refreshed" in out.reply
+        assert first.data["id"] == out.data["id"]
+
+    def test_another_inserts_a_second_event_and_takes_the_topic(self, svc, ticket_text):
+        first = concert(svc, source_text=ticket_text)
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="", another=True)
+        assert out.kind is Kind.OK, out
+        assert out.data["updated"] is False
+        assert len(svc.calendar.inserted) == 2 and svc.calendar.patched == []
+        rows = svc.state.read_json(svc.settings.topics_file, {})
+        assert rows["-1001234567890:7"]["event_id"] == out.data["id"] != first.data["id"]
+        assert rows["-1001234567890:7"]["summary"] == "Other Act"
+
+    def test_a_deleted_event_frees_the_topic(self, svc, ticket_text):
+        first = concert(svc, source_text=ticket_text)
+        svc.calendar.delete_event("cal-concerts", first.data["id"])  # gone behind our back
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="")
+        assert out.kind is Kind.OK, out
+        assert out.data["updated"] is False
+        assert len(svc.calendar.inserted) == 2
+        assert svc.state.read_json(svc.settings.topics_file, {})["-1001234567890:7"]["event_id"] == out.data["id"]
+
+    def test_a_cancelled_event_frees_the_topic(self, svc, ticket_text):
+        first = concert(svc, source_text=ticket_text)
+        for e in svc.calendar.events["cal-concerts"]:
+            if e["id"] == first.data["id"]:
+                e["status"] = "cancelled"
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="")
+        assert out.kind is Kind.OK and out.data["updated"] is False
+        assert len(svc.calendar.inserted) == 2
+
+    def test_the_title_guard_duplicate_also_registers_the_topic(self, svc, ticket_text):
+        e = svc.calendar.seed_event(
+            "cal-concerts", summary="Zed Fox", start=datetime(2026, 11, 14, 20, 30, tzinfo=LA), location=VENUE
+        )
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.DUPLICATE
+        assert svc.state.read_json(svc.settings.topics_file, {})["-1001234567890:7"]["event_id"] == e["id"]
+
+    def test_outside_a_forum_topic_nothing_is_registered_and_the_title_guard_stands(self, settings, now, ticket_text):
+        dm = {
+            "channel": "telegram",
+            "target": {"to": "telegram:12345"},
+            "thread": None,
+            "accountId": None,
+            "lastInteractionAt": ms(now),
+        }
+        svc = services(settings, now, route=dm, text=ticket_text)
+        concert(svc, source_text=ticket_text)
+        assert svc.state.read_json(svc.settings.topics_file, {}) == {}
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="")
+        assert out.kind is Kind.OK and out.data["updated"] is False
+        assert len(svc.calendar.inserted) == 2
+        dup = concert(svc, source_text=ticket_text)
+        assert dup.kind is Kind.DUPLICATE
+
+    def test_a_plain_event_never_touches_the_topic_registry(self, svc):
+        add_plain(title="[Dinner] Team dinner", start=START, location="ZZZ Bistro, San Francisco", svc=svc)
+        assert svc.state.read_json(svc.settings.topics_file, {}) == {}
+
+    def test_dry_run_updates_nothing(self, svc, ticket_text):
+        concert(svc, source_text=ticket_text)
+        out = concert(svc, artist="Other Act", start="2026-12-01 20:00", source_text="", dry_run=True)
+        assert out.kind is Kind.DRY_RUN
+        assert svc.calendar.patched == [] and len(svc.calendar.inserted) == 1
+
+    def test_from_mapping_reads_the_another_key(self):
+        assert AddRequest.from_mapping({"title": "X", "another": True}).another is True
+        assert AddRequest.from_mapping({"title": "X"}).another is False
+        assert AddRequest.from_mapping({"title": "X"}, another=True).another is True

@@ -241,16 +241,36 @@ def test_insert_event_without_description_or_attendees(settings: Settings) -> No
     assert "--description" not in gws_calls(runner, settings)[0][0]
 
 
-def test_patch_description_passes_json(settings: Settings) -> None:
+def test_patch_event_passes_only_the_given_fields_as_json(settings: Settings) -> None:
     runner = FakeRunner({(settings.gws_bin,): (0, "", "")})
     cal = make(settings, runner)
-    assert cal.patch_description("cal-concerts", "e1", "Doors: 7:30 PM\nTeaser playlist: https://x") is None
+    assert cal.patch_event("cal-concerts", "e1", description="Doors: 7:30 PM\nTeaser playlist: https://x") is None
     argv = list(gws_calls(runner, settings)[0][0])
     assert argv[:5] == [settings.gws_bin, "calendar", "events", "patch", "--params"]
     assert json.loads(argv[5]) == {"calendarId": "cal-concerts", "eventId": "e1"}
     assert argv[6] == "--json"
     assert json.loads(argv[7]) == {"description": "Doors: 7:30 PM\nTeaser playlist: https://x"}
     assert len(argv) == 8
+
+
+def test_patch_event_sends_summary_times_and_location(settings: Settings) -> None:
+    runner = FakeRunner({(settings.gws_bin,): (0, "", "")})
+    cal = make(settings, runner)
+    cal.patch_event("cal-concerts", "e1", summary="Zed Fox", start=START, end=END, location="The Quarry")
+    argv = list(gws_calls(runner, settings)[0][0])
+    assert json.loads(argv[7]) == {
+        "summary": "Zed Fox",
+        "start": {"dateTime": START.isoformat()},
+        "end": {"dateTime": END.isoformat()},
+        "location": "The Quarry",
+    }
+
+
+def test_patch_event_with_nothing_to_change_runs_no_command(settings: Settings) -> None:
+    runner = FakeRunner({(settings.gws_bin,): (0, "", "")})
+    cal = make(settings, runner)
+    cal.patch_event("cal-concerts", "e1")
+    assert gws_calls(runner, settings) == []
 
 
 def test_delete_event_runs_in_a_temp_cwd_that_is_removed(settings: Settings) -> None:

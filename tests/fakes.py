@@ -58,7 +58,7 @@ class FakeCalendar:
         self.fail = fail
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.inserted: list[dict[str, Any]] = []
-        self.patched: list[tuple[str, str, str]] = []
+        self.patched: list[tuple[str, str, dict[str, Any]]] = []
         self.deleted: list[tuple[str, str]] = []
         self._n = 0
 
@@ -174,12 +174,33 @@ class FakeCalendar:
         self.inserted.append({"calendar_id": calendar_id, **copy.deepcopy(event)})
         return copy.deepcopy(event)
 
-    def patch_description(self, calendar_id: str, event_id: str, description: str) -> None:
-        self._record("patch_description", calendar_id=calendar_id, event_id=event_id, description=description)
+    def patch_event(
+        self,
+        calendar_id: str,
+        event_id: str,
+        *,
+        summary: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        location: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        fields: dict[str, Any] = {}
+        if summary is not None:
+            fields["summary"] = summary
+        if start is not None:
+            fields["start"] = {"dateTime": start.isoformat()}
+        if end is not None:
+            fields["end"] = {"dateTime": end.isoformat()}
+        if location is not None:
+            fields["location"] = location
+        if description is not None:
+            fields["description"] = description
+        self._record("patch_event", calendar_id=calendar_id, event_id=event_id, **fields)
         for e in self.events.get(calendar_id, []):
             if e["id"] == event_id:
-                e["description"] = description
-                self.patched.append((calendar_id, event_id, description))
+                e.update(copy.deepcopy(fields))
+                self.patched.append((calendar_id, event_id, fields))
                 return
         raise ProviderError("gws", f"gws calendar events exited 1: no such event {event_id}", GWS_REFUSED)
 

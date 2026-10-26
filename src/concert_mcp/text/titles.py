@@ -36,6 +36,11 @@ def clean_param(v: object) -> str:
     return "" if s.lower() in _NOTHING else s
 
 
+def is_yes(v: object) -> bool:
+    """A flag the model typed: yes, y, true, 1, on (any case); everything else is no."""
+    return clean_param(v).lower() in {"yes", "y", "true", "1", "on"}
+
+
 def looks_like_pick(s: str) -> bool:
     """True for a bare one- or two-digit number, optionally followed by a dot."""
     return _PICK_RE.fullmatch(s) is not None

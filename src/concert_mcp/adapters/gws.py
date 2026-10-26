@@ -167,18 +167,33 @@ class GwsCalendar:
             cmd += ["--attendee", str(a)]
         return self.json(*cmd)
 
-    def patch_description(self, calendar_id: str, event_id: str, description: str) -> None:
-        """gws calendar events patch --json {description}."""
+    def patch_event(
+        self,
+        calendar_id: str,
+        event_id: str,
+        *,
+        summary: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        location: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """gws calendar events patch --json with the given fields only (a None is left as it is)."""
         params = {"calendarId": calendar_id, "eventId": event_id}
-        self.raw(
-            "calendar",
-            "events",
-            "patch",
-            "--params",
-            _json.dumps(params),
-            "--json",
-            _json.dumps({"description": description}),
-        )
+        body: dict[str, Any] = {}
+        if summary is not None:
+            body["summary"] = summary
+        if start is not None:
+            body["start"] = {"dateTime": start.isoformat()}
+        if end is not None:
+            body["end"] = {"dateTime": end.isoformat()}
+        if location is not None:
+            body["location"] = location
+        if description is not None:
+            body["description"] = description
+        if not body:
+            return
+        self.raw("calendar", "events", "patch", "--params", _json.dumps(params), "--json", _json.dumps(body))
 
     def delete_event(self, calendar_id: str, event_id: str) -> None:
         """gws calendar events delete, run from a temp cwd because it writes an output file.

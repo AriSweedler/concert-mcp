@@ -35,6 +35,7 @@ class Settings:
     candidates_file: Path
     sent_log: Path
     fix_log: Path
+    topics_file: Path
     gws_bin: str
     gws_key_file: Path
     gws_timeout_s: int
@@ -80,7 +81,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "state_dir",
         "~/.local/state/concert-mcp",
-        "setlist-queue.json, delete-candidates.json, last-sent.json, fix-log.json",
+        "setlist-queue.json, delete-candidates.json, last-sent.json, fix-log.json, topics.json",
     ),
     ("cache_dir", "~/.cache/concert-mcp", "liked.json"),
     ("spotify_credentials", "<config_dir>/spotify.json", "legacy fallback ~/.config/ari-spotify/credentials.json"),
@@ -94,6 +95,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("candidates_file", "<state_dir>/delete-candidates.json", "no legacy fallback (lists are short-lived)"),
     ("sent_log", "<state_dir>/last-sent.json", "reply dedupe memory"),
     ("fix_log", "<state_dir>/fix-log.json", "the retry-loop breaker's memory"),
+    ("topics_file", "<state_dir>/topics.json", "which event each Telegram topic owns"),
     (
         "gws_bin",
         "which gws, else /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, else gws",
@@ -330,6 +332,7 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         candidates_file=path_of("candidates_file", state_dir / "delete-candidates.json"),
         sent_log=path_of("sent_log", state_dir / "last-sent.json"),
         fix_log=path_of("fix_log", state_dir / "fix-log.json"),
+        topics_file=path_of("topics_file", state_dir / "topics.json"),
         gws_bin=which("gws_bin", "gws"),
         gws_key_file=path_of("gws_key_file", home / ".config/gws/.encryption_key"),
         gws_timeout_s=int_of("gws_timeout_s", 60),

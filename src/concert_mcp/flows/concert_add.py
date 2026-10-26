@@ -1,22 +1,24 @@
 """The concert and plain-event add flows (unit flows-calendar).
 
 `prepare_event` is the pure half (validation and derivation in the legacy `cal-add.py` order); `add_event` is the
-orchestration: teaser, setlist lookup, duplicate guard, insert, queue, topic rename. Flows return an Outcome and never
-raise, print or exit; `flows/deliver.py` turns the Outcome into text.
+orchestration: teaser, setlist lookup, topic registry (a Telegram forum topic owns one event, so a repeat add there
+updates it), duplicate guard, insert, queue, topic rename. Flows return an Outcome and never raise, print or exit;
+`flows/deliver.py` turns the Outcome into text.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
 from concert_mcp.config import Settings
-from concert_mcp.flows.queue import make_entry, queue_add
+from concert_mcp.flows.queue import make_entry, queue_add, queue_forget
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
 from concert_mcp.flows.teaser import make_teaser
+from concert_mcp.flows.topics import live_event, make_topic_entry, topic_event, topic_forget, topic_remember
 from concert_mcp.flows.venues import resolve_venue
 from concert_mcp.log import log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
@@ -44,6 +46,7 @@ from concert_mcp.text.derive import (
 )
 from concert_mcp.text.naming import topic_name
 from concert_mcp.text.reply import (
+    changed_note,
     dropped_note,
     render_added,
     render_body,
@@ -55,6 +58,7 @@ from concert_mcp.text.reply import (
 )
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.titles import split_openers, squash, strip_concert_prefix
+from concert_mcp.text.topics import carry_lines, changed_fields, topic_key
 from concert_mcp.text.venues import venue_line
 
 ALIASES = {
@@ -80,6 +84,7 @@ KNOWN = frozenset(
         "allowPast",
         "date",
         "time",
+        "another",
     }
 )
 
@@ -110,6 +115,7 @@ class AddRequest:
     allow_past: bool = False
     concert: bool = False
     teaser: bool = True
+    another: bool = False  # a second event in the topic instead of an update of the topic's event
     dry_run: bool = False
 
     @classmethod
@@ -119,6 +125,7 @@ class AddRequest:
         *,
         concert: bool = False,
         teaser: bool = True,
+        another: bool = False,
         dry_run: bool = False,
     ) -> AddRequest:
         """Fold aliases, refuse unknown keys (FixInput), coerce description and attendees."""
@@ -147,6 +154,7 @@ class AddRequest:
             allow_past=bool(ev.get("allowPast")),
             concert=concert,
             teaser=teaser,
+            another=another or bool(ev.get("another")),
             dry_run=dry_run,
         )
 
@@ -344,14 +352,28 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     if req.dry_run:
         return Outcome(Kind.DRY_RUN, reply=render_dry_add(cal_name, body, notes), data=common)
 
-    def finish(event_id: str | None, html_link: str | None, duplicate: bool) -> Outcome:
-        """Queue the show for the setlist poller, rename the Telegram topic, build the reply."""
+    # The topic key: a Telegram forum topic owns one event. A DM or the General topic has no key.
+    ft = forum_target(chat_target(route)) if route else None
+    key = topic_key(ft[0], ft[1]) if ft else None
+
+    def finish(
+        event_id: str | None,
+        html_link: str | None,
+        duplicate: bool,
+        *,
+        event_cal_id: str = cal_id,
+        updated: bool = False,
+        changed: Sequence[str] = (),
+    ) -> Outcome:
+        """Queue the show for the setlist poller, register the topic's event, rename the topic, build the reply."""
         more_notes = list(notes)
+        if updated:
+            more_notes.append(changed_note(changed))
         if req.concert and event_id:
             # Every concert is queued (2026-10-25): the page fills in over weeks, so the poller keeps checking.
             entry = make_entry(
                 event_id=event_id,
-                calendar_id=cal_id,
+                calendar_id=event_cal_id,
                 artist=p.title,
                 start=p.start,
                 venue=where,
@@ -361,21 +383,77 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             )
             # The event exists by now; a queue write that fails is a note on the reply, never a crash without the link.
             try:
+                if updated:
+                    queue_forget(event_id, svc)  # the row carries the artist and the date; an update rewrites it
                 queue_add(entry, svc)
             except Exception as e:  # noqa: BLE001 - the reply with the calendar link matters more than the queue
                 log_warn(f"setlist queue not written | error='{type(e).__name__}: {e}'")
                 more_notes.append(f"Not queued for the setlist check: {type(e).__name__}")
+        if req.concert and event_id and key:
+            # The topic now owns this event (also after a title-guard duplicate: the next add here updates it).
+            try:
+                topic_remember(
+                    key,
+                    make_topic_entry(
+                        event_id=event_id, calendar_id=event_cal_id, summary=p.title, start=p.start, now=now
+                    ),
+                    svc,
+                )
+            except Exception as e:  # noqa: BLE001 - same rule as the queue
+                log_warn(f"topic registry not written | error='{type(e).__name__}: {e}'")
+                more_notes.append(f"Topic not remembered: {type(e).__name__}")
         if req.concert and route and s.send and s.rename_topics:
-            ft = forum_target(chat_target(route))
             topic_status = svc.chat.rename_topic(ft[0], ft[1], topic) if ft else NOT_FORUM_TOPIC
         else:
             topic_status = NO_LIVE_CHAT
-        reply = render_added(calendar=cal_name, body=body, notes=more_notes, html_link=html_link, duplicate=duplicate)
+        reply = render_added(
+            calendar=cal_name,
+            body=body,
+            notes=more_notes,
+            html_link=html_link,
+            duplicate=duplicate,
+            updated=updated,
+        )
         return Outcome(
             Kind.DUPLICATE if duplicate else Kind.OK,
             reply=reply,
-            data={**common, "id": event_id, "htmlLink": html_link, "topic_status": topic_status},
+            data={
+                **common,
+                "id": event_id,
+                "htmlLink": html_link,
+                "topic_status": topic_status,
+                "updated": updated,
+                "changed": list(changed),
+            },
         )
+
+    # The topic registry: the topic's event is updated in place, unless the caller asked for another one.
+    if req.concert and key and not req.another:
+        prior = topic_event(key, svc)
+        live = live_event(prior, svc) if prior else None
+        if prior and live is None:
+            topic_forget(key, svc)  # the event was deleted elsewhere; the topic is free again
+        if prior and live is not None:
+            changed = changed_fields(live, summary=p.title, start=p.start, location=location)
+            kept = carry_lines(live.get("description"), lines)
+            svc.calendar.patch_event(
+                prior.calendar_id,
+                prior.event_id,
+                summary=p.title,
+                start=p.start,
+                end=p.end,
+                location=location,
+                description="\n".join(kept),
+            )
+            common["description"] = kept
+            return finish(
+                prior.event_id,
+                live.get("htmlLink"),
+                False,
+                event_cal_id=prior.calendar_id,
+                updated=True,
+                changed=changed,
+            )
 
     # Duplicate guard: a retried insert must not create a second event.
     existing = svc.calendar.list_events(cal_id, time_min=p.start, time_max=p.start + timedelta(minutes=1), q=p.title)
@@ -384,7 +462,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         # The event predates the playlist or the setlist page: add the missing link lines to its description.
         missing = missing_link_lines(e.get("description"), [t_line, s_line])
         if missing:
-            svc.calendar.patch_description(cal_id, e["id"], patched_description(e.get("description"), missing))
+            svc.calendar.patch_event(cal_id, e["id"], description=patched_description(e.get("description"), missing))
         return finish(e.get("id"), e.get("htmlLink"), True)
 
     r = svc.calendar.insert_event(
@@ -410,6 +488,7 @@ def add_concert(
     venue: str,
     source_text: str = "",
     notes: str = "",
+    another: bool = False,
     svc: Services,
     dry_run: bool = False,
 ) -> Outcome:
@@ -421,6 +500,7 @@ def add_concert(
         source=source_text,
         description=_note_lines(notes),
         concert=True,
+        another=another,
         dry_run=dry_run,
     )
     return add_event(req, svc)

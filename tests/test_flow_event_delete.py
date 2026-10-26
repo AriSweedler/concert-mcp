@@ -10,8 +10,10 @@ import pytest
 
 from concert_mcp.flows.event_delete import DELETE_KNOWN, DeleteRequest, delete_event, find_candidates
 from concert_mcp.flows.queue import QueueEntry, queue_add, queue_list
+from concert_mcp.flows.topics import topic_event, topic_remember
 from concert_mcp.result import FixInput, Kind
 from concert_mcp.text.reply import NO_CANDIDATES_REPLY, WHICH_EVENT_REPLY
+from concert_mcp.text.topics import TopicEntry
 
 LA = ZoneInfo("America/Los_Angeles")
 QUARRY = "The Quarry, San Francisco"
@@ -87,6 +89,17 @@ class TestOneMatch:
         assert out.data["calendarId"] == "cal-concerts"
         assert out.data["calendar"] == "Concerts"
         assert candidates_file(svc) is None
+
+    def test_deleting_the_topic_event_frees_the_topic(self, svc):
+        e = seed_zed_fox(svc)
+        topic_remember("-100:7", TopicEntry(e["id"], "cal-concerts", "Zed Fox", "2026-11-14", "t"), svc)
+        topic_remember("-100:8", TopicEntry("other", "cal-concerts", "Other", "2026-12-01", "t"), svc)
+
+        out = delete_event(DeleteRequest(title="Zed Fox"), svc)
+
+        assert out.kind is Kind.OK
+        assert topic_event("-100:7", svc) is None
+        assert topic_event("-100:8", svc) is not None
 
     def test_teaser_line_in_the_description_adds_a_left_in_place_row(self, svc):
         seed_zed_fox(svc, description=f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}")
