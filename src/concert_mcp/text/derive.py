@@ -122,8 +122,10 @@ def merge_lines(
     source_norm: str | None,
     title: str,
 ) -> tuple[list[str], list[str]]:
-    """(kept, dropped): derived lines, Opener lines, then verified caller lines whose key is new."""
-    kept = list(derived) + [f"Opener: {o}" for o in openers if o.lower() != title.lower()]
+    """(kept, dropped): derived lines, a Headliner line and the Opener lines when there are openers, then verified
+    caller lines whose key is new."""
+    opener_lines = [f"Opener: {o}" for o in openers if o.lower() != title.lower()]
+    kept = list(derived) + ([f"Headliner: {title}"] if opener_lines else []) + opener_lines
     dropped: list[str] = []
     for raw in caller:
         ln = squash(raw)

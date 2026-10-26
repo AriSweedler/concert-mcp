@@ -170,7 +170,13 @@ def test_merge_lines_derived_beats_caller(ticket_text: str, source_norm: str) ->
         source_norm=source_norm,
         title="Zed Fox",
     )
-    assert kept == ["Doors: 7:30 PM", "Purchased: 2 tickets, $42.00 on Ticketweb", "Opener: Zork.", "Seat: GA"]
+    assert kept == [
+        "Doors: 7:30 PM",
+        "Purchased: 2 tickets, $42.00 on Ticketweb",
+        "Headliner: Zed Fox",
+        "Opener: Zork.",
+        "Seat: GA",
+    ]
     assert dropped == ["Price: $99"]
 
 
@@ -189,7 +195,7 @@ def test_merge_lines_key_match_is_case_insensitive_and_ignores_the_value(source_
 
 def test_merge_lines_drops_an_opener_equal_to_the_title(source_norm: str) -> None:
     kept, _ = merge_lines(derived=[], openers=["zed fox", "Zork."], caller=[], source_norm=source_norm, title="Zed Fox")
-    assert kept == ["Opener: Zork."]
+    assert kept == ["Headliner: Zed Fox", "Opener: Zork."]
 
 
 def test_merge_lines_keeps_dropped_order(source_norm: str) -> None:

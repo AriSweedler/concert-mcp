@@ -60,9 +60,12 @@ def bullet(key: str, value: str) -> str:
 
 
 def bullets(title: str, when: str, location: str, lines: Sequence[str]) -> str:
-    """Artist / When / Where bullets, then one bullet per line (a short 'Key: value' keeps its bold key)."""
+    """Artist / When / Where bullets, then one bullet per line (a short 'Key: value' keeps its bold key). The
+    description's Headliner line repeats the Artist bullet, so the reply skips it."""
     rows = [bullet("Artist", title), bullet("When", when), bullet("Where", location)]
     for ln in lines:
+        if ln.lower().startswith("headliner:"):
+            continue
         k, sep, v = ln.partition(": ")
         rows.append(bullet(k, v) if sep and len(k) <= MAX_KEY_LEN else f"• {ln}")
     return "\n".join(rows)

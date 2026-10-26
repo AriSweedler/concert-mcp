@@ -296,7 +296,13 @@ def test_setlist_line_only_when_found() -> None:
 
 
 def test_render_body_strips_link_lines_and_appends_extras() -> None:
-    lines = ["Doors: 7:30 PM", f"Teaser playlist: {TEASER_URL}", f"Setlist: {SETLIST_URL}", "Opener: Zork."]
+    lines = [
+        "Doors: 7:30 PM",
+        f"Teaser playlist: {TEASER_URL}",
+        f"Setlist: {SETLIST_URL}",
+        "Headliner: Zed Fox",
+        "Opener: Zork.",
+    ]
     out = render_body("Zed Fox", WHEN, "The Quarry", lines, ["• **Teaser:** t", None, "• **Setlist:** s"])
     assert out == (
         "• **Artist:** Zed Fox\n"

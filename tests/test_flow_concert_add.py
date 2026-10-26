@@ -127,7 +127,8 @@ class TestHappyPath:
         assert ins["start"] == {"dateTime": datetime(2026, 11, 14, 20, 30, tzinfo=LA).isoformat()}
         assert ins["end"] == {"dateTime": datetime(2026, 11, 14, 22, 30, tzinfo=LA).isoformat()}
         assert ins["description"] == (
-            "Doors: 7:30 PM\nPurchased: 2 tickets, $42.00 on Ticketweb\nOpener: Zork.\nTeaser playlist: " + TEASER_URL
+            "Doors: 7:30 PM\nPurchased: 2 tickets, $42.00 on Ticketweb\nHeadliner: Zed Fox\nOpener: Zork.\nTeaser playlist: "
+            + TEASER_URL
         )
         assert ins["attendees"] == []
 
@@ -146,6 +147,7 @@ class TestHappyPath:
         assert d["description"] == [
             "Doors: 7:30 PM",
             "Purchased: 2 tickets, $42.00 on Ticketweb",
+            "Headliner: Zed Fox",
             "Opener: Zork.",
             f"Teaser playlist: {TEASER_URL}",
         ]
@@ -384,7 +386,7 @@ class TestNotes:
         assert out.kind is Kind.OK
         assert out.data["dropped"] == ["Doors: 7:30 PM"]
         # The opener still comes from the title; the claim-free note survives; the clock-time note does not.
-        assert out.data["description"][:2] == ["Opener: Zork.", "Seat: GA"]
+        assert out.data["description"][:3] == ["Headliner: Zed Fox", "Opener: Zork.", "Seat: GA"]
 
 
 class TestTeaserAndSetlist:
@@ -703,7 +705,12 @@ class TestPrepareEvent:
         assert p.end == datetime(2026, 11, 14, 22, 30, tzinfo=LA)
         assert p.end_assumed is True
         assert p.tz == "America/Los_Angeles"
-        assert p.lines == ("Doors: 7:30 PM", "Purchased: 2 tickets, $42.00 on Ticketweb", "Opener: Zork.")
+        assert p.lines == (
+            "Doors: 7:30 PM",
+            "Purchased: 2 tickets, $42.00 on Ticketweb",
+            "Headliner: Zed Fox",
+            "Opener: Zork.",
+        )
         assert p.dropped == () and p.notes == ()
         assert p.topic == "2026-11-14 | Zed Fox | The Quarry"
         assert p.raw_source == ticket_text
