@@ -46,6 +46,44 @@ def test_derived_lines_purchased_forms() -> None:
     assert derived_lines("") == []
 
 
+TICKETWEB_RECEIPT = """Wed Nov 4 2026
+8:00 PM (Doors 7:00 PM)
+All Ages
+Cafe Du Nord
+2174 Market St.
+San Francisco, CA 94114
+1 General Admission
+$20.00
+General Admission
+SUBTOTAL
+$20.00
+SERVICE FEE
+$8.30
+DELIVERY FEE - ETICKETS
+$0.00
+TOTAL
+$28.30
+Payment Type:
+charged: Visa ****0000
+($28.30)
+ticketweb.com
+"""
+
+
+def test_derived_lines_take_the_total_not_the_subtotal() -> None:
+    assert derived_lines(TICKETWEB_RECEIPT) == ["Doors: 7:00 PM", "Purchased: 1 ticket, $28.30 on Ticketweb"]
+
+
+def test_derived_lines_total_on_the_same_line_and_grand_total() -> None:
+    assert derived_lines("Subtotal: $40.00\nFees: $12.50\nTotal: $52.50 via AXS") == ["Purchased: $52.50 on AXS"]
+    assert derived_lines("2 tickets\n$30 each\nGrand Total $72.00") == ["Purchased: 2 tickets, $72.00"]
+
+
+def test_derived_lines_without_a_total_label_take_the_largest_amount() -> None:
+    assert derived_lines("Qty: 2\n2 x $20.00\n$46.50 charged") == ["Purchased: 2 tickets, $46.50"]
+    assert derived_lines("Quantity 3 General Admission $15") == ["Purchased: 3 tickets, $15"]
+
+
 def test_derived_lines_platform_is_word_bounded() -> None:
     # "RA" must not match inside "Opera" or "Grand".
     assert derived_lines("1 ticket at the Grand Opera") == ["Purchased: 1 ticket"]

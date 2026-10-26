@@ -30,8 +30,16 @@ PLAIN_RE = re.compile(r"\b\d{1,2}:\d{2}\b")
 TIME_LITERAL = r"(\d{1,2}(?:[:.]\d{2})?\s*[ap]\.?m\.?)"
 # Defined here, not in dates.py, because derived_lines() needs it and dates.py imports from this module.
 DOORS_RE = re.compile(r"doors?\s*(?:open|at|:|@)?\s*" + TIME_LITERAL, re.I)
-_TICKET_COUNT_RE = re.compile(r"\b(\d{1,2})\s*(?:x\s*)?tickets?\b", re.I)
+# "2 tickets", "1 General Admission", "Qty: 2", "2 x $20.00": the count as a receipt prints it.
+_COUNT_RES = (
+    re.compile(r"\b(\d{1,2})\s*(?:x\s*)?tickets?\b", re.I),
+    re.compile(r"\b(\d{1,2})\s*x?\s*general admission\b", re.I),
+    re.compile(r"\bq(?:uantity|ty)\.?:?\s*(\d{1,2})\b", re.I),
+    re.compile(r"\b(\d{1,2})\s*x\s*\$", re.I),
+)
 _AMOUNT_RE = re.compile(r"\$\s?(\d[\d,]*(?:\.\d{2})?)")
+# The amount after a bare TOTAL label (not SUBTOTAL), on the same line or the next: what the card was charged.
+_TOTAL_RE = re.compile(r"(?<![a-z])total\b[^\n$]*\n?\s*\$\s?(\d[\d,]*(?:\.\d{2})?)", re.I)
 _OPENERS_LINE_RE = re.compile(r"^\s*(?:with|w/)\s+(?:special guests?\s+|support from\s+)(.+?)\s*$", re.I | re.M)
 _AMPM_RE = re.compile(r"\s*([ap])\.?m\.?", re.I)
 _DOTTED_RE = re.compile(r"(\d)\.(\d)")
@@ -45,17 +53,34 @@ def derived_lines(text: str) -> list[str]:
     if d:
         doors = _AMPM_RE.sub(lambda m: " " + m.group(1).upper() + "M", d.group(1)).strip()
         lines.append("Doors: " + _DOTTED_RE.sub(r"\1:\2", doors))
-    n = _TICKET_COUNT_RE.search(text)
-    amt = _AMOUNT_RE.search(text)
+    n = ticket_count(text)
+    amt = charged_amount(text)
     plat = next((pl for pl in PLATFORMS if re.search(r"\b" + re.escape(pl) + r"\b", text, re.I)), None)
     if amt or n:
         parts: list[str] = []
         if n:
-            parts.append(f"{n.group(1)} ticket" + ("" if n.group(1) == "1" else "s"))
+            parts.append(f"{n} ticket" + ("" if n == "1" else "s"))
         if amt:
-            parts.append("$" + amt.group(1))
+            parts.append("$" + amt)
         lines.append("Purchased: " + ", ".join(parts) + (f" on {plat}" if plat else ""))
     return lines
+
+
+def ticket_count(text: str) -> str | None:
+    """The first count any receipt form states, as printed."""
+    return next((m.group(1) for rx in _COUNT_RES if (m := rx.search(text))), None)
+
+
+def charged_amount(text: str) -> str | None:
+    """The TOTAL amount when the receipt labels one (SUBTOTAL is not it); else the largest amount, which on a receipt
+    with fees is the charge and on a ticket with one price is that price."""
+    m = _TOTAL_RE.search(text)
+    if m:
+        return m.group(1)
+    amounts = _AMOUNT_RE.findall(text)
+    if not amounts:
+        return None
+    return max(amounts, key=lambda a: float(a.replace(",", "")))
 
 
 def openers_from_text(text: str) -> list[str]:
