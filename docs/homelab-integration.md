@@ -66,4 +66,4 @@ openclaw mcp probe concert
 - `tools.alsoAllow` is needed when the agent runs the `minimal` tool profile, which hides every tool it does not name, MCP tools included; keep what the list already holds and add the three `concert__` names (`openclaw config get tools.alsoAllow` shows it).
 - `openclaw mcp doctor concert --probe` starts the server once and lists its tools; `openclaw mcp reload` picks up a changed entry without restarting the gateway. Credentials added later (`concert-mcp spotify auth`, `setlist-auth`) need no reload: the server reads the files lazily on the next call.
 
-The same command without `cwd`, for a standalone checkout, is in the package README under "OpenClaw configuration".
+The same command without `cwd`, for a standalone checkout, is in the package README under "OpenClaw".

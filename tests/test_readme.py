@@ -17,6 +17,8 @@ from concert_mcp.text.health import ANCHORS
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 HOMELAB_DOC = ROOT / "docs" / "homelab-integration.md"
+CONFIG_DOC = ROOT / "docs" / "configuration.md"
+ARCH_DOC = ROOT / "docs" / "architecture.md"
 
 TEXT_SUFFIXES = {".py", ".md", ".toml", ".yml", ".yaml", ".json", ".txt", ".lock", ".cfg", ".ini", ""}
 SKIP_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", "dist", "build"}
@@ -77,6 +79,7 @@ def test_slug_rule_matches_github():
 
 @pytest.mark.parametrize("anchor", sorted(ANCHORS.values()))
 def test_every_health_anchor_is_a_readme_heading(anchor: str):
+    """The README is the quickstart: every FAIL row of the healthcheck must land on a heading there."""
     file, _, fragment = anchor.partition("#")
     assert file == "README.md"
     slugs = {github_slug(h) for h in readme_headings()}
@@ -85,7 +88,7 @@ def test_every_health_anchor_is_a_readme_heading(anchor: str):
 
 @pytest.mark.parametrize("name", [row[0] for row in env_table()])
 def test_every_env_var_is_documented(name: str):
-    assert name in README.read_text(encoding="utf-8"), f"{name} is missing from README.md"
+    assert name in CONFIG_DOC.read_text(encoding="utf-8"), f"{name} is missing from docs/configuration.md"
 
 
 def _snippet_json(text: str) -> dict:
@@ -155,25 +158,27 @@ def test_the_scan_catches_the_shapes_it_names():
     assert PERSONAL_DATA["a .local hostname"].search("~/.local/state") is None  # the XDG dir is not a hostname
 
 
-def test_readme_names_the_one_link_form():
-    text = README.read_text(encoding="utf-8")
+def test_architecture_doc_names_the_one_link_form():
+    text = ARCH_DOC.read_text(encoding="utf-8")
     assert "https://calendar.google.com/calendar/u/0/r/eventedit/<eid>" in text
     assert "2026-10-25" in text
 
 
 @pytest.mark.parametrize("name", CHECK_NAMES)
-def test_every_health_check_appears_in_the_readme_table(name: str):
-    """The Getting started section pastes a real healthcheck run; a renamed or added check must land there too."""
-    assert name in README.read_text(encoding="utf-8"), f"healthcheck row {name} is missing from README.md"
+def test_every_health_check_appears_in_the_configuration_doc(name: str):
+    """docs/configuration.md pastes a real healthcheck run; a renamed or added check must land there too."""
+    assert name in CONFIG_DOC.read_text(encoding="utf-8"), (
+        f"healthcheck row {name} is missing from docs/configuration.md"
+    )
 
 
-def test_readme_tool_table_lists_every_tool():
+def test_architecture_doc_tool_table_lists_every_tool():
     pytest.importorskip("mcp")
     from concert_mcp.server import TOOLS
 
-    text = README.read_text(encoding="utf-8")
+    text = ARCH_DOC.read_text(encoding="utf-8")
     for fn in TOOLS:
-        assert f"| `{fn.__name__}` |" in text, f"tool {fn.__name__} has no row in the README table"
+        assert f"| `{fn.__name__}` |" in text, f"tool {fn.__name__} has no row in the docs/architecture.md table"
 
 
 def test_changelog_has_the_first_release():
