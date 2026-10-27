@@ -20,6 +20,7 @@ from collections.abc import Callable
 from typing import Any
 
 from concert_mcp.adapters.clock import SystemClock
+from concert_mcp.adapters.gemini_http import GeminiClient, save_gemini_key
 from concert_mcp.adapters.onepassword import OP_PLACEHOLDER, op_available, op_read, op_store_field
 from concert_mcp.adapters.places_http import PROBE_VENUE, GooglePlacesClient, save_places_key
 from concert_mcp.adapters.protocols import Clock, StateStore
@@ -315,3 +316,42 @@ def places_auth(
     client = GooglePlacesClient(settings, urlopen=urlopen, api_key=key)
     probe = client.find_venue(PROBE_VENUE)
     return {"ok": True, "config": str(path), "probe": probe.name if probe else None}
+
+
+GEMINI_KEY_MIN_LEN = 30
+
+
+def gemini_auth(
+    settings: Settings,
+    state: StateStore,
+    *,
+    manual: bool = False,
+    force: bool = False,
+    runner: Runner = run,
+    urlopen: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    """Copy the Gemini key from 1Password (or the terminal) into the config dir and probe one ungrounded call."""
+    path = settings.gemini_credentials
+    if path.exists() and not force:
+        raise ProviderError(
+            "gemini", f"Gemini key already stored | path='{path}' hint='pass --force to replace it'", ""
+        )
+    if manual:
+        if not _stdin_is_tty():
+            raise ProviderError("gemini", "--manual needs a terminal to type into | stdin='not a tty'", "")
+        key = _getpass("Gemini API key (hidden): ").strip()
+    else:
+        if not op_available():
+            raise ProviderError("op", "missing prerequisite | missing='op' hint='or pass --manual'", "")
+        log_info(f"reading the key from 1Password | item='{settings.op_gemini_item}' vault='{settings.op_vault}'")
+        key = op_read(settings.op_vault, settings.op_gemini_item, "credential", runner).strip()
+    if not key or key == OP_PLACEHOLDER or len(key) < GEMINI_KEY_MIN_LEN:
+        raise ProviderError(
+            "gemini",
+            f"that is not a Gemini API key | length='{len(key)}' "
+            "hint='create one at https://aistudio.google.com/apikey and paste it'",
+            "",
+        )
+    save_gemini_key(path, key, state)
+    client = GeminiClient(settings, urlopen=urlopen, api_key=key)
+    return {"ok": True, "config": str(path), "probe": client.probe()}

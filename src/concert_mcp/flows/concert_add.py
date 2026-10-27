@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from concert_mcp.config import Settings
+from concert_mcp.flows.lineup import add_lineup_to_event
 from concert_mcp.flows.queue import make_entry, queue_add, queue_forget
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
@@ -328,13 +329,17 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     lines = list(p.lines) + [ln for ln in (v_line, t_line, s_line) if ln]
 
     when = fmt_range(p.start, p.end) + (" (end assumed)" if p.end_assumed else "")
-    body = render_body(
-        p.title,
-        when,
-        where,
-        lines,
-        [teaser_bullet(teaser, timeout_s=s.teaser_timeout_s, dry=req.dry_run), setlist_bullet(setlist)],
-    )
+
+    def body_of(extra: Sequence[str] = ()) -> str:
+        return render_body(
+            p.title,
+            when,
+            where,
+            [*lines, *extra],
+            [teaser_bullet(teaser, timeout_s=s.teaser_timeout_s, dry=req.dry_run), setlist_bullet(setlist)],
+        )
+
+    body = body_of()
     notes = list(p.notes) + ([dropped_note(p.dropped)] if p.dropped else [])
     common: dict[str, Any] = {
         "calendar": cal_name,
@@ -365,8 +370,26 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         updated: bool = False,
         changed: Sequence[str] = (),
     ) -> Outcome:
-        """Queue the show for the setlist poller, register the topic's event, rename the topic, build the reply."""
+        """The lineup step, then queue the show for the setlist poller, register the topic's event, rename the
+        topic, build the reply."""
         more_notes = list(notes)
+        extra: tuple[str, ...] = ()
+        if req.concert and event_id and svc.gemini is not None:
+            # After the insert, so the link is never held hostage by the lookup; one grounded call, capped.
+            step = add_lineup_to_event(
+                artist=p.title,
+                date=date,
+                venue=where,
+                website=venue.website if venue else None,
+                openers_known=bool(p.openers),
+                calendar_id=event_cal_id,
+                event_id=event_id,
+                description="\n".join(common["description"]),
+                svc=svc,
+            )
+            extra = step.lines
+            common["lineup"] = step.lineup.to_json()
+            common["description"] = [*common["description"], *extra]
         if updated:
             more_notes.append(changed_note(changed))
         if req.concert and event_id:
@@ -408,7 +431,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             topic_status = NO_LIVE_CHAT
         reply = render_added(
             calendar=cal_name,
-            body=body,
+            body=body_of(extra),
             notes=more_notes,
             html_link=html_link,
             duplicate=duplicate,

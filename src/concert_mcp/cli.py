@@ -24,6 +24,7 @@ from concert_mcp.flows.concert_add import ALIASES, KNOWN, AddRequest, add_event
 from concert_mcp.flows.deliver import deliver, render_tool_result, run_tool
 from concert_mcp.flows.event_delete import DELETE_ALIASES, DELETE_KNOWN, DeleteRequest, delete_event
 from concert_mcp.flows.healthcheck import run_healthcheck
+from concert_mcp.flows.lineup import lineup_outcome
 from concert_mcp.flows.poll import poll_outcome
 from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services
@@ -127,6 +128,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--artist", default="", help="artist, when there is no --url")
     p.add_argument("--date", default="", help="concert date, YYYY-MM-DD (names the playlist; the event's date)")
     p.add_argument("--venue", default="", help="venue name, used to break ties in the lookup")
+
+    p = add("lineup", "who opens and when the acts go on, found on the web (Gemini); patches the live topic's event")
+    p.add_argument("--artist", default="", help="headliner; empty takes the live topic's show")
+    p.add_argument("--date", default="", help="concert date, YYYY-MM-DD; empty takes the live topic's show")
+    p.add_argument("--venue", default="", help="venue name, a hint for the search")
+
+    gp = add("gemini", "Gemini maintenance commands")
+    gsub = gp.add_subparsers(dest="gemini_command", metavar="<command>", required=True)
+    q = gsub.add_parser("auth", help="store a Gemini API key, once (optional)", allow_abbrev=False)
+    _add_globals(q, suppress=True)
+    q.add_argument("--force", action="store_true", help="replace a stored key")
+    q.add_argument("--manual", action="store_true", help="type the key instead of reading 1Password")
 
     add("queue", "the concerts waiting for the weekly setlist check, and when the poll last ran")
 
@@ -356,6 +369,25 @@ def _cmd_setlist_playlist(args: argparse.Namespace, settings: Settings) -> int:
     return emit(outcome, delivery, text, json_mode=args.json_mode)
 
 
+def _cmd_lineup(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    outcome, delivery, text = run_tool(
+        lambda: lineup_outcome(args.artist, args.date, args.venue, svc), svc, send=not args.no_send
+    )
+    return emit(outcome, delivery, text, json_mode=args.json_mode)
+
+
+def _cmd_gemini(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    try:
+        record = auth.gemini_auth(settings, svc.state, manual=args.manual, force=args.force)
+    except ProviderError as e:
+        log_err(e.error)
+        return 1
+    print(json.dumps(record, ensure_ascii=False))
+    return 0
+
+
 def _cmd_queue(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     outcome, delivery, text = run_tool(lambda: queue_outcome(svc), svc, send=not args.no_send)
@@ -508,6 +540,10 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_setlist_find(args, settings)
     if command == "setlist-playlist":
         return _cmd_setlist_playlist(args, settings)
+    if command == "lineup":
+        return _cmd_lineup(args, settings)
+    if command == "gemini":
+        return _cmd_gemini(args, settings)
     if command == "queue":
         return _cmd_queue(args, settings)
     if command == "poll":

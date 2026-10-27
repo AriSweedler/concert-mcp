@@ -480,3 +480,43 @@ def test_provider_reply_carries_no_personal_name() -> None:
         text = provider_reply(provider, "Operator")
         assert "Ari" not in text
         assert "laptop" not in text
+
+
+def test_render_lineup_goldens() -> None:
+    from concert_mcp.text.lineup import Lineup, Opener
+
+    page = "https://www.setlist.fm/setlist/zork/2026/the-hollow-oakland-ca-1a2b3c4d.html"
+    full = Lineup(
+        "found",
+        openers=(Opener("Zork", page), Opener("Blorp")),
+        doors="7:00 PM",
+        opener_time="8:00 PM",
+        headliner_time="9:00 PM",
+        sources=("https://a.example", "https://b.example", "https://c.example", "https://d.example"),
+    )
+    assert reply.render_lineup("Zed Fox", "2026-11-14", "The Quarry", full, patched=True) == (
+        "**Lineup:** Zed Fox @ The Quarry, 2026-11-14\n"
+        f"• **Opener:** Zork ([recent setlist]({page}))\n"
+        "• **Opener:** Blorp\n"
+        "• **Expected:** doors 7:00 PM, Zork 8:00 PM, Zed Fox 9:00 PM\n"
+        "• **Sources:** [1](https://a.example) [2](https://b.example) [3](https://c.example)\n"
+        "Added to the calendar event."
+    )
+    assert reply.render_lineup("Zed Fox", "2026-11-14", "", Lineup("found", doors="7:00 PM"), patched=False) == (
+        "**Lineup:** Zed Fox, 2026-11-14\n• **Opener:** none announced\n• **Expected:** doors 7:00 PM"
+    )
+    assert reply.render_lineup(
+        "Zed Fox", "2026-11-14", "", Lineup("found", openers=(Opener("Zork"),)), patched=False
+    ) == ("**Lineup:** Zed Fox, 2026-11-14\n• **Opener:** Zork\n• **Expected:** set times not announced")
+    assert reply.render_lineup("Zed Fox", "2026-11-14", "The Quarry", Lineup("none"), patched=False) == (
+        "**Lineup:** Zed Fox @ The Quarry, 2026-11-14\nNo opener or set times announced yet in the sources I can find."
+    )
+
+
+def test_provider_reply_gemini() -> None:
+    assert provider_reply("gemini-unconfigured", "Admin") == (
+        "Gemini is not set up on this machine. Admin: run `concert-mcp gemini auth`."
+    )
+    assert provider_reply("gemini", "Admin") == (
+        "The lineup lookup failed; the event keeps what the ticket said. Admin: check the host log."
+    )

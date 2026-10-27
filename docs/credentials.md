@@ -1,6 +1,6 @@
 # Credentials
 
-Four providers. Google Calendar is required. `concert_add` degrades without the other three (the reply says `not made (Spotify is not set up ...)`, `lookup skipped (setlist.fm is not set up ...)`, `NOT SENT: no live chat`), but the healthcheck expects every provider on the gateway host: a missing credential is a FAIL with its fix line and counts in the exit code, so the homelab doctor notices. The server reads the credential files lazily, so a `spotify auth` or `setlist-auth` run while it is up is picked up on the next call without a restart or `openclaw mcp reload`.
+Five providers. Google Calendar is required. `concert_add` degrades without the other three (the reply says `not made (Spotify is not set up ...)`, `lookup skipped (setlist.fm is not set up ...)`, `NOT SENT: no live chat`), but the healthcheck expects every provider on the gateway host: a missing credential is a FAIL with its fix line and counts in the exit code, so the homelab doctor notices. The server reads the credential files lazily, so a `spotify auth` or `setlist-auth` run while it is up is picked up on the next call without a restart or `openclaw mcp reload`.
 
 ## Google Calendar
 
@@ -83,6 +83,21 @@ concert-mcp venues lookup --name 'Cafe Du Nord'
 
 The key file is `<config_dir>/places.json`, mode 600. The address fields bill at the Pro SKU (5,000 free calls a month) and the website field at Enterprise (1,000 free); a few venues a month costs nothing. `CONCERT_MCP_VENUE_LOOKUP=0` turns every network lookup off.
 
+## Gemini (optional)
+
+The lineup step (who opens, the announced set times, the opener's most recent setlist.fm page) asks Gemini once per concert with Google Search grounding. Without a key the step is skipped silently: `concert_add` works unchanged, the `gemini-key` healthcheck row reads `SKIP optional: ...`, and the `lineup` tool answers `FIX: Gemini is not set up`.
+
+1. Create a free API key at <https://aistudio.google.com/apikey> (an AI Studio key; the free tier carries a daily allowance of grounded requests, and a concert costs one).
+2. Store it, typed hidden into the terminal, or from the 1Password item `CONCERT_MCP_OP_GEMINI_ITEM` (default `Gemini - API key`, field `credential`):
+
+   ```sh
+   concert-mcp gemini auth --manual      # type the key hidden; or without --manual, read it from 1Password
+   concert-mcp lineup --artist 'Zed Fox' --date 2026-11-14 --venue 'The Quarry'
+   ```
+
+   The key (at least 30 characters, not the placeholder) is written to `<config_dir>/gemini.json`, mode 600, and one ungrounded call proves it works. `--force` replaces a stored key. The server reads the file lazily, so the next `concert_add` after `gemini auth` runs the lineup step without a restart.
+3. One `generateContent` call per concert on `gemini-2.5-flash` with the `google_search` tool, capped at `CONCERT_MCP_GEMINI_TIMEOUT_S` (20 s). A refusal, a timeout or an unreadable answer is a log line; the event and the reply keep what the ticket said.
+
 ## Registering the server with OpenClaw
 
 Register the server once on the gateway host; OpenClaw keeps a stdio server running and restarts it with backoff:
@@ -97,7 +112,7 @@ openclaw mcp reload                     # after changing the entry, without rest
 
 The `tools.alsoAllow` line matters when the agent runs the `minimal` tool profile (the usual setup for a small local model): that profile hides every tool it does not name, MCP tools included, and the model then answers "I don't have a calendar tool". Keep whatever the list already holds and add the three `concert__` names; `openclaw config get tools.alsoAllow` shows it.
 
-The entry exposes three tools: `concert_add`, `calendar_add` and `event_delete`, the three jobs a chat message asks for. The other four (`teaser_playlist`, `setlist_find`, `queue_status`, `healthcheck`) are operator jobs the CLI already covers, and `concert_add` runs the first two itself; a 9B model given all eight is more likely to call one of them instead of `concert_add`. `setlist_playlist` (a pasted setlist.fm link) is a chat job and belongs in the filter. To expose the rest anyway, drop `toolFilter` from the entry: the server always registers all eight.
+The entry exposes three tools: `concert_add`, `calendar_add` and `event_delete`, the three jobs a chat message asks for. The other four (`teaser_playlist`, `setlist_find`, `queue_status`, `healthcheck`) are operator jobs the CLI already covers, and `concert_add` runs the first two itself; a 9B model given all nine is more likely to call one of them instead of `concert_add`. `setlist_playlist` (a pasted setlist.fm link) is a chat job and belongs in the filter. To expose the rest anyway, drop `toolFilter` from the entry: the server always registers all nine. `lineup` ("who is the opener here") is a chat job too and belongs in the filter.
 
 `requestTimeoutMs` is 480000 so that a slow provider never cuts a call off after the calendar insert and before the reply (the model would then retry; the duplicate guard makes that retry harmless, but the user waits twice and gets no link). A typical cold `concert_add` runs 60 to 150 s: a Liked Songs fetch is about 40 s, the teaser step is capped at `CONCERT_MCP_TEASER_TIMEOUT_S` (150 s, covering every Spotify read and write of the step), and `gws` and Telegram add a few seconds each. The worst case, with every provider at its cap, is about 8 minutes: teaser 150 s, two setlist.fm requests at 30 s, the duplicate check and the insert at 60 s each, three `openclaw message send` tries at 20 s with 4 s between them, and a 20 s topic rename. OpenClaw's default of 60 s is far too short. `${VAR}` in `env` expands from the gateway's environment; an unset variable expands to empty, which the package treats as "use the default". `CONCERT_MCP_GWS_BIN` and `CONCERT_MCP_OPENCLAW_BIN` are there for a gateway whose PATH has neither binary and whose install dir is not one of `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` (those three are searched when PATH misses; a launchd-started gateway has a bare PATH).
 

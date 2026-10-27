@@ -21,11 +21,13 @@ from typing import Any
 
 from concert_mcp.proc import RunResult
 from concert_mcp.result import ProviderError
+from concert_mcp.text.lineup import GroundedAnswer
 from concert_mcp.text.routes import ChatTarget
 
 GWS_REFUSED = "Google Calendar refused the request. Admin: check `gws auth` on the host."
 SPOTIFY_REFUSED = "Spotify refused the request. Admin: check the host log."
 SETLISTFM_REFUSED = "setlist.fm refused the request. Admin: check the host log."
+GEMINI_REFUSED = "The lineup lookup failed; the event keeps what the ticket said. Admin: check the host log."
 
 
 def _normalize(name: object) -> str:
@@ -396,6 +398,10 @@ class FakeSetlistFm:
         res = self.responses.get((artist, date, year))
         return copy.deepcopy(dict(res)) if res is not None else None
 
+    def latest_setlist(self, artist: str) -> dict[str, Any] | None:
+        """The (artist, None, None) response: the artist's setlists, newest first."""
+        return self.search_setlists(artist)
+
     def get_setlist(self, setlist_id: str) -> dict[str, Any] | None:
         self.fetched.append(setlist_id)
         if self.fail:
@@ -662,3 +668,19 @@ class FakeVenueLookup:
             if needle.lower() in q:
                 return hit
         return None
+
+
+class FakeGemini:
+    """GroundedModel that answers every prompt with one canned text and sources; `fail` raises ProviderError."""
+
+    def __init__(self, text: str = "", sources: Sequence[str] = (), *, fail: bool = False) -> None:
+        self.text = text
+        self.sources = tuple(sources)
+        self.fail = fail
+        self.prompts: list[tuple[str, bool]] = []
+
+    def ask(self, prompt: str, *, grounded: bool = True) -> GroundedAnswer:
+        self.prompts.append((prompt, grounded))
+        if self.fail:
+            raise ProviderError("gemini", "gemini refused | status='500' body=''", GEMINI_REFUSED)
+        return GroundedAnswer(text=self.text, sources=self.sources)

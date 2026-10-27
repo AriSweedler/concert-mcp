@@ -67,6 +67,9 @@ class Settings:
     places_credentials: Path
     venue_lookup: bool
     op_places_item: str
+    gemini_credentials: Path
+    gemini_timeout_s: int
+    op_gemini_item: str
     operator_name: str
     send: bool
     rename_topics: bool
@@ -148,6 +151,13 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("places_credentials", "<config_dir>/places.json", "optional Google Places key; without it Nominatim answers"),
     ("venue_lookup", "1", "0 skips every network venue lookup; the ticket's address block is still used"),
     ("op_places_item", "Google Places - API key", "field credential, `venues auth` only"),
+    (
+        "gemini_credentials",
+        "<config_dir>/gemini.json",
+        "optional Gemini key: openers and set times; without it the lineup step is skipped",
+    ),
+    ("gemini_timeout_s", "20", "cap on the one Gemini call per concert"),
+    ("op_gemini_item", "Gemini - API key", "field credential, `gemini auth` only"),
     ("operator_name", "Admin", "the name in 'Admin: check `gws auth` on the host.'"),
     ("send", "1", "0 disables reply delivery and topic renames everywhere"),
     ("rename_topics", "1", "0 keeps Telegram topic names as they are"),
@@ -372,6 +382,9 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         places_credentials=path_of("places_credentials", config_dir / "places.json"),
         venue_lookup=bool_of("venue_lookup", True),
         op_places_item=str_of("op_places_item", "Google Places - API key"),
+        gemini_credentials=path_of("gemini_credentials", config_dir / "gemini.json"),
+        gemini_timeout_s=int_of("gemini_timeout_s", 20),
+        op_gemini_item=str_of("op_gemini_item", "Gemini - API key"),
         operator_name=str_of("operator_name", "Admin"),
         send=bool_of("send", True),
         rename_topics=bool_of("rename_topics", True),

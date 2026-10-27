@@ -1,4 +1,4 @@
-"""server.py: the eight tools, their string-only schemas, the instructions, and the output contract on fake services."""
+"""server.py: the nine tools, their string-only schemas, the instructions, and the output contract on fake services."""
 
 from __future__ import annotations
 
@@ -26,13 +26,14 @@ from concert_mcp.text.reply import NO_CANDIDATES_REPLY, WHICH_EVENT_REPLY  # noq
 from conftest import make_services, settings_env  # noqa: E402
 from fakes import FakeCalendar  # noqa: E402
 
-EIGHT = {
+NINE = {
     "concert_add",
     "calendar_add",
     "event_delete",
     "teaser_playlist",
     "setlist_find",
     "setlist_playlist",
+    "lineup",
     "queue_status",
     "healthcheck",
 }
@@ -47,9 +48,9 @@ async def _tools(svc: Services) -> dict[str, Any]:
 # ---------- registration and schema ----------
 
 
-async def test_registers_exactly_the_eight_tools(svc: Services) -> None:
-    assert set(await _tools(svc)) == EIGHT
-    assert {fn.__name__ for fn in TOOLS} == EIGHT
+async def test_registers_exactly_the_nine_tools(svc: Services) -> None:
+    assert set(await _tools(svc)) == NINE
+    assert {fn.__name__ for fn in TOOLS} == NINE
 
 
 async def test_every_parameter_is_a_described_string_with_a_default(svc: Services) -> None:
@@ -79,6 +80,7 @@ async def test_descriptions_are_short_and_literal(svc: Services) -> None:
         "teaser_playlist",
         "setlist_find",
         "setlist_playlist",
+        "lineup",
         "queue_status",
     ):
         assert "NO_REPLY" in DESCRIPTIONS[name], name

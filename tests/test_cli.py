@@ -551,6 +551,10 @@ def test_build_parser_subcommands() -> None:
     args, extras = parser.parse_known_args(["--json", "spotify", "liked", "--artist", "X", "--dry-run"])
     assert args.spotify_command == "liked" and args.json_mode is True and args.dry_run is True
     assert extras == []
+    args, extras = parser.parse_known_args(["lineup", "--artist", "Zed Fox", "--date", "2026-11-14"])
+    assert args.command == "lineup" and args.artist == "Zed Fox" and args.venue == "" and extras == []
+    args, extras = parser.parse_known_args(["gemini", "auth", "--manual", "--force"])
+    assert args.gemini_command == "auth" and args.manual is True and args.force is True
 
 
 def test_venues_text_and_json(cli_env: Services, monkeypatch, capsys) -> None:
@@ -560,3 +564,10 @@ def test_venues_text_and_json(cli_env: Services, monkeypatch, capsys) -> None:
     assert code == 0
     rec = json.loads(out)
     assert rec["count"] == 0 and rec["venues"] == []
+
+
+def test_lineup_without_a_key_is_a_fix_line(cli_env: Services, monkeypatch, capsys) -> None:
+    code = cli.main(["lineup", "--artist", "Zed Fox", "--date", "2026-11-14"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert out.strip() == "FIX: Gemini is not set up: run `concert-mcp gemini auth` on the host, then ask again"
