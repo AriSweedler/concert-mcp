@@ -85,7 +85,7 @@ The key file is `<config_dir>/places.json`, mode 600. The address fields bill at
 
 ## Gemini (optional)
 
-The lineup step (who opens, the announced set times, the opener's most recent setlist.fm page) asks Gemini once per concert with Google Search grounding. Without a key the step is skipped silently: `concert_add` works unchanged, the `gemini-key` healthcheck row reads `SKIP optional: ...`, and the `lineup` tool answers `FIX: Gemini is not set up`.
+The lineup step (who opens, the announced set times, the opener's most recent setlist.fm page) asks Gemini once per concert, with the venue's own pages read through the `url_context` tool. Without a key the step is skipped silently: `concert_add` works unchanged, the `gemini-key` healthcheck row reads `SKIP optional: ...`, and the `lineup` tool answers `FIX: Gemini is not set up`.
 
 1. Create a free API key at <https://aistudio.google.com/apikey> (an AI Studio key; the free tier carries a daily allowance of grounded requests, and a concert costs one).
 2. Store it, typed hidden into the terminal, or from the 1Password item `CONCERT_MCP_OP_GEMINI_ITEM` (default `Gemini - API key`, field `credential`):
@@ -96,7 +96,7 @@ The lineup step (who opens, the announced set times, the opener's most recent se
    ```
 
    The key (at least 30 characters, not the placeholder) is written to `<config_dir>/gemini.json`, mode 600, and one ungrounded call proves it works. `--force` replaces a stored key. The server reads the file lazily, so the next `concert_add` after `gemini auth` runs the lineup step without a restart.
-3. One `generateContent` call per concert on `gemini-3.8-flash` with the `google_search` tool, capped at `CONCERT_MCP_GEMINI_TIMEOUT_S` (20 s). A refusal, a timeout or an unreadable answer is a log line; the event and the reply keep what the ticket said.
+3. One `generateContent` call per concert on `gemini-3.5-flash-lite` with the `url_context` tool (the free tier allows it; Google Search grounding answers 429 on a free key and is only added with `CONCERT_MCP_GEMINI_GROUNDING=search` on a billed one), capped at `CONCERT_MCP_GEMINI_TIMEOUT_S` (60 s). A refusal, a timeout or an unreadable answer is a log line; the event and the reply keep what the ticket said.
 
 ## Registering the server with OpenClaw
 

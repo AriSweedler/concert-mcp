@@ -1,10 +1,11 @@
-"""Gemini over urllib: one grounded `generateContent` call per lookup (unit adapter-music).
+"""Gemini over urllib: one `generateContent` call per lookup (unit adapter-music).
 
-`gemini-3.8-flash` (CONCERT_MCP_GEMINI_MODEL) with the `google_search` tool reads the venue's event page
-for us, so no venue page is ever
-scraped here. The key comes from `<config_dir>/gemini.json` (`concert-mcp gemini auth` writes it); a free AI Studio
-key carries a daily grounding allowance, and a concert costs one call. The call is capped at
-`CONCERT_MCP_GEMINI_TIMEOUT_S` (20 s) so a slow answer never holds a concert_add reply for long.
+The model reads the venue's pages for us through the `url_context` tool, so no venue page is ever scraped
+here; a free AI Studio key allows that, while Google Search grounding needs a billed key and is added only
+when `CONCERT_MCP_GEMINI_GROUNDING=search`. The default model is `gemini-3.5-flash-lite` (the free tier
+answers it; the larger Flash models shed free traffic with 503), with `CONCERT_MCP_GEMINI_FALLBACKS` tried in
+turn on a 429 or 503. The key comes from `<config_dir>/gemini.json` (`concert-mcp gemini auth` writes it); a
+concert costs one call, capped at `CONCERT_MCP_GEMINI_TIMEOUT_S` (60 s, a page read takes twenty or so).
 """
 
 from __future__ import annotations
@@ -26,8 +27,16 @@ from concert_mcp.text.lineup import GroundedAnswer
 from concert_mcp.text.reply import provider_reply
 
 GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
-# 2.5 Flash left the API in October 2026; the model is a setting so the next retirement is an .env line.
-GEMINI_MODEL = os.environ.get("CONCERT_MCP_GEMINI_MODEL", "").strip() or "gemini-3.8-flash"
+# Models are settings, so the next retirement or quota change is an .env line, not a release.
+GEMINI_MODEL = os.environ.get("CONCERT_MCP_GEMINI_MODEL", "").strip() or "gemini-3.5-flash-lite"
+GEMINI_FALLBACKS = tuple(
+    m.strip()
+    for m in (os.environ.get("CONCERT_MCP_GEMINI_FALLBACKS") or "gemini-3.5-flash,gemini-3.8-flash").split(",")
+    if m.strip()
+)
+# "url" reads the pages the prompt names (free tier); "search" adds Google Search grounding (a billed key).
+GEMINI_GROUNDING = os.environ.get("CONCERT_MCP_GEMINI_GROUNDING", "").strip().lower() or "url"
+RETRY_STATUSES = {429, 503}
 PROBE_PROMPT = "Answer with the single word: ok"
 
 
@@ -41,14 +50,22 @@ def save_gemini_key(path: Path, key: str, state: StateStore) -> None:
     save_api_key(path, key, state)
 
 
-def request_body(prompt: str, *, grounded: bool) -> dict[str, Any]:
-    """The generateContent body: the prompt, the Google Search tool when grounded, a cool temperature (pure)."""
+def grounding_tools(mode: str = GEMINI_GROUNDING) -> list[dict[str, Any]]:
+    """The tools a grounded call carries: url_context always, Google Search only in "search" mode (pure)."""
+    tools: list[dict[str, Any]] = [{"url_context": {}}]
+    if mode == "search":
+        tools.append({"google_search": {}})
+    return tools
+
+
+def request_body(prompt: str, *, grounded: bool, mode: str = GEMINI_GROUNDING) -> dict[str, Any]:
+    """The generateContent body: the prompt, the grounding tools when grounded, a cool temperature (pure)."""
     body: dict[str, Any] = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.1},
     }
     if grounded:
-        body["tools"] = [{"google_search": {}}]
+        body["tools"] = grounding_tools(mode)
     return body
 
 
@@ -59,12 +76,19 @@ def parse_answer(data: Any) -> GroundedAnswer:
     parts = ((first.get("content") or {}).get("parts") or []) if isinstance(first, dict) else []
     text = "".join(str(p.get("text") or "") for p in parts if isinstance(p, dict))
     chunks = ((first.get("groundingMetadata") or {}).get("groundingChunks") or []) if isinstance(first, dict) else []
-    sources = tuple(
+    sources = [
         str((c.get("web") or {}).get("uri") or "")
         for c in chunks
         if isinstance(c, dict) and (c.get("web") or {}).get("uri")
-    )
-    return GroundedAnswer(text=text, sources=sources)
+    ]
+    # url_context names the pages it read; only the ones it actually fetched count as sources
+    pages = ((first.get("urlContextMetadata") or {}).get("urlMetadata") or []) if isinstance(first, dict) else []
+    sources += [
+        str(u.get("retrievedUrl") or "")
+        for u in pages
+        if isinstance(u, dict) and u.get("retrievedUrl") and "SUCCESS" in str(u.get("urlRetrievalStatus") or "")
+    ]
+    return GroundedAnswer(text=text, sources=tuple(dict.fromkeys(sources)))
 
 
 class GeminiClient:
@@ -92,9 +116,22 @@ class GeminiClient:
         return cls(settings, **kw)
 
     def ask(self, prompt: str, *, grounded: bool = True) -> GroundedAnswer:
-        """One generateContent call; ProviderError('gemini') on any failure."""
-        url = f"{GEMINI_API}/models/{GEMINI_MODEL}:generateContent"
-        log_debug("gemini ask " + kv(model=GEMINI_MODEL, grounded=grounded, chars=len(prompt)))
+        """One generateContent call, the fallback models tried on a 429 or 503; ProviderError('gemini') otherwise."""
+        last: ProviderError | None = None
+        for model in (GEMINI_MODEL, *GEMINI_FALLBACKS):
+            try:
+                return self._ask(model, prompt, grounded=grounded)
+            except ProviderError as e:
+                last = e
+                if not any(f"status='{code}'" in e.error for code in RETRY_STATUSES):
+                    raise
+                log_debug("gemini fallback " + kv(model=model, error=e.error[:80]))
+        assert last is not None
+        raise last
+
+    def _ask(self, model: str, prompt: str, *, grounded: bool) -> GroundedAnswer:
+        url = f"{GEMINI_API}/models/{model}:generateContent"
+        log_debug("gemini ask " + kv(model=model, grounded=grounded, mode=GEMINI_GROUNDING, chars=len(prompt)))
         req = urllib.request.Request(
             url, data=json.dumps(request_body(prompt, grounded=grounded)).encode("utf-8"), method="POST"
         )
@@ -111,7 +148,9 @@ class GeminiClient:
             except Exception:  # noqa: BLE001 - a body that cannot be read is not worth a second error
                 body = ""
             raise ProviderError(
-                "gemini", f"gemini refused | status='{e.code}' body='{body}'", provider_reply("gemini", operator)
+                "gemini",
+                f"gemini refused | status='{e.code}' model='{model}' body='{body}'",
+                provider_reply("gemini", operator),
             ) from e
         except urllib.error.URLError as e:
             raise ProviderError(

@@ -47,8 +47,10 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_VENUE_LOOKUP` | `1` | 0 skips every network venue lookup; the ticket's address block is still used |
 | `CONCERT_MCP_OP_PLACES_ITEM` | `Google Places - API key` | field credential, `venues auth` only |
 | `CONCERT_MCP_GEMINI_CREDENTIALS` | `<config_dir>/gemini.json` | optional Gemini key for the lineup step (openers, set times); without it the step is skipped |
-| `CONCERT_MCP_GEMINI_TIMEOUT_S` | `20` | cap on the one Gemini call per concert |
-| `CONCERT_MCP_GEMINI_MODEL` | `gemini-3.8-flash` | the Gemini model behind the lineup lookups; it must support the `google_search` tool |
+| `CONCERT_MCP_GEMINI_TIMEOUT_S` | `60` | cap on the one Gemini call per concert |
+| `CONCERT_MCP_GEMINI_MODEL` | `gemini-3.5-flash-lite` | the Gemini model behind the lineup lookups; the free tier answers it |
+| `CONCERT_MCP_GEMINI_FALLBACKS` | `gemini-3.5-flash,gemini-3.8-flash` | tried in turn when the model answers 429 or 503 |
+| `CONCERT_MCP_GEMINI_GROUNDING` | `url` | `url`: the model reads the venue's pages (`url_context`, free); `search`: adds Google Search grounding, which needs a billed key |
 | `CONCERT_MCP_OP_GEMINI_ITEM` | `Gemini - API key` | field credential, `gemini auth` only |
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in 'Admin: check `gws auth` on the host.' |
 | `CONCERT_MCP_SEND` | `1` | 0 disables reply delivery and topic renames everywhere |

@@ -34,7 +34,7 @@ def test_prompt_names_the_show_the_hint_and_the_shape() -> None:
     assert text.startswith(
         "For the concert by Zed Fox at The Quarry, San Francisco on 2026-11-14: who are the opening acts"
     )
-    assert "The venue's website is https://venue.example." in text
+    assert "Read the venue's website https://venue.example/ and its event listing" in text
     assert "use null for anything not announced" in text
     assert json.dumps(LINEUP_SCHEMA["properties"], separators=(",", ":")) in text
     assert "website" not in lineup_prompt("Zed Fox", "2026-11-14", "The Quarry", None).split("Answer")[

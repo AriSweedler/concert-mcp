@@ -10,6 +10,7 @@ import pytest
 
 from concert_mcp.adapters.gemini_http import (
     GEMINI_API,
+    GEMINI_FALLBACKS,
     GEMINI_MODEL,
     PROBE_PROMPT,
     GeminiClient,
@@ -72,11 +73,12 @@ def test_if_configured_and_key_file(settings: Settings, fake: FakeUrlopen) -> No
 
 
 def test_request_body_grounded_and_not() -> None:
-    assert request_body("q", grounded=True) == {
+    assert request_body("q", grounded=True, mode="search") == {
         "contents": [{"role": "user", "parts": [{"text": "q"}]}],
         "generationConfig": {"temperature": 0.1},
-        "tools": [{"google_search": {}}],
+        "tools": [{"url_context": {}}, {"google_search": {}}],
     }
+    assert request_body("q", grounded=True, mode="url")["tools"] == [{"url_context": {}}]
     assert "tools" not in request_body("q", grounded=False)
 
 
@@ -99,7 +101,7 @@ def test_ask_posts_one_grounded_call_with_the_timeout(
     assert headers["Content-type"] == "application/json"
     assert any(k.lower() == "x-goog-api-key" and v == "k" * 39 for k, v in headers.items())
     assert json.loads(body or b"{}") == request_body("who opens?", grounded=True)
-    assert seen["timeout"] == settings.gemini_timeout_s == 20
+    assert seen["timeout"] == settings.gemini_timeout_s == 60
     assert answer == GroundedAnswer(
         '{"openers": ["Zork"], "doors": "7:00 PM"}', ("https://venue.example/events/zed-fox",)
     )
@@ -113,11 +115,27 @@ def test_parse_answer_tolerates_any_shape() -> None:
 
 
 def test_http_error_is_provider_error_with_the_status(client: GeminiClient, fake: FakeUrlopen) -> None:
-    fake.add("POST", GENERATE, http_error(429, '{"error": "quota"}'))
+    # a 429 or 503 moves on to the next model; when every model refuses, the last refusal is the error
+    for model in (GEMINI_MODEL, *GEMINI_FALLBACKS):
+        fake.add("POST", f"{GEMINI_API}/models/{model}:generateContent", http_error(429, '{"error": "quota"}'))
     with pytest.raises(ProviderError) as ei:
         client.ask("q")
     assert ei.value.provider == "gemini"
     assert "status='429'" in ei.value.error and "quota" in ei.value.error
+    assert f"model='{GEMINI_FALLBACKS[-1]}'" in ei.value.error
+
+
+def test_a_busy_model_falls_back_to_the_next(client: GeminiClient, fake: FakeUrlopen) -> None:
+    fake.add("POST", GENERATE, http_error(503, '{"error": "high demand"}'))
+    fake.add("POST", f"{GEMINI_API}/models/{GEMINI_FALLBACKS[0]}:generateContent", ANSWER)
+    assert client.ask("q").text == parse_answer(ANSWER).text
+
+
+def test_a_real_refusal_does_not_fall_back(client: GeminiClient, fake: FakeUrlopen) -> None:
+    fake.add("POST", GENERATE, http_error(400, '{"error": "bad"}'))
+    with pytest.raises(ProviderError) as ei:
+        client.ask("q")
+    assert "status='400'" in ei.value.error and f"model='{GEMINI_MODEL}'" in ei.value.error
     assert ei.value.reply == (
         "The lineup lookup failed; the event keeps what the ticket said. Admin: check the host log."
     )
@@ -131,7 +149,7 @@ def test_unreachable_and_timeout_are_provider_errors(client: GeminiClient, fake:
     fake.add("POST", GENERATE, TimeoutError("timed out"))
     with pytest.raises(ProviderError) as ei:
         client.ask("q")
-    assert "timed out" in ei.value.error and "after_s='20'" in ei.value.error
+    assert "timed out" in ei.value.error and "after_s='60'" in ei.value.error
 
 
 def test_unreadable_answer_is_a_provider_error(client: GeminiClient, fake: FakeUrlopen) -> None:

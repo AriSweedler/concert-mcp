@@ -85,12 +85,17 @@ class Lineup:
 
 
 def lineup_prompt(artist: str, date: str, venue: str, website: str | None) -> str:
-    """The one question asked per concert; the venue's website is a hint for where to look."""
-    hint = f" The venue's website is {website}." if website else ""
+    """The one question asked per concert; the venue's website names the pages the model reads (url_context)."""
+    hint = ""
+    if website:
+        base = website.rstrip("/")
+        hint = (
+            f" Read the venue's website {base}/ and its event listing ({base}/shows, {base}/calendar or {base}/events)."
+        )
     return (
         f"For the concert by {artist} at {venue} on {date}: who are the opening acts, and what are the announced "
-        "set times (doors, opener on stage, headliner on stage)? Search the venue's event page, the promoter and "
-        f"the ticket page.{hint} Answer only from sources you can cite; use null for anything not announced and an "
+        f"set times (doors, opener on stage, headliner on stage)?{hint} Use the venue's event page, the promoter and "
+        "the ticket page. Answer only from pages you have read; use null for anything not announced and an "
         "empty list when no opener is announced. Do not guess. Answer with one JSON object and nothing else, in "
         f"this shape: {json.dumps(LINEUP_SCHEMA['properties'], separators=(',', ':'))}"
     )
