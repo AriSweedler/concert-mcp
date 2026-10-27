@@ -7,6 +7,10 @@ import json
 import pytest
 
 from concert_mcp.text.lineup import (
+    lineup_pages,
+    parse_website,
+    urls_in,
+    website_prompt,
     LINEUP_SCHEMA,
     GroundedAnswer,
     Lineup,
@@ -29,17 +33,46 @@ SOURCES = ("https://venue.example/events/zed-fox", "https://tickets.example/zed-
 PAGE = "https://www.setlist.fm/setlist/zork/2026/the-hollow-oakland-ca-1a2b3c4d.html"
 
 
-def test_prompt_names_the_show_the_hint_and_the_shape() -> None:
-    text = lineup_prompt("Zed Fox", "2026-11-14", "The Quarry, San Francisco", "https://venue.example")
-    assert text.startswith(
-        "For the concert by Zed Fox at The Quarry, San Francisco on 2026-11-14: who are the opening acts"
+def test_prompt_names_the_pages_the_show_and_the_shape() -> None:
+    pages = lineup_pages(
+        "Zed Fox", "2026-11-14", "The Quarry, San Francisco", "https://venue.example", ("https://tix.example/zed",)
     )
-    assert "Read the venue's website https://venue.example/ and its event listing" in text
+    assert pages == (
+        "https://venue.example/",
+        "https://venue.example/shows",
+        "https://venue.example/calendar",
+        "https://venue.example/events",
+        "https://tix.example/zed",
+        "https://lite.duckduckgo.com/lite/?q=Zed+Fox+The+Quarry%2C+San+Francisco+2026-11-14+tickets",
+    )
+    text = lineup_prompt("Zed Fox", "2026-11-14", "The Quarry, San Francisco", pages)
+    assert text.startswith("Read these pages: https://venue.example/ https://venue.example/shows")
+    assert "For the concert by Zed Fox at The Quarry, San Francisco on 2026-11-14: who are the opening acts" in text
     assert "use null for anything not announced" in text
     assert json.dumps(LINEUP_SCHEMA["properties"], separators=(",", ":")) in text
-    assert "website" not in lineup_prompt("Zed Fox", "2026-11-14", "The Quarry", None).split("Answer")[
-        0
-    ].lower().replace("venue's event page", "")
+    # no website: the results page alone
+    assert lineup_pages("Zed Fox", "2026-11-14", "The Quarry", None) == (
+        "https://lite.duckduckgo.com/lite/?q=Zed+Fox+The+Quarry+2026-11-14+tickets",
+    )
+
+
+def test_ticket_urls_are_read_once_each() -> None:
+    text = "Your order https://tix.example/o/1. See https://tix.example/o/1 and https://venue.example/shows/zed, thanks"
+    assert urls_in(text) == ("https://tix.example/o/1", "https://venue.example/shows/zed")
+    assert urls_in("") == ()
+
+
+def test_website_prompt_and_answer() -> None:
+    assert website_prompt("The Quarry, San Francisco").startswith(
+        "Read https://lite.duckduckgo.com/lite/?q=The+Quarry%2C+San+Francisco+official+website ."
+    )
+    assert (
+        parse_website(GroundedAnswer('```json\n{"website": "https://thequarrysf.com"}\n```', ()))
+        == "https://thequarrysf.com/"
+    )
+    assert parse_website(GroundedAnswer('{"website": null}', ())) is None
+    assert parse_website(GroundedAnswer('{"website": "https://www.yelp.com/biz/the-quarry"}', ())) is None
+    assert parse_website(GroundedAnswer("no idea", ())) is None
 
 
 @pytest.mark.parametrize(

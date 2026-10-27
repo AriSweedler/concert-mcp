@@ -101,7 +101,7 @@ def test_ask_posts_one_grounded_call_with_the_timeout(
     assert headers["Content-type"] == "application/json"
     assert any(k.lower() == "x-goog-api-key" and v == "k" * 39 for k, v in headers.items())
     assert json.loads(body or b"{}") == request_body("who opens?", grounded=True)
-    assert seen["timeout"] == settings.gemini_timeout_s == 60
+    assert seen["timeout"] == settings.gemini_timeout_s == 90
     assert answer == GroundedAnswer(
         '{"openers": ["Zork"], "doors": "7:00 PM"}', ("https://venue.example/events/zed-fox",)
     )
@@ -149,7 +149,7 @@ def test_unreachable_and_timeout_are_provider_errors(client: GeminiClient, fake:
     fake.add("POST", GENERATE, TimeoutError("timed out"))
     with pytest.raises(ProviderError) as ei:
         client.ask("q")
-    assert "timed out" in ei.value.error and "after_s='60'" in ei.value.error
+    assert "timed out" in ei.value.error and "after_s='90'" in ei.value.error
 
 
 def test_unreadable_answer_is_a_provider_error(client: GeminiClient, fake: FakeUrlopen) -> None:

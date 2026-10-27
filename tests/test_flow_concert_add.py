@@ -1025,7 +1025,8 @@ class TestLineup:
         )
         assert out.data["lineup"]["openers"] == [{"name": "Zork", "setlist_url": self.PAGE}]
         assert out.data["description"][-1] == f"Opener setlist (recent): {self.PAGE}"
-        assert len(svc.gemini.prompts) == 1
+        # the venue has no website in the registry: one call finds it, one reads the show's pages
+        assert len(svc.gemini.prompts) == 2 and svc.gemini.prompts[-1][0].startswith("Read these pages:")
 
     def test_ticket_with_an_opener_keeps_its_opener_and_gains_the_times(self, settings, now, forum_route, ticket_text):
         svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=FakeGemini(self.FULL))

@@ -96,7 +96,7 @@ The lineup step (who opens, the announced set times, the opener's most recent se
    ```
 
    The key (at least 30 characters, not the placeholder) is written to `<config_dir>/gemini.json`, mode 600, and one ungrounded call proves it works. `--force` replaces a stored key. The server reads the file lazily, so the next `concert_add` after `gemini auth` runs the lineup step without a restart.
-3. One `generateContent` call per concert on `gemini-3.5-flash-lite` with the `url_context` tool (the free tier allows it; Google Search grounding answers 429 on a free key and is only added with `CONCERT_MCP_GEMINI_GROUNDING=search` on a billed one), capped at `CONCERT_MCP_GEMINI_TIMEOUT_S` (60 s). A refusal, a timeout or an unreadable answer is a log line; the event and the reply keep what the ticket said.
+3. One `generateContent` call per concert on `gemini-3.5-flash-lite` with the `url_context` tool (the free tier allows it; Google Search grounding answers 429 on a free key and is only added with `CONCERT_MCP_GEMINI_GROUNDING=search` on a billed one), capped at `CONCERT_MCP_GEMINI_TIMEOUT_S` (90 s). A refusal, a timeout or an unreadable answer is a log line; the event and the reply keep what the ticket said.
 
 ## Registering the server with OpenClaw
 

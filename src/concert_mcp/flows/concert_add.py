@@ -386,6 +386,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 event_id=event_id,
                 description="\n".join(common["description"]),
                 svc=svc,
+                source_text=req.source,
             )
             extra = step.lines
             common["lineup"] = step.lineup.to_json()

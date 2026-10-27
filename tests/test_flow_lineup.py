@@ -218,7 +218,7 @@ def test_tool_in_a_topic_takes_the_show_from_the_event_and_patches_it(svc) -> No
     out = lineup_outcome("", "", "", svc)
     assert out.kind is Kind.OK, out
     assert out.data["artist"] == "Zed Fox" and out.data["date"] == "2026-11-14" and out.data["venue"] == "The Quarry"
-    assert "Zed Fox at The Quarry on 2026-11-14" in svc.gemini.prompts[0][0]
+    assert "Zed Fox at The Quarry on 2026-11-14" in svc.gemini.prompts[-1][0]
     assert out.reply.endswith("\nAdded to the calendar event.")
     [(_, eid, fields)] = svc.calendar.patched
     assert eid == e["id"]

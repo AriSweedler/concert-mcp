@@ -7,12 +7,14 @@ is the on-demand `lineup` tool: in a Telegram topic the topic's event supplies t
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from dataclasses import dataclass
 from typing import Any
 
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.topics import live_event, topic_event
-from concert_mcp.flows.venues import load_registry
+from concert_mcp.flows.venues import load_registry, save_registry
 from concert_mcp.log import kv, log_info, log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
 from concert_mcp.text.dates import concert_date
@@ -21,7 +23,11 @@ from concert_mcp.text.lineup import (
     Opener,
     latest_setlist_url,
     lineup_lines,
+    lineup_pages,
     lineup_prompt,
+    parse_website,
+    urls_in,
+    website_prompt,
     merge_lineup_lines,
     parse_lineup,
 )
@@ -59,13 +65,42 @@ def _opener_pages(openers: tuple[Opener, ...], svc: Services) -> tuple[Opener, .
     return tuple(out)
 
 
-def find_lineup(artist: str, date: str, venue: str, website: str | None, svc: Services) -> Lineup:
-    """One grounded call, checked; never raises."""
+def discover_website(venue: str, svc: Services) -> str | None:
+    """Ask the model, once per venue, which site is the venue's own, and remember it in the registry; None when unsure."""
+    model = svc.gemini
+    if model is None or not venue:
+        return None
+    try:
+        site = parse_website(model.ask(website_prompt(venue)))
+    except Exception as e:  # noqa: BLE001 - a venue without a website is a lineup without pages, not a failure
+        log_warn("venue website lookup failed | " + kv(venue=venue, error=f"{type(e).__name__}: {e}"[:120]))
+        return None
+    if not site:
+        log_info("venue website unknown | " + kv(venue=venue))
+        return None
+    name = venue_name_of(venue)
+    if name:
+        reg = load_registry(svc)
+        known = reg.get(venue_key(name))
+        if known is not None and not known.website:
+            known.website = site
+            save_registry(reg, svc)
+    log_info("venue website found | " + kv(venue=venue, website=site))
+    return site
+
+
+def find_lineup(
+    artist: str, date: str, venue: str, website: str | None, svc: Services, *, ticket_urls: Sequence[str] = ()
+) -> Lineup:
+    """The venue's pages (found once when the registry has none), the ticket's pages and a results page, read in
+    one call and checked; never raises."""
     model = svc.gemini
     if model is None:
         return Lineup("unavailable", reason="Gemini is not set up")
     try:
-        answer = model.ask(lineup_prompt(artist, date, venue, website))
+        site = website or discover_website(venue, svc)
+        pages = lineup_pages(artist, date, venue, site, ticket_urls)
+        answer = model.ask(lineup_prompt(artist, date, venue, pages))
         lineup = parse_lineup(answer, headliner=artist, venue=venue)
     except ProviderError as e:
         return Lineup("failed", reason=str(e.error)[:REASON_LIMIT])
@@ -80,6 +115,7 @@ def find_lineup(artist: str, date: str, venue: str, website: str | None, svc: Se
             openers=len(lineup.openers),
             times=lineup.has_times,
             sources=len(lineup.sources),
+            pages=len(pages),
         )
     )
     if lineup.status != "found":
@@ -113,9 +149,10 @@ def add_lineup_to_event(
     event_id: str,
     description: str | None,
     svc: Services,
+    source_text: str = "",
 ) -> LineupStep:
     """Look the lineup up and patch the lines the event's description lacks into it; never raises."""
-    lineup = find_lineup(artist, date, venue, website, svc)
+    lineup = find_lineup(artist, date, venue, website, svc, ticket_urls=urls_in(source_text))
     wanted = lineup_lines(lineup, artist, openers_known=openers_known)
     merged, added = merge_lineup_lines(description, wanted)
     if added:

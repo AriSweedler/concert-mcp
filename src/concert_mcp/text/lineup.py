@@ -84,20 +84,97 @@ class Lineup:
         return rec
 
 
-def lineup_prompt(artist: str, date: str, venue: str, website: str | None) -> str:
-    """The one question asked per concert; the venue's website names the pages the model reads (url_context)."""
-    hint = ""
-    if website:
-        base = website.rstrip("/")
-        hint = (
-            f" Read the venue's website {base}/ and its event listing ({base}/shows, {base}/calendar or {base}/events)."
-        )
+SEARCH = "https://lite.duckduckgo.com/lite/?q="
+NOT_A_VENUE_SITE = (
+    "duckduckgo.",
+    "bing.",
+    "google.",
+    "yelp.",
+    "facebook.",
+    "instagram.",
+    "tripadvisor.",
+    "wikipedia.",
+    "songkick.",
+    "bandsintown.",
+    "ticketmaster.",
+    "axs.",
+    "dice.fm",
+    "eventbrite.",
+    "ticketweb.",
+    "seetickets.",
+    "foursquare.",
+    "mapquest.",
+    "yellowpages.",
+    "x.com",
+    "twitter.",
+    "youtube.",
+    "tiktok.",
+    "reddit.",
+)
+URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
+
+
+def search_page(query: str) -> str:
+    """A search engine's results page for the query: the one page url_context can always read (pure)."""
+    from urllib.parse import quote_plus
+
+    return SEARCH + quote_plus(" ".join(query.split()))
+
+
+def urls_in(text: str) -> tuple[str, ...]:
+    """The http(s) URLs a ticket text carries (the event or receipt pages), deduplicated, in order (pure)."""
+    seen: dict[str, None] = {}
+    for m in URL_RE.finditer(text or ""):
+        seen.setdefault(m.group(0).rstrip(".,;"), None)
+    return tuple(seen)
+
+
+def listing_pages(website: str) -> tuple[str, ...]:
+    """A venue website and the pages its event listing usually lives on (pure)."""
+    base = website.rstrip("/")
+    return (base + "/", base + "/shows", base + "/calendar", base + "/events")
+
+
+def website_prompt(venue: str) -> str:
+    """Find the venue's own website from a results page; the model reads the page named here (pure)."""
     return (
-        f"For the concert by {artist} at {venue} on {date}: who are the opening acts, and what are the announced "
-        f"set times (doors, opener on stage, headliner on stage)?{hint} Use the venue's event page, the promoter and "
-        "the ticket page. Answer only from pages you have read; use null for anything not announced and an "
-        "empty list when no opener is announced. Do not guess. Answer with one JSON object and nothing else, in "
-        f"this shape: {json.dumps(LINEUP_SCHEMA['properties'], separators=(',', ':'))}"
+        f"Read {search_page(venue + ' official website')} . Which result is the official website of the venue "
+        f"{venue}? Not a listing, ticket or social site: the venue's own domain. Answer with one JSON object "
+        '{"website": "https://..."} or {"website": null}, nothing else.'
+    )
+
+
+def parse_website(answer: GroundedAnswer) -> str | None:
+    """The venue website the model named, when it is a real site of the venue's own (pure)."""
+    obj = _json_object(answer.text)
+    site = str((obj or {}).get("website") or "").strip()
+    if not site.startswith(("http://", "https://")):
+        return None
+    host = site.split("/")[2].lower()
+    if any(bad in host for bad in NOT_A_VENUE_SITE):
+        return None
+    return site.rstrip("/") + "/"
+
+
+def lineup_pages(
+    artist: str, date: str, venue: str, website: str | None, ticket_urls: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """Every page the model is asked to read for one show: the venue's listing, the ticket's pages, a results page (pure)."""
+    pages: list[str] = list(listing_pages(website)) if website else []
+    pages += [u for u in ticket_urls if u not in pages]
+    pages.append(search_page(f"{artist} {venue} {date} tickets"))
+    return tuple(pages)
+
+
+def lineup_prompt(artist: str, date: str, venue: str, pages: Sequence[str]) -> str:
+    """The one question asked per concert; the model reads the pages named here (url_context)."""
+    read = " ".join(pages)
+    return (
+        f"Read these pages: {read} . For the concert by {artist} at {venue} on {date}: who are the opening acts, "
+        "and what are the announced set times (doors, opener on stage, headliner on stage)? Answer only from what "
+        "those pages say; use null for anything not announced and an empty list when no opener is announced. "
+        "Do not guess. Answer with one JSON object and nothing else, in this shape: "
+        f"{json.dumps(LINEUP_SCHEMA['properties'], separators=(',', ':'))}"
     )
 
 
