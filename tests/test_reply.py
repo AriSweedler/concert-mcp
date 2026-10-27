@@ -313,7 +313,7 @@ def test_render_body_strips_link_lines_and_appends_extras() -> None:
         "• **Teaser:** t\n"
         "• **Setlist:** s"
     )
-    assert LINK_LINE_PREFIXES == ("Teaser playlist: ", "Setlist: ")
+    assert LINK_LINE_PREFIXES == ("Teaser playlist: ", "Setlist: ", "Setlist playlist: ")
 
 
 # ---------- delete replies ----------
@@ -418,7 +418,14 @@ def test_render_setlist_standalone() -> None:
 
 def test_render_queue_empty(tmp_path: Path) -> None:
     status = QueueStatus(entries=(), active=(), expired=(), path=tmp_path / "q.json")
-    assert render_queue(status) == "The setlist queue is empty."
+    assert render_queue(status) == "The setlist queue is empty.\nLast poll: never"
+
+
+def test_render_queue_shows_the_last_poll(tmp_path: Path) -> None:
+    status = QueueStatus(
+        entries=(), active=(), expired=(), path=tmp_path / "q.json", last_poll="2026-10-25T19:00:00+00:00"
+    )
+    assert render_queue(status) == "The setlist queue is empty.\nLast poll: 2026-10-25T19:00:00+00:00"
 
 
 def test_render_queue_active_then_expired_by_date(tmp_path: Path) -> None:
@@ -430,7 +437,8 @@ def test_render_queue_active_then_expired_by_date(tmp_path: Path) -> None:
         "**Setlist queue** (3 shows)\n"
         "• 2026-11-14 Zed Fox @ The Quarry — 12 songs, checking until 2027-01-14\n"
         "• 2026-12-01 Bonobo @ The Other Hall — 0 songs, checking until 2027-01-31\n"
-        "• 2026-08-01 Zork. @ Side Room — 9 songs, checking until 2026-10-01 (expired)"
+        "• 2026-08-01 Zork. @ Side Room — 9 songs, checking until 2026-10-01 (expired)\n"
+        "Last poll: never"
     )
 
 

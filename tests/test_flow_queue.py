@@ -13,7 +13,9 @@ from concert_mcp.flows.queue import (
     queue_forget,
     queue_list,
     queue_outcome,
+    queue_replace,
     queue_status,
+    write_poll_stamp,
 )
 from concert_mcp.result import Kind
 from concert_mcp.text.setlists import Setlist, SetlistResult
@@ -204,7 +206,7 @@ class TestQueueOutcome:
     def test_empty_queue_reply(self, svc):
         out = queue_outcome(svc)
         assert out.kind is Kind.OK
-        assert out.reply == "The setlist queue is empty."
+        assert out.reply == "The setlist queue is empty.\nLast poll: never"
         assert out.data == {"count": 0, "entries": []}
 
     def test_reply_lists_every_show_and_data_carries_the_rows(self, svc):
@@ -216,3 +218,34 @@ class TestQueueOutcome:
         assert out.reply.startswith("**Setlist queue** (1 shows)")
         assert "2026-11-14 Zed Fox @ The Quarry, San Francisco" in out.reply
         assert "checking until 2027-01-14" in out.reply
+        assert out.reply.endswith("\nLast poll: never")
+
+    def test_reply_shows_the_poll_stamp(self, svc, now):
+        write_poll_stamp(now, svc)
+        assert queue_outcome(svc).reply.endswith("Last poll: 2026-10-25T12:00:00-07:00")
+        assert svc.state.read_json(svc.settings.state_dir / "setlist-poll.stamp", None) == {
+            "last_run": "2026-10-25T12:00:00-07:00"
+        }
+
+
+class TestPlaylistUrl:
+    def test_the_key_is_written_only_once_a_playlist_exists(self):
+        e = entry("evt1")
+        assert "playlist_url" not in e.to_json()
+        with_pl = QueueEntry.from_json({**e.to_json(), "playlist_url": "https://open.spotify.com/playlist/pl1"})
+        assert with_pl.playlist_url == "https://open.spotify.com/playlist/pl1"
+        assert with_pl.to_json()["playlist_url"] == "https://open.spotify.com/playlist/pl1"
+        assert QueueEntry.from_json(with_pl.to_json()) == with_pl
+
+
+class TestQueueReplace:
+    def test_rewrites_the_row_in_place_and_keeps_the_others(self, svc):
+        svc.state.write_json(svc.settings.setlist_queue, ["garbage", entry("evt1").to_json(), entry("evt2").to_json()])
+        queue_replace(QueueEntry.from_json({**entry("evt1").to_json(), "song_count": 7}), svc)
+        stored = svc.state.read_json(svc.settings.setlist_queue, None)
+        assert stored[0] == "garbage"
+        assert [(r["event_id"], r["song_count"]) for r in stored[1:]] == [("evt1", 7), ("evt2", 0)]
+
+    def test_appends_when_the_row_is_absent(self, svc):
+        queue_replace(entry("evt1"), svc)
+        assert queue_list(svc) == [entry("evt1")]

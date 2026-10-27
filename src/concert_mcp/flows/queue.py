@@ -30,10 +30,11 @@ class QueueEntry:
     song_count: int
     until: str
     added: str
+    playlist_url: str | None = None  # the setlist playlist, once the weekly poll has made it
 
     def to_json(self) -> dict[str, Any]:
-        """The legacy queue row."""
-        return {
+        """The legacy queue row, plus `playlist_url` once the poll has a playlist (a legacy reader ignores it)."""
+        rec: dict[str, Any] = {
             "event_id": self.event_id,
             "calendar_id": self.calendar_id,
             "artist": self.artist,
@@ -44,6 +45,9 @@ class QueueEntry:
             "until": self.until,
             "added": self.added,
         }
+        if self.playlist_url:
+            rec["playlist_url"] = self.playlist_url
+        return rec
 
     @classmethod
     def from_json(cls, d: Mapping[str, Any]) -> QueueEntry:
@@ -63,6 +67,7 @@ class QueueEntry:
             song_count=song_count,
             until=str(d.get("until") or ""),
             added=str(d.get("added") or ""),
+            playlist_url=str(d.get("playlist_url")) if d.get("playlist_url") else None,
         )
 
 
@@ -72,6 +77,32 @@ class QueueStatus:
     active: tuple[QueueEntry, ...]
     expired: tuple[QueueEntry, ...]
     path: Path
+    last_poll: str | None = None  # the weekly poll's last run, ISO time, from the stamp file
+
+
+POLL_STAMP_NAME = "setlist-poll.stamp"
+
+
+def poll_stamp_path(svc: Services) -> Path:
+    """`<state_dir>/setlist-poll.stamp`: when the weekly poll last ran."""
+    return svc.settings.state_dir / POLL_STAMP_NAME
+
+
+def read_poll_stamp(svc: Services) -> datetime | None:
+    """The last run's time from the stamp, or None when there was none (or the file is unreadable)."""
+    raw = svc.state.read_json(poll_stamp_path(svc), None)
+    value = raw.get("last_run") if isinstance(raw, Mapping) else raw
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def write_poll_stamp(now: datetime, svc: Services) -> None:
+    """Record a run; the file is `{"last_run": "<ISO time>"}`."""
+    svc.state.write_json(poll_stamp_path(svc), {"last_run": now.isoformat(timespec="seconds")})
 
 
 def make_entry(
@@ -136,6 +167,15 @@ def queue_add(entry: QueueEntry, svc: Services) -> bool:
     return True
 
 
+def queue_replace(entry: QueueEntry, svc: Services) -> None:
+    """Rewrite the row for `entry.event_id` in place (append when absent); other rows are carried over untouched."""
+    rows = _raw_rows(svc)
+    out = [entry.to_json() if _is_row_for(r, entry.event_id) else r for r in rows]
+    if not any(_is_row_for(r, entry.event_id) for r in rows):
+        out.append(entry.to_json())
+    svc.state.write_json(svc.settings.setlist_queue, out)
+
+
 def queue_forget(event_id: str, svc: Services) -> bool:
     """Drop the row for an event; returns whether one was dropped."""
     rows = _raw_rows(svc)
@@ -153,13 +193,26 @@ def _until_date(entry: QueueEntry) -> date | None:
         return None
 
 
+def is_expired(entry: QueueEntry, today: date) -> bool:
+    """Past `until` (or `until` unreadable): the poll drops the row."""
+    u = _until_date(entry)
+    return u is None or u < today
+
+
 def queue_status(svc: Services) -> QueueStatus:
     """Rows split into active and expired by their `until` date (today in the configured zone)."""
     today = svc.clock.now().astimezone(svc.tz).date()
     entries = sorted(queue_list(svc), key=lambda e: e.date)
-    active = tuple(e for e in entries if (u := _until_date(e)) is not None and u >= today)
+    active = tuple(e for e in entries if not is_expired(e, today))
     expired = tuple(e for e in entries if e not in active)
-    return QueueStatus(entries=tuple(entries), active=active, expired=expired, path=svc.settings.setlist_queue)
+    last = read_poll_stamp(svc)
+    return QueueStatus(
+        entries=tuple(entries),
+        active=active,
+        expired=expired,
+        path=svc.settings.setlist_queue,
+        last_poll=last.isoformat(timespec="seconds") if last else None,
+    )
 
 
 def queue_outcome(svc: Services) -> Outcome:

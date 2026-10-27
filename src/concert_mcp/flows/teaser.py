@@ -23,7 +23,7 @@ from concert_mcp.text.artists import (
     pick_artist,
 )
 from concert_mcp.text.dates import concert_date
-from concert_mcp.text.naming import playlist_name, teaser_description
+from concert_mcp.text.naming import is_setlist_playlist, playlist_name, teaser_description
 from concert_mcp.text.reply import provider_reply, render_teaser_standalone
 
 REASON_LIMIT = 160
@@ -74,7 +74,9 @@ def make_teaser(
         a, _ = resolve_artist(artist, api)
         tracks = liked_by_artist(a, api, deadline=deadline)
         name = playlist_name(date, a.name)
-        existing = find_playlist_named(api.my_playlists(deadline=deadline), name)
+        # The setlist playlist of the same show shares the name; its description starts with `Setlist:`.
+        mine = [pl for pl in api.my_playlists(deadline=deadline) if not is_setlist_playlist(pl)]
+        existing = find_playlist_named(mine, name)
         track_names = tuple(t["name"] for t in tracks)
         if not tracks:
             return TeaserResult("none", a, date, name, 0, tracks=())

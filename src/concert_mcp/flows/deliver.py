@@ -15,7 +15,7 @@ from collections.abc import Callable
 from concert_mcp.flows.services import Services
 from concert_mcp.log import log_debug, log_warn
 from concert_mcp.result import NO_REPLY_TEXT, Delivery, Kind, Outcome, crash_outcome
-from concert_mcp.text.routes import chat_target
+from concert_mcp.text.routes import ChatTarget, chat_target
 
 FIX_GUARD_ADD = (
     "I could not get the details right from that after a few tries. "
@@ -33,25 +33,34 @@ FIX_GUARD_OTHER = (
     "I could not get that right after a few tries. "
     "Reply with the artist and the date as YYYY-MM-DD and I will try once more."
 )
+FIX_GUARD_SETLIST_PLAYLIST = (
+    "I could not use that after a few tries. "
+    "Reply with the setlist.fm link of the show, or the artist and the date, in one line and I will try once more."
+)
 # The reply fix_guard sends on the third FIX in a row, per tool; tools not listed get FIX_GUARD_OTHER.
 FIX_GUARD_REPLIES = {
     "concert_add": FIX_GUARD_ADD,
     "calendar_add": FIX_GUARD_CALENDAR,
     "event_delete": FIX_GUARD_DELETE,
+    "setlist_playlist": FIX_GUARD_SETLIST_PLAYLIST,
 }
 FIX_GUARD_LIMIT = 3
 
 
-def deliver(outcome: Outcome, svc: Services, *, send: bool) -> Delivery:
-    """Decide whether and where the reply goes, dedupe, send it, log it. Never raises."""
+def deliver(outcome: Outcome, svc: Services, *, send: bool, target: ChatTarget | None = None) -> Delivery:
+    """Decide whether and where the reply goes, dedupe, send it, log it. Never raises.
+
+    `target` names the chat when no one spoke: the weekly setlist poll runs from launchd and announces a playlist
+    in the show's own topic, so it hands the target in instead of asking for the live route.
+    """
     try:
-        return _deliver(outcome, svc, send=send)
+        return _deliver(outcome, svc, send=send, target=target)
     except Exception as e:  # noqa: BLE001 - delivery must never take the flow's result down with it
         log_warn(f"delivery failed | error='{type(e).__name__}: {e}'")
         return Delivery(False, f"NOT SENT: {type(e).__name__}")
 
 
-def _deliver(outcome: Outcome, svc: Services, *, send: bool) -> Delivery:
+def _deliver(outcome: Outcome, svc: Services, *, send: bool, target: ChatTarget | None) -> Delivery:
     reply = outcome.reply
     if not reply:
         return Delivery(False, "NOT SENT: no reply")
@@ -63,12 +72,13 @@ def _deliver(outcome: Outcome, svc: Services, *, send: bool) -> Delivery:
         return Delivery(False, "NOT SENT: delivery disabled")
     settings = svc.settings
     now_s = svc.clock.time()
-    _sid, route = svc.context.live_route(now_s)
-    if route is None:
-        return Delivery(False, "NOT SENT: no live chat (CLI run)")
-    target = chat_target(route)
     if target is None:
-        return Delivery(False, "NOT SENT: no chat target in the route")
+        _sid, route = svc.context.live_route(now_s)
+        if route is None:
+            return Delivery(False, "NOT SENT: no live chat (CLI run)")
+        target = chat_target(route)
+        if target is None:
+            return Delivery(False, "NOT SENT: no chat target in the route")
     last = svc.state.read_json(settings.sent_log, {})
     if isinstance(last, dict) and last.get("text") == reply:
         at = last.get("at", 0)

@@ -59,7 +59,7 @@ openclaw mcp probe concert
 ```
 
 - `cwd` is the submodule so `uv run` finds the project's lockfile and virtual environment without a `--project` lookup from wherever the gateway was started.
-- `toolFilter` exposes the three chat jobs (`concert_add`, `calendar_add`, `event_delete`); the four operator tools stay on the CLI. Drop it to expose all seven.
+- `toolFilter` exposes the three chat jobs (`concert_add`, `calendar_add`, `event_delete`); `setlist_playlist` is the fourth chat job (a pasted setlist.fm link) and belongs in the filter too; the four operator tools stay on the CLI. Drop it to expose all eight.
 - `requestTimeoutMs` is 480000: a cold `concert_add` typically takes 60 to 150 s (Liked Songs fetch, teaser cap, gws, Telegram) and about 8 minutes when every provider sits at its cap. The default 60 s cuts the call off after the calendar insert and before the reply.
 - `CONCERT_MCP_GWS_BIN` and `CONCERT_MCP_OPENCLAW_BIN` matter only when the gateway's PATH has neither binary and they live outside `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`; unset, the package searches those three after PATH.
 - The `${VAR}` placeholders expand from the gateway's environment at launch; an unset one expands to empty, which the package treats as "use the default" (`Admin`, `America/Los_Angeles`). Set them in the gateway's environment, or replace the placeholders with literal values, but keep the values out of this repository.

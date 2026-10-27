@@ -1,4 +1,4 @@
-"""The MCP server: seven coarse tools for a small model (unit server).
+"""The MCP server: eight coarse tools for a small model (unit server).
 
 Every parameter is a `Param`: a string with default "" whose validator runs `clean_param` before pydantic sees the
 value, so a number, a null or a quoted string from the model becomes a clean string and never a schema error (which
@@ -25,6 +25,7 @@ from concert_mcp.flows.healthcheck import healthcheck_outcome
 from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services, build_services
 from concert_mcp.flows.setlist import setlist_outcome
+from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import teaser_outcome
 from concert_mcp.log import set_level
 from concert_mcp.result import Outcome, crash_outcome
@@ -49,7 +50,8 @@ INSTRUCTIONS = (
     '7. "delete"/"remove" an event -> event_delete. '
     "If the user answers a numbered list with a number, call event_delete with pick=that number.\n"
     '8. Playlist alone -> teaser_playlist. Setlist alone -> setlist_find. "what is queued" -> queue_status. '
-    '"are you healthy"/"what is missing" -> healthcheck.\n'
+    '"are you healthy"/"what is missing" -> healthcheck. '
+    "A setlist.fm link in a topic -> setlist_playlist once, with the link as url.\n"
     "9. Do not print tool calls as text; call the tool."
 )
 
@@ -78,6 +80,11 @@ DESCRIPTIONS = {
         "Look up one show on setlist.fm by artist and date. concert_add already does this; call only when asked "
         "about a setlist alone. NO_REPLY means answer exactly NO_REPLY."
     ),
+    "setlist_playlist": (
+        "Build or top up the Spotify playlist of one show's setlist, in setlist.fm order, named "
+        '"YYYY-MM-DD | Artist", and link it from the calendar event. Call once with the pasted setlist.fm link as '
+        "url (or artist and date when there is no link). NO_REPLY means answer exactly NO_REPLY."
+    ),
     "queue_status": (
         "List the concerts waiting for the weekly setlist.fm check. Takes no parameters. "
         "NO_REPLY means answer exactly NO_REPLY."
@@ -94,6 +101,7 @@ ANNOTATIONS = {
     "event_delete": ToolAnnotations(destructiveHint=True),
     "teaser_playlist": ToolAnnotations(),
     "setlist_find": ToolAnnotations(readOnlyHint=True),
+    "setlist_playlist": ToolAnnotations(),
     "queue_status": ToolAnnotations(readOnlyHint=True),
     "healthcheck": ToolAnnotations(readOnlyHint=True),
 }
@@ -287,6 +295,32 @@ def setlist_find(
     )
 
 
+def setlist_playlist(
+    url: Annotated[
+        Param,
+        Field(
+            description="The setlist.fm page the user pasted, e.g. "
+            '"https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-3bd6f4a.html". '
+            "Leave empty to look the show up by artist and date."
+        ),
+    ] = "",
+    artist: Annotated[Param, Field(description='Artist name when there is no link, e.g. "Zed Fox".')] = "",
+    date: Annotated[Param, Field(description="Concert date as YYYY-MM-DD when there is no link.")] = "",
+    venue: Annotated[Param, Field(description="Venue name to break ties when looking the show up.")] = "",
+) -> str:
+    """Build or top up the setlist playlist of one show and link it from the event."""
+    return _run(
+        "setlist_playlist",
+        lambda svc, a: setlist_playlist_outcome(
+            a["url"], a["artist"], a["date"], a["venue"], svc, dry_run=svc.settings.dry_run
+        ),
+        url=url,
+        artist=artist,
+        date=date,
+        venue=venue,
+    )
+
+
 def queue_status() -> str:
     """List the concerts waiting for the weekly setlist check."""
     return _run("queue_status", lambda svc, a: queue_outcome(svc))
@@ -303,13 +337,14 @@ TOOLS: tuple[Callable[..., str], ...] = (
     event_delete,
     teaser_playlist,
     setlist_find,
+    setlist_playlist,
     queue_status,
     healthcheck,
 )
 
 
 def build_server(svc: Services | None = None) -> MCPServer:
-    """MCPServer('concert') with the seven tools; services are built lazily on the first tool call."""
+    """MCPServer('concert') with the eight tools; services are built lazily on the first tool call."""
     global _svc
     _svc = svc
     mcp = MCPServer("concert", instructions=INSTRUCTIONS, version=__version__)

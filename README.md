@@ -80,7 +80,7 @@ Settings are `CONCERT_MCP_*` environment variables, or keys in `~/.config/concer
 
 | Document | What it holds |
 |---|---|
-| [Architecture and design](docs/architecture.md) | the seven tools, what the model sees, the small-model rule |
+| [Architecture and design](docs/architecture.md) | the eight tools, what the model sees, the small-model rule |
 | [Credentials](docs/credentials.md) | each provider in full, and the OpenClaw entry explained |
 | [Configuration](docs/configuration.md) | every setting, and what the healthcheck prints |
 | [CLI](docs/cli.md) | every subcommand, flag and exit code |

@@ -42,7 +42,7 @@ Keep tools coarse. The model behind the bot is a 9B model: it does well with one
 
 Tests touch no network, no keychain, no home directory, no `gws` and no `openclaw`: the pure modules are tested against literal strings copied from the legacy scripts, the flows run end to end on `tests/fakes.py`, and the adapters run on a fake runner and a fake `urlopen`. `conftest.py` points every `CONCERT_MCP_*_DIR` at `tmp_path` and sets `CONCERT_MCP_SEND=0`. `tests/test_readme.py` checks the docs against the code: every healthcheck anchor is a README heading, every setting is in the table in `docs/configuration.md`, the OpenClaw snippet parses with a long enough timeout, and no personal data is in any text file of the repository.
 
-The stdio smoke test spawns the real server (`python -m concert_mcp serve`) through the MCP client, checks the instructions and the seven tool names, and calls `healthcheck`:
+The stdio smoke test spawns the real server (`python -m concert_mcp serve`) through the MCP client, checks the instructions and the eight tool names, and calls `healthcheck`:
 
 ```sh
 uv run pytest -q tests/test_smoke_stdio.py

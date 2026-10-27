@@ -13,7 +13,7 @@ from typing import Any
 
 # A description line the ticket text cannot supply: kept from the old description when the new lines lack it,
 # so a Spotify or setlist.fm hiccup during an update never erases a link the event already had.
-KEPT_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "Venue: ")
+KEPT_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "Setlist playlist: ", "Venue: ")
 
 
 def topic_key(chat: str, thread: str) -> str:

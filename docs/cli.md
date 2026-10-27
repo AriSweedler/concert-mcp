@@ -14,7 +14,8 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `del` (alias `delete`) | `concert-mcp del --title 'Zed Fox' --date 2026-11-14`, then `concert-mcp del --pick 2` after a numbered list (the list is good for 15 minutes, `CONCERT_MCP_CONTEXT_WINDOW_S`) |
 | `teaser` | `concert-mcp teaser --artist 'Zed Fox' --date 2026-11-14 [--description TEXT]` |
 | `setlist-find` | `concert-mcp setlist-find --artist 'Zed Fox' --date 2026-11-14 --venue 'The Quarry' --songs` (`--songs` adds the song list to the `--json` record) |
-| `queue` | `concert-mcp queue` |
+| `queue` | `concert-mcp queue` (the shows waiting for the weekly setlist check, and `Last poll: <time>`) |
+| `poll` | `concert-mcp poll [--force]` (the weekly setlist check; see [poll](#poll)) |
 | `venues` | `concert-mcp venues` (every venue seen: visits, address, website) |
 | `venues lookup` | `concert-mcp venues lookup --name 'Cafe Du Nord'` (look it up again and store it) |
 | `venues auth` | `concert-mcp venues auth [--force] [--manual]` (optional Google Places key) |
@@ -34,6 +35,16 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `spotify setlist-auth` | `concert-mcp spotify setlist-auth [--force] [--manual]` |
 
 `add` and `del` also take one JSON object as the positional argument or on stdin, with the legacy aliases folded (`artist` and `summary` for `title`, `venue` for `location`, `notes` for `description`, `datetime` for `start`, `text` for `source`; `del` also takes `event`, `name`, `when`, `day`, `cal`, `eventId`, `number`, `choice`); an unknown key or flag is a `FIX:` line, never a traceback. `add` takes `--concert` (the Concerts calendar, teaser, setlist lookup, queue, rename), `--no-teaser` and `--another` (a second event in the live topic instead of an update of the topic's event; the JSON key is `another`). The `spotify` subcommands print one JSON record in the legacy shape.
+
+## poll
+
+The weekly setlist check. A launchd job on the host runs it once a day:
+
+```sh
+uv run --project /path/to/concert-mcp concert-mcp poll
+```
+
+A run less than seven days after the last one (recorded in `<state_dir>/setlist-poll.stamp`) prints `**Setlist poll** skipped: ...` and does nothing; `--force` runs it anyway, `--dry-run` reports what a run would do, `--no-send` makes the playlists and patches the events but sends no message. One run walks every queued show, oldest first, and prints one line per show: `• 2026-11-14 Zed Fox — 5 songs; playlist created; announced`, `— 12 songs; 7 added to the playlist`, `— page found, no songs yet`, `— not on setlist.fm yet`, `— expired; dropped from the queue`. The playlist is made on the first run that finds songs on the page (then the calendar event gets a `Setlist playlist: <url>` line and the show's Telegram topic, else `CONCERT_MCP_CONCERTS_CHAT`, gets one message with the link); later runs top it up as the page fills in, silently, until two months after the show. `--json` prints the report as a record (`ran`, `now`, `last_poll`, `rows`).
 
 Flags:
 

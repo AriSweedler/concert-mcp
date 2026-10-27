@@ -242,6 +242,11 @@ class SpotifyClient:
         res = self.api("GET", "/search", params={"q": q, "type": "artist", "limit": limit}) or {}
         return list((res.get("artists") or {}).get("items") or [])
 
+    def search_tracks(self, q: str, limit: int = 1) -> list[dict[str, Any]]:
+        """GET /search type=track (q may carry `track:` and `artist:` field filters)."""
+        res = self.api("GET", "/search", params={"q": q, "type": "track", "limit": limit}) or {}
+        return list((res.get("tracks") or {}).get("items") or [])
+
     def liked_rows(self, refresh: bool = False, deadline: float | None = None) -> list[dict[str, Any]]:
         """Liked Songs as track rows, oldest first, cached at settings.liked_cache for liked_cache_ttl_s."""
         cache = Path(self.settings.liked_cache)
@@ -292,6 +297,10 @@ class SpotifyClient:
     def rename_playlist(self, playlist_id: str, name: str) -> None:
         """PUT /playlists/<id> {name}."""
         self.api("PUT", f"/playlists/{playlist_id}", body={"name": name})
+
+    def update_playlist_details(self, playlist_id: str, *, description: str) -> None:
+        """PUT /playlists/<id> {description}."""
+        self.api("PUT", f"/playlists/{playlist_id}", body={"description": description})
 
     def unfollow_playlist(self, playlist_id: str) -> None:
         """DELETE /playlists/<id>/followers."""

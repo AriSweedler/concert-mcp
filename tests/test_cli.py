@@ -329,12 +329,42 @@ def test_setlist_find_songs_adds_the_list_to_the_record(cli_env: Services, monke
     assert rec["songs"] == ["First Light", "Second Wind"]
 
 
+def test_setlist_playlist_dry_run_needs_no_provider(cli_env: Services, monkeypatch, capsys) -> None:
+    cli_env.setlistfm = None
+    cli_env.spotify = None
+    url = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-3bd6f4a.html"
+    code, out, _ = run(monkeypatch, capsys, ["--dry-run", "setlist-playlist", "--url", url, "--date", "2026-11-14"])
+    assert code == 0
+    assert out == f"**Setlist playlist** would make 2026-11-14 | Zed Fox from the songs at {url}\nNOT SENT: dry run\n"
+
+
+def test_setlist_playlist_refuses_a_non_setlistfm_link(cli_env: Services, monkeypatch, capsys) -> None:
+    code, out, _ = run(monkeypatch, capsys, ["setlist-playlist", "--url", "https://open.spotify.com/playlist/x"])
+    assert code == 1
+    assert out.startswith("FIX: send a setlist.fm setlist page, like ")
+
+
 def test_queue_json(cli_env: Services, monkeypatch, capsys) -> None:
     code, out, err = run(monkeypatch, capsys, ["queue", "--json"])
     rec = one_json_line(out)
     assert code == 0
     assert rec["count"] == 0 and rec["entries"] == []
     assert_clean_stdout(out, err)
+
+
+def test_poll_text_and_json(cli_env: Services, monkeypatch, capsys) -> None:
+    code, out, err = run(monkeypatch, capsys, ["poll"])
+    assert code == 0
+    assert out.endswith("\nThe setlist queue is empty.\n") and out.startswith("**Setlist poll** ")
+    assert_clean_stdout(out, err)
+    code, out, _ = run(monkeypatch, capsys, ["poll"])
+    assert code == 0 and out.startswith("**Setlist poll** skipped: last run ")
+    code, out, _ = run(monkeypatch, capsys, ["poll", "--force", "--json"])
+    rec = one_json_line(out)
+    assert code == 0 and rec["ok"] is True and rec["ran"] is True and rec["rows"] == []
+    assert rec["sent"] == "NOT SENT: the poll report stays on the terminal"
+    code, out, _ = run(monkeypatch, capsys, ["queue"])
+    assert code == 0 and "\nLast poll: 20" in out
 
 
 def test_queue_text(cli_env: Services, monkeypatch, capsys) -> None:
