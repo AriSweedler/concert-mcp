@@ -27,6 +27,7 @@ from fakes import (
     FakeChat,
     FakeClock,
     FakeContext,
+    FakeGemini,
     FakeSetlistFm,
     FakeSpotify,
     FakeVenueLookup,
@@ -105,11 +106,13 @@ def services(
     setlistfm: FakeSetlistFm | None = None,
     chat: FakeChat | None = None,
     places: Any = None,
+    gemini: Any = None,
 ) -> Services:
     clock = FakeClock(now)
     return Services(
         settings=settings,
         places=places,
+        gemini=gemini,
         calendar=calendar
         or FakeCalendar(
             calendars=[{"id": "cal-concerts", "summary": "Concerts"}, {"id": "primary", "summary": "Personal"}]
@@ -968,3 +971,94 @@ class TestTopicRegistry:
         assert AddRequest.from_mapping({"title": "X", "another": True}).another is True
         assert AddRequest.from_mapping({"title": "X"}).another is False
         assert AddRequest.from_mapping({"title": "X"}, another=True).another is True
+
+
+class TestLineup:
+    """The lineup step after the insert: one grounded call, lines patched in, bullets in the reply."""
+
+    PAGE = "https://www.setlist.fm/setlist/zork/2026/the-hollow-oakland-ca-1a2b3c4d.html"
+    FULL = '{"openers": ["Zork"], "doors": "7:30 PM", "opener_on_stage": "8:00 PM", "headliner_on_stage": "9:00 PM"}'
+    ZORK_ROW = {
+        "id": "1a2b3c4d",
+        "url": PAGE,
+        "eventDate": "02-10-2026",
+        "artist": {"name": "Zork"},
+        "venue": {"name": "The Hollow", "city": {"name": "Oakland"}},
+        "sets": {"set": [{"song": [{"name": "Hum"}]}]},
+    }
+
+    def svc_with(self, settings, now, forum_route, text, *, gemini: FakeGemini):
+        return services(
+            settings,
+            now,
+            route=forum_route,
+            text=text,
+            gemini=gemini,
+            setlistfm=FakeSetlistFm({("Zork", None, None): {"setlist": [self.ZORK_ROW]}}),
+        )
+
+    def test_ticket_without_an_opener_gets_opener_expected_and_setlist_lines(self, settings, now, forum_route):
+        text = "ZED FOX\nThe Quarry, San Francisco\nSat Nov 14 2026\nDoors 7:30 PM Show 8:30 PM\n"
+        svc = self.svc_with(settings, now, forum_route, text, gemini=FakeGemini(self.FULL, ("https://v.example",)))
+        out = concert(svc, artist="Zed Fox", source_text=text)
+        assert out.kind is Kind.OK, out
+        [ins] = svc.calendar.inserted
+        assert ins["description"] == f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}"
+        [(_, eid, fields)] = svc.calendar.patched
+        assert eid == "evt1"
+        assert fields["description"] == (
+            f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}\nHeadliner: Zed Fox\nOpener: Zork\n"
+            f"Expected: doors 7:30 PM, Zork 8:00 PM, Zed Fox 9:00 PM\nOpener setlist (recent): {self.PAGE}"
+        )
+        assert out.reply == (
+            "**Added to Concerts**\n"
+            "• **Artist:** Zed Fox\n"
+            "• **When:** Sat Nov 14, 8:30 PM – 10:30 PM PST (end assumed)\n"
+            "• **Where:** The Quarry, San Francisco\n"
+            "• **Doors:** 7:30 PM\n"
+            "• **Opener:** Zork\n"
+            "• **Expected:** doors 7:30 PM, Zork 8:00 PM, Zed Fox 9:00 PM\n"
+            f"• **Opener setlist (recent):** {self.PAGE}\n"
+            f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify.\n"
+            "• **Setlist:** not on setlist.fm yet; checking weekly for 2 months\n"
+            f"[Open in Google Calendar]({eventedit('evt1')})"
+        )
+        assert out.data["lineup"]["openers"] == [{"name": "Zork", "setlist_url": self.PAGE}]
+        assert out.data["description"][-1] == f"Opener setlist (recent): {self.PAGE}"
+        assert len(svc.gemini.prompts) == 1
+
+    def test_ticket_with_an_opener_keeps_its_opener_and_gains_the_times(self, settings, now, forum_route, ticket_text):
+        svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=FakeGemini(self.FULL))
+        out = concert(svc, source_text=ticket_text)
+        [(_, _, fields)] = svc.calendar.patched
+        assert fields["description"].count("Opener: ") == 1
+        assert "Opener: Zork." in fields["description"] and "Opener: Zork\n" not in fields["description"]
+        assert "• **Expected:** doors 7:30 PM, Zork 8:00 PM, Zed Fox 9:00 PM" in out.reply
+        assert f"• **Opener setlist (recent):** {self.PAGE}" in out.reply
+
+    def test_nothing_found_leaves_the_event_and_the_reply_as_they_were(self, settings, now, forum_route, ticket_text):
+        svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=FakeGemini("no idea"))
+        out = concert(svc, source_text=ticket_text)
+        assert out.reply == golden_added()
+        assert svc.calendar.patched == []
+        assert out.data["lineup"]["status"] == "none"
+
+    def test_a_model_failure_never_fails_the_add(self, settings, now, forum_route, ticket_text):
+        svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=FakeGemini(fail=True))
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.OK
+        assert out.reply == golden_added()
+        assert out.data["lineup"]["status"] == "failed"
+
+    def test_without_a_model_nothing_is_asked(self, svc, ticket_text):
+        out = concert(svc, source_text=ticket_text)
+        assert out.reply == golden_added()
+        assert "lineup" not in out.data
+        assert svc.calendar.patched == []
+
+    def test_dry_run_asks_nothing(self, settings, now, forum_route, ticket_text):
+        gemini = FakeGemini(self.FULL)
+        svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=gemini)
+        out = concert(svc, source_text=ticket_text, dry_run=True)
+        assert out.kind is Kind.DRY_RUN
+        assert gemini.prompts == []

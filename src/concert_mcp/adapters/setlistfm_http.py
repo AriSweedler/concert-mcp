@@ -138,6 +138,10 @@ class SetlistFmClient:
         """GET /setlist/<id>: one setlist with its sets and songs; None when the id is unknown."""
         return self.get(f"/setlist/{urllib.parse.quote(setlist_id)}", {})
 
+    def latest_setlist(self, artist: str) -> dict[str, Any] | None:
+        """GET /search/setlists by artistName alone: the artist's setlists, newest first (page 1)."""
+        return self.search_setlists(artist)
+
     def probe(self) -> int:
         """One real call for healthcheck --probe and setlist-auth: the total of a known artist's search."""
         return int((self.search_setlists(PROBE_ARTIST) or {}).get("total", 0) or 0)

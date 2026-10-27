@@ -46,6 +46,9 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_PLACES_CREDENTIALS` | `<config_dir>/places.json` | optional Google Places key; without it Nominatim answers |
 | `CONCERT_MCP_VENUE_LOOKUP` | `1` | 0 skips every network venue lookup; the ticket's address block is still used |
 | `CONCERT_MCP_OP_PLACES_ITEM` | `Google Places - API key` | field credential, `venues auth` only |
+| `CONCERT_MCP_GEMINI_CREDENTIALS` | `<config_dir>/gemini.json` | optional Gemini key for the lineup step (openers, set times); without it the step is skipped |
+| `CONCERT_MCP_GEMINI_TIMEOUT_S` | `20` | cap on the one Gemini call per concert |
+| `CONCERT_MCP_OP_GEMINI_ITEM` | `Gemini - API key` | field credential, `gemini auth` only |
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in 'Admin: check `gws auth` on the host.' |
 | `CONCERT_MCP_SEND` | `1` | 0 disables reply delivery and topic renames everywhere |
 | `CONCERT_MCP_RENAME_TOPICS` | `1` | 0 keeps Telegram topic names as they are |
@@ -92,6 +95,7 @@ SKIP  liked-cache      absent: the first teaser will be slow (~40 s)
 FAIL  setlistfm-key    missing
 SKIP  setlistfm-auth   pass --probe
 SKIP  places-key       optional: concert-mcp venues auth stores a Google Places key
+SKIP  gemini-key       optional: concert-mcp gemini auth stores a Gemini key (openers, set times)
 FAIL  openclaw-binary  openclaw not found
 SKIP  openclaw-config  absent
 SKIP  openclaw-session-db absent or unreadable: replies are not delivered

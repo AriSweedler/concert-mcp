@@ -177,3 +177,10 @@ def test_probe_returns_total(client: SetlistFmClient, fake: FakeUrlopen) -> None
 def test_probe_404_is_zero(client: SetlistFmClient, fake: FakeUrlopen) -> None:
     fake.add("GET", SEARCH, http_error(404))
     assert client.probe() == 0
+
+
+def test_latest_setlist_is_the_bare_artist_search(client: SetlistFmClient, fake: FakeUrlopen) -> None:
+    fake.add("GET", SEARCH, {"total": 2, "setlist": [{"id": "new"}, {"id": "old"}]})
+    assert client.latest_setlist("Zork") == {"total": 2, "setlist": [{"id": "new"}, {"id": "old"}]}
+    url = fake.requests[-1][1]
+    assert url == f"{SEARCH}?artistName=Zork&p=1"

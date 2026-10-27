@@ -87,6 +87,9 @@ def test_bare_tmp_settings_table(bare: Settings) -> None:
     assert rows["places-key"] == Check(
         "places-key", "SKIP", "optional: concert-mcp venues auth stores a Google Places key"
     )
+    assert rows["gemini-key"] == Check(
+        "gemini-key", "SKIP", "optional: concert-mcp gemini auth stores a Gemini key (openers, set times)"
+    )
 
     assert rows["openclaw-binary"].status == "FAIL"
     assert rows["openclaw-binary"].anchor == "openclaw"
@@ -381,7 +384,7 @@ def test_a_check_raising_becomes_a_fail_with_the_type_name(bare: Settings, monke
 
 def test_check_names_and_registry_agree() -> None:
     assert tuple(mod.CHECKS) == CHECK_NAMES
-    assert len(CHECK_NAMES) == 18
+    assert len(CHECK_NAMES) == 19
 
 
 # ---------- the outcome ----------

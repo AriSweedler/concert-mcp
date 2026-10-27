@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from concert_mcp.flows.queue import QueueEntry, QueueStatus
     from concert_mcp.text.artists import TeaserResult
     from concert_mcp.text.candidates import Candidate
+    from concert_mcp.text.lineup import Lineup
     from concert_mcp.text.setlists import SetlistResult, SyncResult
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "render_body",
     "render_candidates",
     "render_dry_add",
+    "render_lineup",
     "render_none_found",
     "render_poll",
     "render_queue",
@@ -258,6 +260,28 @@ def render_setlist_playlist(res: SyncResult, *, setlistfm_url: str, event: str |
     return text
 
 
+def render_lineup(artist: str, date: str, venue: str, lineup: Lineup, *, patched: bool) -> str:
+    """The lineup tool's reply: the openers (each with its recent setlist.fm page), the set times, the sources."""
+    from concert_mcp.text.lineup import expected_line
+
+    where = f" @ {venue}" if venue else ""
+    head = f"**Lineup:** {artist}{where}, {date}"
+    if lineup.status == "none":
+        return head + "\nNo opener or set times announced yet in the sources I can find."
+    rows: list[str] = []
+    for o in lineup.openers:
+        page = f" ([recent setlist]({o.setlist_url}))" if o.setlist_url else ""
+        rows.append(bullet("Opener", o.name + page))
+    if not lineup.openers:
+        rows.append(bullet("Opener", "none announced"))
+    exp = expected_line(lineup, artist)
+    rows.append(bullet("Expected", exp.partition(": ")[2] if exp else "set times not announced"))
+    if lineup.sources:
+        rows.append(bullet("Sources", " ".join(f"[{i}]({u})" for i, u in enumerate(lineup.sources[:3], 1))))
+    tail = "\nAdded to the calendar event." if patched else ""
+    return head + "\n" + "\n".join(rows) + tail
+
+
 def render_setlist_standalone(res: SetlistResult) -> str:
     """The setlist_find tool's reply: no weekly-check promise (nothing is queued); a miss points at the search page."""
     search = f" Search: {res.search_url}" if not res.found and res.search_url and res.match == "none" else ""
@@ -343,6 +367,10 @@ def provider_reply(provider: str, operator: str, *, what: str = "request") -> st
             return f"Google Places is not set up on this machine. {operator}: run `concert-mcp venues auth`."
         case "places" | "nominatim":
             return f"The venue lookup failed; the event keeps the venue as written. {operator}: check the host log."
+        case "gemini-unconfigured":
+            return f"Gemini is not set up on this machine. {operator}: run `concert-mcp gemini auth`."
+        case "gemini":
+            return f"The lineup lookup failed; the event keeps what the ticket said. {operator}: check the host log."
         case "op":
             return f"1Password did not answer. {operator}: run the auth command with --manual."
         case _:

@@ -1,4 +1,4 @@
-"""The eight side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
+"""The nine side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
+from concert_mcp.text.lineup import GroundedAnswer
 from concert_mcp.text.routes import ChatTarget
 from concert_mcp.text.venues import VenueHit
 
@@ -96,9 +97,15 @@ class SetlistFmApi(Protocol):
 
     def get_setlist(self, setlist_id: str) -> dict[str, Any] | None: ...
 
+    def latest_setlist(self, artist: str) -> dict[str, Any] | None: ...
+
 
 class VenueLookup(Protocol):
     def find_venue(self, query: str) -> VenueHit | None: ...
+
+
+class GroundedModel(Protocol):
+    def ask(self, prompt: str, *, grounded: bool = True) -> GroundedAnswer: ...
 
 
 class Chat(Protocol):

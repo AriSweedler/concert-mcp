@@ -40,6 +40,7 @@ CHECK_NAMES = (
     "setlistfm-key",
     "setlistfm-auth",
     "places-key",
+    "gemini-key",
     "openclaw-binary",
     "openclaw-config",
     "openclaw-session-db",
@@ -303,6 +304,16 @@ def _check_places_key(ctx: _Ctx) -> Check:
     )
 
 
+def _check_gemini_key(ctx: _Ctx) -> Check:
+    """Optional: SKIP when no key is stored (the lineup step is skipped), the credential-file rules otherwise."""
+    path = ctx.settings.gemini_credentials
+    if not path.exists():
+        return Check("gemini-key", "SKIP", "optional: concert-mcp gemini auth stores a Gemini key (openers, set times)")
+    return _credential_file(
+        "gemini-key", path, ("api_key",), legacy=False, anchor="configuration", auth_cmd="concert-mcp gemini auth"
+    )
+
+
 def _check_openclaw_binary(ctx: _Ctx) -> Check:
     if not ctx.settings.send:
         return Check("openclaw-binary", "SKIP", SKIP_DELIVERY_OFF)
@@ -368,6 +379,7 @@ CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "setlistfm-key": (_check_setlistfm_key, "setlistfm"),
     "setlistfm-auth": (_check_setlistfm_auth, "setlistfm"),
     "places-key": (_check_places_key, "configuration"),
+    "gemini-key": (_check_gemini_key, "configuration"),
     "openclaw-binary": (_check_openclaw_binary, "openclaw"),
     "openclaw-config": (_check_openclaw_config, "openclaw"),
     "openclaw-session-db": (_check_openclaw_session_db, "openclaw"),
