@@ -345,6 +345,7 @@ def test_module_is_the_only_place_that_spells_the_statuses() -> None:
         "concert_add": FIX_GUARD_ADD,
         "calendar_add": mod.FIX_GUARD_CALENDAR,
         "event_delete": FIX_GUARD_DELETE,
+        "setlist_playlist": mod.FIX_GUARD_SETLIST_PLAYLIST,
     }
 
 

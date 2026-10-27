@@ -134,6 +134,10 @@ class SetlistFmClient:
         params["p"] = page
         return self.get("/search/setlists", params)
 
+    def get_setlist(self, setlist_id: str) -> dict[str, Any] | None:
+        """GET /setlist/<id>: one setlist with its sets and songs; None when the id is unknown."""
+        return self.get(f"/setlist/{urllib.parse.quote(setlist_id)}", {})
+
     def probe(self) -> int:
         """One real call for healthcheck --probe and setlist-auth: the total of a known artist's search."""
         return int((self.search_setlists(PROBE_ARTIST) or {}).get("total", 0) or 0)

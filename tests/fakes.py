@@ -224,9 +224,12 @@ class FakeSpotify:
         playlists: Sequence[Mapping[str, Any]] | None = None,
         items: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
         fail: str | None = None,
+        tracks: Sequence[Mapping[str, Any]] | None = None,
     ) -> None:
         self.artists: list[dict[str, Any]] = [dict(a) for a in (artists or [])]
         self.liked: list[dict[str, Any]] = [dict(r) for r in (liked or [])]
+        # The catalogue `search_tracks` answers from: rows with name, artists (names) and uri.
+        self.tracks: list[dict[str, Any]] = [dict(t) for t in (tracks or [])]
         self.playlists: list[dict[str, Any]] = [dict(p) for p in (playlists or [])]
         self.items: dict[str, list[dict[str, Any]]] = {k: [dict(r) for r in v] for k, v in (items or {}).items()}
         self.fail = fail
@@ -235,6 +238,7 @@ class FakeSpotify:
         self.added: list[tuple[str, list[str]]] = []
         self.deadlines: list[tuple[str, float | None]] = []  # (method, deadline) per paged read
         self.renamed: list[tuple[str, str]] = []
+        self.described: list[tuple[str, str]] = []
         self.unfollowed: list[str] = []
         self._n = 0
 
@@ -258,6 +262,28 @@ class FakeSpotify:
         want = _normalize(q)
         hits = [a for a in self.artists if want in _normalize(a.get("name")) or _normalize(a.get("name")) in want]
         return [copy.deepcopy(a) for a in hits[:limit]]
+
+    def search_tracks(self, q: str, limit: int = 1) -> list[dict[str, Any]]:
+        """`track:<name> artist:<artist>`: a row whose name equals the track and whose artists include the artist."""
+        self._record("search_tracks", q=q, limit=limit)
+        track, _, artist = q.partition(" artist:")
+        track = _normalize(track.removeprefix("track:"))
+        artist = _normalize(artist)
+        hits = [
+            t
+            for t in self.tracks
+            if _normalize(t.get("name")) == track
+            and (not artist or any(_normalize(a) == artist for a in t.get("artists") or []))
+        ]
+        return [
+            {
+                "name": t.get("name"),
+                "uri": t.get("uri"),
+                "artists": [{"name": a} for a in t.get("artists") or []],
+                "external_urls": {"spotify": f"https://open.spotify.com/track/{str(t.get('uri')).split(':')[-1]}"},
+            }
+            for t in hits[:limit]
+        ]
 
     def liked_rows(self, refresh: bool = False, deadline: float | None = None) -> list[dict[str, Any]]:
         self.calls.append(("liked_rows", {"refresh": refresh, "deadline": deadline}))
@@ -321,6 +347,13 @@ class FakeSpotify:
                 p["name"] = name
         self.renamed.append((playlist_id, name))
 
+    def update_playlist_details(self, playlist_id: str, *, description: str) -> None:
+        self._record("update_playlist_details", playlist_id=playlist_id, description=description)
+        for p in self.playlists:
+            if p.get("id") == playlist_id:
+                p["description"] = description
+        self.described.append((playlist_id, description))
+
     def unfollow_playlist(self, playlist_id: str) -> None:
         self._record("unfollow_playlist", playlist_id=playlist_id)
         self.playlists = [p for p in self.playlists if p.get("id") != playlist_id]
@@ -335,11 +368,17 @@ class FakeSetlistFm:
     """SetlistFmApi with responses keyed (artist, date, year); a missing key is a 404 (None)."""
 
     def __init__(
-        self, responses: Mapping[tuple[Any, ...], Mapping[str, Any] | None] | None = None, fail: bool = False
+        self,
+        responses: Mapping[tuple[Any, ...], Mapping[str, Any] | None] | None = None,
+        fail: bool = False,
+        setlists: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
         self.responses: dict[tuple[Any, ...], Mapping[str, Any] | None] = dict(responses or {})
         self.fail = fail
+        # `get_setlist` answers from this table, keyed by setlist id; a missing id is a 404 (None).
+        self.setlists: dict[str, Mapping[str, Any]] = dict(setlists or {})
         self.calls: list[dict[str, Any]] = []
+        self.fetched: list[str] = []
 
     def search_setlists(
         self,
@@ -355,6 +394,13 @@ class FakeSetlistFm:
                 "setlistfm", "setlist.fm refused | path='/search/setlists' status='500'", SETLISTFM_REFUSED
             )
         res = self.responses.get((artist, date, year))
+        return copy.deepcopy(dict(res)) if res is not None else None
+
+    def get_setlist(self, setlist_id: str) -> dict[str, Any] | None:
+        self.fetched.append(setlist_id)
+        if self.fail:
+            raise ProviderError("setlistfm", "setlist.fm refused | path='/setlist' status='500'", SETLISTFM_REFUSED)
+        res = self.setlists.get(setlist_id)
         return copy.deepcopy(dict(res)) if res is not None else None
 
 

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from concert_mcp.flows.queue import QueueEntry, QueueStatus
     from concert_mcp.text.artists import TeaserResult
     from concert_mcp.text.candidates import Candidate
-    from concert_mcp.text.setlists import SetlistResult
+    from concert_mcp.text.setlists import SetlistResult, SyncResult
 
 __all__ = [
     "LINK_LINE_PREFIXES",
@@ -225,6 +225,33 @@ def render_would_look(title: str, date: str | None, calendar_names: Sequence[str
 def render_teaser_standalone(res: TeaserResult, *, timeout_s: int, dry: bool) -> str:
     """The teaser_playlist tool's reply."""
     return "**Teaser playlist**\n" + (teaser_bullet(res, timeout_s=timeout_s, dry=dry) or "")
+
+
+def render_setlist_playlist(res: SyncResult, *, setlistfm_url: str, event: str | None, dry: bool = False) -> str:
+    """The setlist_playlist tool's reply: the playlist link, how many songs landed, which are not on Spotify,
+    and whether the calendar event got the link (`event` is None when no event was found, else a short note)."""
+    head = "**Setlist playlist** "
+    if res.status == "unavailable":
+        return head + "not made (Spotify is not set up: run `concert-mcp spotify auth`)"
+    if res.status == "failed":
+        return head + f"not made ({(res.reason or 'unknown error')[:REASON_LEN]})"
+    if res.status == "dry_run" or dry or not res.url:
+        songs = f"the {res.total} songs" if res.total else "the songs"
+        return head + f"would make {res.name} from {songs} at {setlistfm_url}"
+    # Created or topped up: the link, the counts, the misses, the cross-link, the event.
+    n = res.on_spotify
+    text = head + f"[{res.name}]({res.url}): {n} song{'s' if n != 1 else ''}"
+    if res.missing:
+        text += f", {len(res.missing)} not on Spotify"
+    if res.status == "updated":
+        text += f" (already existed, {res.added} added)"
+    text += "."
+    if res.missing:
+        text += "\nNot on Spotify: " + ", ".join(res.missing)
+    if res.teaser_url:
+        text += "\nLinked with the teaser playlist."
+    text += "\n" + (event or "No calendar event found for this show; the link was not added to one.")
+    return text
 
 
 def render_setlist_standalone(res: SetlistResult) -> str:

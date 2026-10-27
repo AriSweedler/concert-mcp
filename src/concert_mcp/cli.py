@@ -27,6 +27,7 @@ from concert_mcp.flows.healthcheck import run_healthcheck
 from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist, setlist_outcome
+from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import make_teaser, teaser_outcome
 from concert_mcp.flows.venues import refresh_venue, venues_outcome
 from concert_mcp.log import log_err, set_level
@@ -119,6 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--date", required=True, help="concert date, YYYY-MM-DD")
     p.add_argument("--venue", default="", help="venue name, used to break ties")
     p.add_argument("--songs", action="store_true", help="include the song list in the --json record")
+
+    p = add("setlist-playlist", "build or top up the Spotify playlist of one show's setlist, in setlist.fm order")
+    p.add_argument("--url", default="", help="the setlist.fm page (this show, or an equivalent one of the tour)")
+    p.add_argument("--artist", default="", help="artist, when there is no --url")
+    p.add_argument("--date", default="", help="concert date, YYYY-MM-DD (names the playlist; the event's date)")
+    p.add_argument("--venue", default="", help="venue name, used to break ties in the lookup")
 
     add("queue", "the concerts waiting for the weekly setlist check")
 
@@ -335,6 +342,16 @@ def _cmd_setlist_find(args: argparse.Namespace, settings: Settings) -> int:
     return emit(outcome, delivery, text, json_mode=args.json_mode)
 
 
+def _cmd_setlist_playlist(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    outcome, delivery, text = run_tool(
+        lambda: setlist_playlist_outcome(args.url, args.artist, args.date, args.venue, svc, dry_run=args.dry_run),
+        svc,
+        send=not args.no_send,
+    )
+    return emit(outcome, delivery, text, json_mode=args.json_mode)
+
+
 def _cmd_queue(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     outcome, delivery, text = run_tool(lambda: queue_outcome(svc), svc, send=not args.no_send)
@@ -477,6 +494,8 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_teaser(args, settings)
     if command == "setlist-find":
         return _cmd_setlist_find(args, settings)
+    if command == "setlist-playlist":
+        return _cmd_setlist_playlist(args, settings)
     if command == "queue":
         return _cmd_queue(args, settings)
     if command == "venues":

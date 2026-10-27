@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date as date_type
@@ -38,6 +39,46 @@ class Setlist:
         if songs:
             rec["songs"] = list(self.songs)
         return rec
+
+
+@dataclass(frozen=True)
+class Song:
+    """One song of a setlist.fm page: its name, the original artist when it is a cover, and whether it was tape."""
+
+    name: str
+    artist: str | None = None
+    tape: bool = False
+
+
+def songs_of(setlist_json: Mapping[str, Any] | None) -> list[Song]:
+    """The songs of one setlist.fm setlist in page order (`sets.set[].song[]`); a nameless row is skipped."""
+    out: list[Song] = []
+    for st in ((setlist_json or {}).get("sets") or {}).get("set", []) or []:
+        for song in st.get("song", []) or []:
+            name = str(song.get("name") or "").strip()
+            if not name:
+                continue
+            cover = (song.get("cover") or {}).get("name")
+            out.append(Song(name=name, artist=str(cover).strip() if cover else None, tape=bool(song.get("tape"))))
+    return out
+
+
+# A setlist.fm setlist page: https://www.setlist.fm/setlist/<artist>/<year>/<venue>-<id>.html (the id is hex).
+SETLIST_PAGE = re.compile(r"^https?://(?:www\.)?setlist\.fm/setlist/[^\s?#]+?-([0-9a-f]+)\.html(?:[?#].*)?$", re.I)
+
+
+def page_artist_of(url: str) -> str | None:
+    """The artist named by a setlist.fm page URL's slug ('zed-fox' -> 'Zed Fox'); None for any other URL."""
+    if setlist_id_of(url) is None:
+        return None
+    slug = (url or "").strip().split("/setlist/", 1)[1].split("/", 1)[0]
+    return " ".join(w.capitalize() for w in slug.split("-") if w) or None
+
+
+def setlist_id_of(url: str) -> str | None:
+    """The setlist id in a setlist.fm page URL; None for any other URL."""
+    m = SETLIST_PAGE.match((url or "").strip())
+    return m.group(1) if m else None
 
 
 @dataclass(frozen=True)
@@ -138,3 +179,41 @@ def near_date(rows: Iterable[Setlist], date: str, venue: str | None, max_days: i
 def search_url(artist: str) -> str:
     """The setlist.fm search page for the artist."""
     return f"https://www.setlist.fm/search?query={quote(artist)}"
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    """What sync_setlist_playlist did: the playlist, the songs that landed, the ones Spotify does not have."""
+
+    status: Literal["created", "updated", "dry_run", "unavailable", "failed"]
+    name: str
+    total: int
+    url: str | None = None
+    id: str | None = None
+    added: int = 0
+    already_there: int = 0
+    missing: tuple[str, ...] = ()
+    teaser_url: str | None = None
+    reason: str | None = None
+
+    @property
+    def on_spotify(self) -> int:
+        """Songs found on Spotify (in the playlist now, new or already there)."""
+        return self.added + self.already_there
+
+    def to_json(self) -> dict[str, Any]:
+        """The setlist playlist record."""
+        rec: dict[str, Any] = {
+            "status": self.status,
+            "name": self.name,
+            "songs": self.total,
+            "url": self.url,
+            "id": self.id,
+            "added": self.added,
+            "already_there": self.already_there,
+            "not_on_spotify": list(self.missing),
+            "teaser_url": self.teaser_url,
+        }
+        if self.reason is not None:
+            rec["error"] = self.reason
+        return rec

@@ -26,7 +26,7 @@ The output contract, which every tool and every CLI subcommand ends in:
 4. Not sent: the tool result is the reply text plus the `NOT SENT` line, and the model relays the text unchanged.
 5. The caller's input was wrong: `FIX: <what to change>`, the only retry signal. On the MCP path it ends with `Call <tool> once more with only that change.`; the third FIX for one tool within 15 minutes becomes a question to the user instead.
 
-The seven tools. Every parameter is a string with default `""`; a missing required value is answered in code (`I could not read the artist from that. Reply with it and I will add the event.`), never by a schema error:
+The eight tools. Every parameter is a string with default `""`; a missing required value is answered in code (`I could not read the artist from that. Reply with it and I will add the event.`), never by a schema error:
 
 | Tool | Parameters | What it does |
 |---|---|---|
@@ -35,10 +35,13 @@ The seven tools. Every parameter is a string with default `""`; a missing requir
 | `event_delete` | `title`, `date`, `pick` | delete one event by title; several matches become a numbered list, and `pick` (or a bare number as the title) chooses from it |
 | `teaser_playlist` | `artist`, `date` | the Spotify teaser alone: every liked song by the artist, oldest first, named `YYYY-MM-DD \| Artist` |
 | `setlist_find` | `artist`, `date`, `venue` | the setlist.fm page for one show: exact date first, then within a day at a venue sharing a word |
+| `setlist_playlist` | `url`, `artist`, `date`, `venue` | the Spotify playlist of one show's setlist, in setlist.fm order, named `YYYY-MM-DD \| Artist`: built from a pasted setlist.fm page (or the show found by artist and date), topped up on a repeat, cross-linked with the teaser playlist, linked from the calendar event |
 | `queue_status` | none | the concerts waiting for the weekly setlist check |
 | `healthcheck` | none | which credentials and tools are present and what fixes each missing one |
 
 `event_delete` carries `destructiveHint`; `setlist_find`, `queue_status` and `healthcheck` carry `readOnlyHint`.
+
+**Two playlists, one name.** The teaser and the setlist playlist of a show are both named `YYYY-MM-DD | Artist`, so the Concerts folders in Spotify read the same. The description's first word tells them apart: a setlist playlist's starts with `Setlist:` (`Setlist: Zed Fox on 2026-11-14, in setlist order, from <setlist.fm url> Teaser playlist: <url>`), a teaser's with `Teaser for`. Both flows look a playlist up by name and marker, so neither tops the other up. `setlist_playlist` searches each setlist.fm song on Spotify as `track:<name> artist:<artist>` (the original artist for a cover; tape intros are skipped), adds only the URIs the playlist lacks (setlist order kept for the new tail), writes `Setlist playlist: <url>` into the teaser's description and the event's description once, and reports the songs Spotify does not have. The owner may paste the page of an equivalent show of the same tour: in a topic the playlist takes the topic event's date, not the page's. The weekly poll reuses `sync_setlist_playlist` to top the playlist up as the page fills in.
 
 **One event per topic.** A Telegram forum topic is the conversation about one show, so it owns one event. `<state_dir>/topics.json` maps `<chat>:<thread>` to the event last added from that topic. A `concert_add` whose live route is that topic patches the event (title, start, end, location, description) instead of inserting, keeps a `Teaser playlist:`, `Setlist:` or `Venue:` line the new text could not supply, rewrites the queue row, and replies `**Updated on Concerts**` with a `Changed:` note. `another=yes` inserts a second event and makes it the topic's current one; `event_delete` frees the topic; a DM or the General topic has no key and falls back to the title-and-minute duplicate guard.
 

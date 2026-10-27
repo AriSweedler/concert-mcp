@@ -33,11 +33,16 @@ FIX_GUARD_OTHER = (
     "I could not get that right after a few tries. "
     "Reply with the artist and the date as YYYY-MM-DD and I will try once more."
 )
+FIX_GUARD_SETLIST_PLAYLIST = (
+    "I could not use that after a few tries. "
+    "Reply with the setlist.fm link of the show, or the artist and the date, in one line and I will try once more."
+)
 # The reply fix_guard sends on the third FIX in a row, per tool; tools not listed get FIX_GUARD_OTHER.
 FIX_GUARD_REPLIES = {
     "concert_add": FIX_GUARD_ADD,
     "calendar_add": FIX_GUARD_CALENDAR,
     "event_delete": FIX_GUARD_DELETE,
+    "setlist_playlist": FIX_GUARD_SETLIST_PLAYLIST,
 }
 FIX_GUARD_LIMIT = 3
 
