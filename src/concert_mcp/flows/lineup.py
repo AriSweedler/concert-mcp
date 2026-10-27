@@ -65,7 +65,9 @@ def _opener_pages(openers: tuple[Opener, ...], svc: Services) -> tuple[Opener, .
 
 
 def discover_website(venue: str, svc: Services) -> str | None:
-    """Ask the model, once per venue, which site is the venue's own, and remember it in the registry; None when unsure."""
+    """Ask the model, once per venue, which site is the venue's own, and remember it in the registry.
+
+    None when the model is unsure or names a listing site."""
     model = svc.gemini
     if model is None or not venue:
         return None
