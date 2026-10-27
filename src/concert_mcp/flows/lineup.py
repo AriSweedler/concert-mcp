@@ -8,7 +8,6 @@ is the on-demand `lineup` tool: in a Telegram topic the topic's event supplies t
 from __future__ import annotations
 
 from collections.abc import Sequence
-
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,11 +24,11 @@ from concert_mcp.text.lineup import (
     lineup_lines,
     lineup_pages,
     lineup_prompt,
+    merge_lineup_lines,
+    parse_lineup,
     parse_website,
     urls_in,
     website_prompt,
-    merge_lineup_lines,
-    parse_lineup,
 )
 from concert_mcp.text.reply import render_lineup
 from concert_mcp.text.routes import chat_target, forum_target
@@ -92,8 +91,8 @@ def discover_website(venue: str, svc: Services) -> str | None:
 def find_lineup(
     artist: str, date: str, venue: str, website: str | None, svc: Services, *, ticket_urls: Sequence[str] = ()
 ) -> Lineup:
-    """The venue's pages (found once when the registry has none), the ticket's pages and a results page, read in
-    one call and checked; never raises."""
+    """The venue's pages (found once when the registry has none), the ticket's pages and a results page, read
+    in one call and checked; never raises."""
     model = svc.gemini
     if model is None:
         return Lineup("unavailable", reason="Gemini is not set up")

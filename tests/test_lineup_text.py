@@ -7,10 +7,6 @@ import json
 import pytest
 
 from concert_mcp.text.lineup import (
-    lineup_pages,
-    parse_website,
-    urls_in,
-    website_prompt,
     LINEUP_SCHEMA,
     GroundedAnswer,
     Lineup,
@@ -19,10 +15,14 @@ from concert_mcp.text.lineup import (
     expected_line,
     latest_setlist_url,
     lineup_lines,
+    lineup_pages,
     lineup_prompt,
     merge_lineup_lines,
     opener_setlist_line,
     parse_lineup,
+    parse_website,
+    urls_in,
+    website_prompt,
 )
 
 FULL = json.dumps(

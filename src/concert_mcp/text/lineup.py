@@ -159,7 +159,8 @@ def parse_website(answer: GroundedAnswer) -> str | None:
 def lineup_pages(
     artist: str, date: str, venue: str, website: str | None, ticket_urls: Sequence[str] = ()
 ) -> tuple[str, ...]:
-    """Every page the model is asked to read for one show: the venue's listing, the ticket's pages, a results page (pure)."""
+    """Every page the model is asked to read for one show: the venue's listing, the ticket's pages, a
+    results page (pure)."""
     pages: list[str] = list(listing_pages(website)) if website else []
     pages += [u for u in ticket_urls if u not in pages]
     pages.append(search_page(f"{artist} {venue} {date} tickets"))
