@@ -46,6 +46,7 @@ class Settings:
     ocr_last: Path
     tz: str
     concerts_calendar: str
+    concerts_chat: str
     default_calendar: str
     default_calendar_name: str
     context_window_s: int
@@ -81,7 +82,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "state_dir",
         "~/.local/state/concert-mcp",
-        "setlist-queue.json, delete-candidates.json, last-sent.json, fix-log.json, topics.json",
+        "setlist-queue.json, setlist-poll.stamp, delete-candidates.json, last-sent.json, fix-log.json, topics.json",
     ),
     ("cache_dir", "~/.cache/concert-mcp", "liked.json"),
     ("spotify_credentials", "<config_dir>/spotify.json", "legacy fallback ~/.config/ari-spotify/credentials.json"),
@@ -118,6 +119,11 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("ocr_last", "<openclaw_home>/media/ocr-last.txt", "the last OCR output"),
     ("tz", "America/Los_Angeles", "IANA zone for every start/end"),
     ("concerts_calendar", "Concerts", "calendar name, resolved through gws calendar calendarList list"),
+    (
+        "concerts_chat",
+        "",
+        "Telegram chat id the weekly setlist poll announces a new playlist to when the show's topic is unknown",
+    ),
     ("default_calendar", "primary", "id used for plain events and the second delete search"),
     ("default_calendar_name", "Personal", "how replies name it"),
     ("context_window_s", "900", "live chat / OCR / transcript recency"),
@@ -343,6 +349,7 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         ocr_last=path_of("ocr_last", openclaw_home / "media/ocr-last.txt"),
         tz=str_of("tz", "America/Los_Angeles"),
         concerts_calendar=str_of("concerts_calendar", "Concerts"),
+        concerts_chat=str_of("concerts_chat", ""),
         default_calendar=str_of("default_calendar", "primary"),
         default_calendar_name=str_of("default_calendar_name", "Personal"),
         context_window_s=int_of("context_window_s", 900),

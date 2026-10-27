@@ -352,6 +352,21 @@ def test_queue_json(cli_env: Services, monkeypatch, capsys) -> None:
     assert_clean_stdout(out, err)
 
 
+def test_poll_text_and_json(cli_env: Services, monkeypatch, capsys) -> None:
+    code, out, err = run(monkeypatch, capsys, ["poll"])
+    assert code == 0
+    assert out.endswith("\nThe setlist queue is empty.\n") and out.startswith("**Setlist poll** ")
+    assert_clean_stdout(out, err)
+    code, out, _ = run(monkeypatch, capsys, ["poll"])
+    assert code == 0 and out.startswith("**Setlist poll** skipped: last run ")
+    code, out, _ = run(monkeypatch, capsys, ["poll", "--force", "--json"])
+    rec = one_json_line(out)
+    assert code == 0 and rec["ok"] is True and rec["ran"] is True and rec["rows"] == []
+    assert rec["sent"] == "NOT SENT: the poll report stays on the terminal"
+    code, out, _ = run(monkeypatch, capsys, ["queue"])
+    assert code == 0 and "\nLast poll: 20" in out
+
+
 def test_queue_text(cli_env: Services, monkeypatch, capsys) -> None:
     code, out, _ = run(monkeypatch, capsys, ["queue", "--no-send"])
     assert code == 0

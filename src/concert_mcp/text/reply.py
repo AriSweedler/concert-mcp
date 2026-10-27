@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from concert_mcp.result import NO_REPLY_TEXT
 
 if TYPE_CHECKING:
+    from concert_mcp.flows.poll import PollReport
     from concert_mcp.flows.queue import QueueEntry, QueueStatus
     from concert_mcp.text.artists import TeaserResult
     from concert_mcp.text.candidates import Candidate
@@ -32,8 +33,10 @@ __all__ = [
     "render_candidates",
     "render_dry_add",
     "render_none_found",
+    "render_poll",
     "render_queue",
     "render_removed",
+    "render_setlist_playlist_announce",
     "render_setlist_standalone",
     "render_teaser_standalone",
     "render_would_look",
@@ -43,7 +46,8 @@ __all__ = [
     "teaser_line",
 ]
 
-LINK_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ")
+LINK_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "Setlist playlist: ")
+SETLIST_PLAYLIST_LINE_PREFIX = "Setlist playlist: "
 NO_CANDIDATES_REPLY = (
     "I do not have a list to pick from any more. Tell me the event name and date and I will look again."
 )
@@ -266,12 +270,50 @@ def _queue_row(e: QueueEntry, expired: bool) -> str:
 
 
 def render_queue(status: QueueStatus) -> str:
-    """The setlist queue: active shows first, then expired ones, each by date."""
+    """The setlist queue: active shows first, then expired ones, each by date; last the weekly poll's last run."""
+    last = f"Last poll: {status.last_poll or 'never'}"
     if not status.entries:
-        return "The setlist queue is empty."
+        return f"The setlist queue is empty.\n{last}"
     rows = [_queue_row(e, False) for e in sorted(status.active, key=lambda e: e.date)]
     rows += [_queue_row(e, True) for e in sorted(status.expired, key=lambda e: e.date)]
-    return f"**Setlist queue** ({len(status.entries)} shows)\n" + "\n".join(rows)
+    return f"**Setlist queue** ({len(status.entries)} shows)\n" + "\n".join(rows) + f"\n{last}"
+
+
+def render_poll(report: PollReport) -> str:
+    """The weekly poll's report: one line per queued show, or why the run was skipped."""
+    last = report.last_poll or "never"
+    if not report.ran:
+        return (
+            f"**Setlist poll** skipped: last run {last}, less than {report.interval_days} days ago "
+            "(`concert-mcp poll --force` runs it now)"
+        )
+    head = "**Setlist poll (dry run)**" if report.dry_run else "**Setlist poll**"
+    head += f" {report.now} (last: {last})"
+    if not report.rows:
+        return f"{head}\nThe setlist queue is empty."
+    return head + "".join(f"\n• {r.date} {r.artist} — {r.action}" for r in report.rows)
+
+
+def render_setlist_playlist_announce(
+    artist: str,
+    date: str,
+    venue: str,
+    *,
+    setlist_url: str,
+    song_count: int,
+    playlist_name: str,
+    playlist_url: str,
+    html_link: str | None,
+) -> str:
+    """The one Telegram message the weekly poll sends when a show's setlist playlist first exists."""
+    rows = [
+        bullet("Setlist", f"[setlist.fm]({setlist_url}) {song_count} songs"),
+        bullet("Playlist", f"[{playlist_name}]({playlist_url})"),
+    ]
+    if html_link:
+        rows.append(bullet("Calendar", f"[Open in Google Calendar]({event_link(html_link)})"))
+    where = f" @ {venue}" if venue else ""
+    return f"**Setlist playlist:** {artist}{where}, {date}\n" + "\n".join(rows)
 
 
 def provider_reply(provider: str, operator: str, *, what: str = "request") -> str:

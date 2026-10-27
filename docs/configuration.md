@@ -5,7 +5,7 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | Variable | Default | Meaning |
 |---|---|---|
 | `CONCERT_MCP_CONFIG_DIR` | `~/.config/concert-mcp` | credentials files and config.toml |
-| `CONCERT_MCP_STATE_DIR` | `~/.local/state/concert-mcp` | setlist-queue.json, delete-candidates.json, last-sent.json, fix-log.json |
+| `CONCERT_MCP_STATE_DIR` | `~/.local/state/concert-mcp` | setlist-queue.json, setlist-poll.stamp, delete-candidates.json, last-sent.json, fix-log.json, topics.json |
 | `CONCERT_MCP_CACHE_DIR` | `~/.cache/concert-mcp` | liked.json |
 | `CONCERT_MCP_SPOTIFY_CREDENTIALS` | `<config_dir>/spotify.json` | legacy fallback ~/.config/ari-spotify/credentials.json |
 | `CONCERT_MCP_SETLISTFM_CREDENTIALS` | `<config_dir>/setlistfm.json` | legacy fallback ~/.config/ari-spotify/setlistfm.json |
@@ -25,6 +25,7 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_OCR_LAST` | `<openclaw_home>/media/ocr-last.txt` | the last OCR output |
 | `CONCERT_MCP_TZ` | `America/Los_Angeles` | IANA zone for every start/end |
 | `CONCERT_MCP_CONCERTS_CALENDAR` | `Concerts` | calendar name, resolved through gws calendar calendarList list |
+| `CONCERT_MCP_CONCERTS_CHAT` | (empty) | Telegram chat id the weekly setlist poll announces a new playlist to when the show's topic is not in `topics.json` |
 | `CONCERT_MCP_DEFAULT_CALENDAR` | `primary` | id used for plain events and the second delete search |
 | `CONCERT_MCP_DEFAULT_CALENDAR_NAME` | `Personal` | how replies name it |
 | `CONCERT_MCP_CONTEXT_WINDOW_S` | `900` | live chat / OCR / transcript recency |

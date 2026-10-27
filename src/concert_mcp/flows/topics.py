@@ -56,6 +56,14 @@ def topic_forget(key: str, svc: Services) -> bool:
     return True
 
 
+def topic_for_event(event_id: str, svc: Services) -> str | None:
+    """The key of the topic that owns an event, if any; the weekly poll announces a playlist there."""
+    for key, row in _rows(svc).items():
+        if isinstance(row, Mapping) and row.get("event_id") == event_id:
+            return str(key)
+    return None
+
+
 def topic_forget_event(event_id: str, svc: Services) -> bool:
     """Drop every entry pointing at a deleted event; returns whether any was dropped."""
     rows = _rows(svc)
