@@ -48,6 +48,7 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_OP_PLACES_ITEM` | `Google Places - API key` | field credential, `venues auth` only |
 | `CONCERT_MCP_GEMINI_CREDENTIALS` | `<config_dir>/gemini.json` | optional Gemini key for the lineup step (openers, set times); without it the step is skipped |
 | `CONCERT_MCP_GEMINI_TIMEOUT_S` | `20` | cap on the one Gemini call per concert |
+| `CONCERT_MCP_GEMINI_MODEL` | `gemini-3.8-flash` | the Gemini model behind the lineup lookups; it must support the `google_search` tool |
 | `CONCERT_MCP_OP_GEMINI_ITEM` | `Gemini - API key` | field credential, `gemini auth` only |
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in 'Admin: check `gws auth` on the host.' |
 | `CONCERT_MCP_SEND` | `1` | 0 disables reply delivery and topic renames everywhere |

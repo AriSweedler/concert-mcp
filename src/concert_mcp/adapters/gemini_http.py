@@ -1,6 +1,6 @@
 """Gemini over urllib: one grounded `generateContent` call per lookup (unit adapter-music).
 
-`gemini-2.5-flash` with the `google_search` tool reads the venue's event page for us, so no venue page is ever
+`gemini-3.8-flash` (CONCERT_MCP_GEMINI_MODEL) with the `google_search` tool reads the venue's event page for us, so no venue page is ever
 scraped here. The key comes from `<config_dir>/gemini.json` (`concert-mcp gemini auth` writes it); a free AI Studio
 key carries a daily grounding allowance, and a concert costs one call. The call is capped at
 `CONCERT_MCP_GEMINI_TIMEOUT_S` (20 s) so a slow answer never holds a concert_add reply for long.
@@ -9,6 +9,7 @@ key carries a daily grounding allowance, and a concert costs one call. The call 
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -24,7 +25,7 @@ from concert_mcp.text.lineup import GroundedAnswer
 from concert_mcp.text.reply import provider_reply
 
 GEMINI_API = "https://generativelanguage.googleapis.com/v1beta"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = os.environ.get("CONCERT_MCP_GEMINI_MODEL", "").strip() or "gemini-3.8-flash"  # 2.5 Flash was retired from the API in October 2026
 PROBE_PROMPT = "Answer with the single word: ok"
 
 
