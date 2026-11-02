@@ -1,8 +1,10 @@
 """The setlist playlist flow (unit flows-music): a Spotify playlist in setlist.fm order for one show.
 
 The owner pastes a setlist.fm link (of this show, or of an equivalent show on the same tour) or names the show; the
-songs come from the setlist.fm API, each is found on Spotify by `track:<name> artist:<artist>` search, and the
-playlist named "YYYY-MM-DD | Artist" is created or topped up with the ones it lacks, setlist order kept. The teaser
+songs come from the setlist.fm API, each is found on Spotify by a `track:<name> artist:<artist>` search and, when
+that finds nothing by the artist, by a plain `<name> <artist>` search whose candidates are checked by loose name
+(case, accents and punctuation ignored: `K.Flay` is `K Flay`, `Don’t` is `Don't`) and by the artist's Spotify id.
+The playlist named "YYYY-MM-DD | Artist" is created or topped up with the ones it lacks, setlist order kept. The teaser
 playlist of the same show has the same name: a setlist playlist's description starts with `Setlist:`, a teaser's with
 `Teaser for`, and that first word is what tells them apart. The two descriptions link each other, and the calendar
 event's description gains `Setlist playlist: <url>` once. `sync_setlist_playlist` is the piece the weekly poll reuses.
@@ -13,13 +15,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from concert_mcp.adapters.protocols import SpotifyApi
 from concert_mcp.flows.event_delete import DeleteRequest, find_candidates
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
+from concert_mcp.flows.teaser import resolve_artist
 from concert_mcp.flows.topics import live_event, topic_event
-from concert_mcp.log import log_info, log_warn
+from concert_mcp.log import log_debug, log_info, log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
-from concert_mcp.text.artists import find_playlist_named, new_uris
+from concert_mcp.text.artists import NoArtistMatch, find_playlist_named, new_uris
 from concert_mcp.text.candidates import missing_link_lines, patched_description
 from concert_mcp.text.dates import concert_date
 from concert_mcp.text.naming import (
@@ -33,8 +37,11 @@ from concert_mcp.text.reply import provider_reply, render_setlist_playlist
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, SyncResult, page_artist_of, setlist_id_of, setlist_row, songs_of
 from concert_mcp.text.topics import TopicEntry, topic_key
+from concert_mcp.text.tracks import candidate_summary, pick_track, plain_query
 
 REASON_LIMIT = 160
+# Candidates read per search: the first Spotify result is not always the artist's own recording.
+CANDIDATES = 5
 NOT_SETLISTFM_FIX = (
     'send a setlist.fm setlist page, like "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-'
     'san-francisco-ca-3bd6f4a.html", or leave url empty and pass artist and date'
@@ -61,6 +68,40 @@ def find_teaser_playlist(playlists: Iterable[Mapping[str, Any]], name: str) -> M
 def track_query(song: Song, artist: str) -> str:
     """The Spotify search for one setlist song: the cover's original artist when it is a cover."""
     return f"track:{song.name} artist:{song.artist or artist}"
+
+
+def find_track_uri(song: Song, artist: str, api: SpotifyApi, *, artist_id: str | None = None) -> str:
+    """The Spotify URI of one setlist song, or "" when no candidate is the song by its artist.
+
+    Two searches, the second only when the first yields nothing by the artist: the field-filtered
+    `track:<name> artist:<artist>`, then the plain `<name> <artist>` (Spotify's `artist:` filter misses some
+    spellings, `K.Flay` among them). Every candidate must match the song by loose name and credit the artist, by
+    Spotify id when the headliner's is known, else by loose name; a cover is matched to its original artist by name.
+    The query and the candidates are logged at debug level, so a `Not on Spotify` row explains itself.
+    """
+    want_artist = song.artist or artist
+    want_id = None if song.artist else artist_id
+    for q in (track_query(song, artist), plain_query(song, artist)):
+        hits = api.search_tracks(q, CANDIDATES)
+        pick = pick_track(hits, song.name, want_artist, want_id)
+        log_debug(
+            f"setlist song search | song='{song.name}' query='{q}' candidates='{candidate_summary(hits)}' "
+            f"picked='{pick.get('name') if pick else None}'"
+        )
+        uri = str(pick.get("uri") or "") if pick else ""
+        if uri:
+            return uri
+    return ""
+
+
+def _artist_id(artist: str, api: SpotifyApi) -> str | None:
+    """The headliner's Spotify id for matching tracks by credit; None when the name is not an exact artist match."""
+    try:
+        a, corrected = resolve_artist(artist, api)
+    except (NoArtistMatch, ProviderError) as e:
+        log_debug(f"setlist artist id not resolved | artist='{artist}' reason='{str(e)[:REASON_LIMIT]}'")
+        return None
+    return None if corrected else a.id
 
 
 def _url_of(pl: Mapping[str, Any]) -> str | None:
@@ -97,11 +138,10 @@ def sync_setlist_playlist(
 
         uris: list[str] = []
         missing: list[str] = []
-        for song in songs:
-            if song.tape:
-                continue
-            hits = api.search_tracks(track_query(song, artist), 1)
-            uri = str(hits[0].get("uri") or "") if hits else ""
+        wanted = [s for s in songs if not s.tape]
+        artist_id = _artist_id(artist, api) if wanted else None
+        for song in wanted:
+            uri = find_track_uri(song, artist, api, artist_id=artist_id)
             if not uri:
                 missing.append(song.name)
             elif uri not in uris:
