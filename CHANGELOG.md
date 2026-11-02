@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- `setlist_playlist` finds released songs the `track:<name> artist:<artist>` search missed (ten of eighteen on a K.Flay setlist, among them songs on her albums): when that search returns nothing by the artist, a plain `<name> <artist>` search follows and its candidates are matched by loose name (case, accents and punctuation ignored, so a curly apostrophe or `K.Flay` against `K Flay` no longer loses a match) and by the artist's Spotify id or loose name; a candidate by another artist is never added, so a wrong-artist first hit no longer lands in the playlist. `--log-level debug` logs each song's query and candidates. A repeat call tops the playlist up with the songs now found.
 - The `Purchased:` line takes the amount after a receipt's `TOTAL` label (not `SUBTOTAL`), else the largest amount; the count also reads `1 General Admission`, `Qty: 2` and `2 x $20.00`.
 - `concert_add` asks the user for the headliner when the artist is a ticket platform (`DICE`, `Ticketweb`, ...) or the venue, and drops a caller-named opener the source text does not contain.
 

@@ -134,13 +134,151 @@ def test_sync_creates_the_playlist_in_setlist_order_and_skips_tape_and_misses(sv
     assert sp.added == [("pl1", ["spotify:track:t1", "spotify:track:c1", "spotify:track:t3"])]
     assert sp.created[0]["description"] == setlist_description(ARTIST, DATE, PAGE_URL)
     assert sp.created[0]["public"] is False
+    # The field-filtered search first; the plain search only for the song it did not find.
     queries = [a["q"] for m, a in sp.calls if m == "search_tracks"]
     assert queries == [
         "track:First Light artist:Zed Fox",
         "track:Borrowed Song artist:Other Band",
         "track:Third Rail artist:Zed Fox",
         "track:Unreleased Jam artist:Zed Fox",
+        "Unreleased Jam Zed Fox",
     ]
+    assert {a["limit"] for m, a in sp.calls if m == "search_tracks"} == {5}
+    assert [a["q"] for m, a in sp.calls if m == "search_artists"] == ["Zed Fox"]
+
+
+# ---------- the search fallback (beads-9pb) ----------
+
+
+def searched(sp: Any) -> list[str]:
+    return [a["q"] for m, a in sp.calls if m == "search_tracks"]
+
+
+def sync_one(svc: Services, song: Song, artist: str = ARTIST) -> tuple[Any, Any]:
+    res = sync_setlist_playlist(artist=artist, date=DATE, songs=[song], setlistfm_url=PAGE_URL, svc=svc)
+    return res, svc.spotify
+
+
+def test_a_song_the_field_search_misses_is_found_by_the_plain_search(svc_cli: Services) -> None:
+    # setlist.fm writes the stage detail in parentheses; Spotify has the plain title.
+    svc_cli.spotify.tracks = [{"name": "Third Rail", "artists": ["Zed Fox"], "uri": "spotify:track:t3"}]
+    res, sp = sync_one(svc_cli, Song("Third Rail (acoustic)"))
+    assert (res.added, res.missing) == (1, ())
+    assert sp.added == [("pl1", ["spotify:track:t3"])]
+    assert searched(sp) == ["track:Third Rail (acoustic) artist:Zed Fox", "Third Rail Zed Fox"]
+
+
+def test_a_curly_apostrophe_matches_a_straight_one(svc_cli: Services) -> None:
+    svc_cli.spotify.tracks = [{"name": "Foxes Don't Cry", "artists": ["Zed Fox"], "uri": "spotify:track:t9"}]
+    res, sp = sync_one(svc_cli, Song("Foxes Don’t Cry"))
+    assert (res.added, res.missing) == (1, ())
+    assert sp.added == [("pl1", ["spotify:track:t9"])]
+    assert searched(sp) == ["track:Foxes Don’t Cry artist:Zed Fox", "Foxes Don’t Cry Zed Fox"]
+
+
+def test_artist_punctuation_does_not_lose_the_match(svc_cli: Services) -> None:
+    # The page says `Z.Fox`, Spotify credits `Z Fox` (the real case was `K.Flay`, beads-9pb): the field filter
+    # misses, the plain search's candidate passes the loose artist check.
+    svc_cli.spotify.artists = []
+    svc_cli.spotify.tracks = [{"name": "Hell", "artists": ["Z Fox"], "uri": "spotify:track:k1"}]
+    res, sp = sync_one(svc_cli, Song("Hell"), artist="Z.Fox")
+    assert res.name == "2026-11-14 | Z.Fox"
+    assert (res.added, res.missing) == (1, ())
+    assert searched(sp) == ["track:Hell artist:Z.Fox", "Hell Z.Fox"]
+
+
+def test_a_candidate_by_another_artist_is_never_added(svc_cli: Services) -> None:
+    # The plain search returns the same title by someone else and the artist's other songs: none is the song.
+    svc_cli.spotify.tracks = [
+        {"name": "Hell", "artists": ["Other Band"], "uri": "spotify:track:wrong"},
+        {"name": "Hello", "artists": ["Zed Fox"], "uri": "spotify:track:near"},
+        {"name": "Alive Again", "artists": ["Zed Fox"], "uri": "spotify:track:longer"},
+    ]
+    res, sp = sync_one(svc_cli, Song("Hell"))
+    assert (res.added, res.missing) == (0, ("Hell",))
+    assert sp.added == []
+    assert searched(sp) == ["track:Hell artist:Zed Fox", "Hell Zed Fox"]
+    res, sp = sync_one(svc_cli, Song("Alive"))
+    assert res.missing == ("Alive",) and sp.added == []
+
+
+def test_a_wrong_artist_first_hit_of_the_field_search_is_skipped_for_the_right_one(svc_cli: Services) -> None:
+    svc_cli.spotify.tracks = [
+        {"name": "Hell", "artists": ["Other Band"], "uri": "spotify:track:wrong"},
+        {"name": "Hell", "artists": ["Zed Fox"], "uri": "spotify:track:right"},
+    ]
+    # The fake's field filter already excludes the wrong artist; the plain search puts it first, and it is skipped.
+    res, sp = sync_one(svc_cli, Song("Hell (reprise)"))
+    assert sp.added == [("pl1", ["spotify:track:right"])] and res.missing == ()
+
+
+def test_the_artist_id_matches_a_track_credited_under_another_spelling(svc_cli: Services) -> None:
+    svc_cli.spotify.tracks = [
+        {"name": "Alias Song", "artists": ["Z. Fox"], "artist_ids": ["artist-zedfox"], "uri": "spotify:track:a1"}
+    ]
+    res, sp = sync_one(svc_cli, Song("Alias Song"))
+    assert (res.added, res.missing) == (1, ())
+    assert sp.added == [("pl1", ["spotify:track:a1"])]
+    # Without the id (no exact artist on Spotify), the same track is not the song by this artist.
+    svc_cli.spotify.artists = []
+    svc_cli.spotify.added.clear()
+    svc_cli.spotify.playlists.clear()
+    res, sp = sync_one(svc_cli, Song("Alias Song"))
+    assert res.missing == ("Alias Song",) and sp.added == []
+
+
+def test_a_corrected_artist_name_lends_no_id(svc_cli: Services) -> None:
+    # `Zed Fox & Friends` resolves to Zed Fox only by word subset: that id must not vouch for tracks.
+    svc_cli.spotify.tracks = [
+        {"name": "Alias Song", "artists": ["Z. Fox"], "artist_ids": ["artist-zedfox"], "uri": "spotify:track:a1"}
+    ]
+    res, sp = sync_one(svc_cli, Song("Alias Song"), artist="Zed Fox & Friends")
+    assert res.missing == ("Alias Song",) and sp.added == []
+
+
+def test_a_cover_is_searched_under_its_original_artist_both_ways(svc_cli: Services) -> None:
+    # The headliner's own recording of the cover is not taken (today's behaviour): the original artist is the match.
+    svc_cli.spotify.tracks = [{"name": "Borrowed Song", "artists": ["Zed Fox"], "uri": "spotify:track:own"}]
+    res, sp = sync_one(svc_cli, Song("Borrowed Song", "Other Band"))
+    assert res.missing == ("Borrowed Song",) and sp.added == []
+    assert searched(sp) == ["track:Borrowed Song artist:Other Band", "Borrowed Song Other Band"]
+    svc_cli.spotify.tracks.append({"name": "Borrowed Song", "artists": ["Other Band"], "uri": "spotify:track:c1"})
+    svc_cli.spotify.playlists.clear()
+    res, sp = sync_one(svc_cli, Song("Borrowed Song", "Other Band"))
+    assert res.missing == () and [uris for _, uris in sp.added] == [["spotify:track:c1"]]
+
+
+def test_tape_songs_are_not_searched_and_need_no_artist_lookup(svc_cli: Services) -> None:
+    res, sp = sync_one(svc_cli, Song("Intro", None, True))
+    assert (res.added, res.missing) == (0, ())
+    assert [m for m, _ in sp.calls if m in ("search_tracks", "search_artists")] == []
+
+
+def test_a_failed_artist_lookup_does_not_fail_the_sync(svc_cli: Services) -> None:
+    svc_cli.spotify.fail = "search_artists"
+    svc_cli.spotify.tracks = list(TRACKS)
+    res, sp = sync_one(svc_cli, Song("Third Rail"))
+    assert res.status == "created" and (res.added, res.missing) == (1, ())
+
+
+def test_debug_log_names_the_query_and_the_candidates(svc_cli: Services, capsys: Any) -> None:
+    from concert_mcp.log import set_level, strip_ansi
+
+    svc_cli.spotify.tracks = [{"name": "Hell", "artists": ["Other Band"], "uri": "spotify:track:wrong"}]
+    set_level("debug")
+    try:
+        sync_one(svc_cli, Song("Hell"))
+    finally:
+        set_level("info")
+    err = strip_ansi(capsys.readouterr().err)
+    assert (
+        "[DEBUG] setlist song search | song='Hell' query='track:Hell artist:Zed Fox' candidates='none' picked='None'"
+        in err
+    )
+    assert (
+        "[DEBUG] setlist song search | song='Hell' query='Hell Zed Fox' candidates='Hell by Other Band' picked='None'"
+        in err
+    )
 
 
 def test_sync_tops_up_an_existing_setlist_playlist_and_cross_links_the_teaser(svc_cli: Services) -> None:

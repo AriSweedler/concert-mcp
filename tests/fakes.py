@@ -34,6 +34,11 @@ def _normalize(name: object) -> str:
     return " ".join(str(name or "").lower().replace("&", "and").split())
 
 
+def _loose_words(s: object) -> list[str]:
+    """Lower-case words with punctuation stripped (an apostrophe joins), for the fake's plain track search."""
+    return [w for w in re.split(r"[^0-9a-z]+", re.sub(r"['’]", "", str(s or "").lower())) if w]
+
+
 def _parse_when(value: Mapping[str, Any], tz: timezone | Any) -> datetime:
     if value.get("dateTime"):
         return datetime.fromisoformat(str(value["dateTime"]).replace("Z", "+00:00"))
@@ -266,22 +271,39 @@ class FakeSpotify:
         return [copy.deepcopy(a) for a in hits[:limit]]
 
     def search_tracks(self, q: str, limit: int = 1) -> list[dict[str, Any]]:
-        """`track:<name> artist:<artist>`: a row whose name equals the track and whose artists include the artist."""
+        """Two shapes of query over the catalogue rows (name, artists, optional artist_ids, uri).
+
+        `track:<name> artist:<artist>`: rows whose name equals the track and whose artists include the artist, both
+        compared case- and whitespace-insensitively but punctuation kept, as Spotify's field filters behave. A plain
+        query: every row sharing a word with it, most shared words first, as Spotify's fuzzy search behaves (the
+        artist's other songs come back too).
+        """
         self._record("search_tracks", q=q, limit=limit)
-        track, _, artist = q.partition(" artist:")
-        track = _normalize(track.removeprefix("track:"))
-        artist = _normalize(artist)
-        hits = [
-            t
-            for t in self.tracks
-            if _normalize(t.get("name")) == track
-            and (not artist or any(_normalize(a) == artist for a in t.get("artists") or []))
-        ]
+        if q.startswith("track:"):
+            track, _, artist = q.partition(" artist:")
+            track = _normalize(track.removeprefix("track:"))
+            artist = _normalize(artist)
+            hits = [
+                t
+                for t in self.tracks
+                if _normalize(t.get("name")) == track
+                and (not artist or any(_normalize(a) == artist for a in t.get("artists") or []))
+            ]
+        else:
+            words = set(_loose_words(q))
+
+            def shared(t: Mapping[str, Any]) -> int:
+                return len(words & set(_loose_words(" ".join([str(t.get("name")), *(t.get("artists") or [])]))))
+
+            hits = sorted((t for t in self.tracks if shared(t)), key=lambda t: -shared(t))
         return [
             {
                 "name": t.get("name"),
                 "uri": t.get("uri"),
-                "artists": [{"name": a} for a in t.get("artists") or []],
+                "artists": [
+                    {"name": a, "id": (t.get("artist_ids") or [None] * (i + 1))[i]}
+                    for i, a in enumerate(t.get("artists") or [])
+                ],
                 "external_urls": {"spotify": f"https://open.spotify.com/track/{str(t.get('uri')).split(':')[-1]}"},
             }
             for t in hits[:limit]
