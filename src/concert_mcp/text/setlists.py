@@ -183,7 +183,8 @@ def search_url(artist: str) -> str:
 
 @dataclass(frozen=True)
 class SyncResult:
-    """What sync_setlist_playlist did: the playlist, the songs that landed, the ones Spotify does not have."""
+    """What sync_setlist_playlist did: the playlist, the songs that landed, the ones swapped for the version the
+    artist originally released, the ones Spotify does not have."""
 
     status: Literal["created", "updated", "dry_run", "unavailable", "failed"]
     name: str
@@ -195,11 +196,12 @@ class SyncResult:
     missing: tuple[str, ...] = ()
     teaser_url: str | None = None
     reason: str | None = None
+    swapped: tuple[str, ...] = ()
 
     @property
     def on_spotify(self) -> int:
-        """Songs found on Spotify (in the playlist now, new or already there)."""
-        return self.added + self.already_there
+        """Songs found on Spotify (in the playlist now: new, already there, or swapped for the original version)."""
+        return self.added + self.already_there + len(self.swapped)
 
     def to_json(self) -> dict[str, Any]:
         """The setlist playlist record."""
@@ -212,6 +214,7 @@ class SyncResult:
             "added": self.added,
             "already_there": self.already_there,
             "not_on_spotify": list(self.missing),
+            "swapped": list(self.swapped),
             "teaser_url": self.teaser_url,
         }
         if self.reason is not None:

@@ -180,9 +180,10 @@ def _poll_entry(entry: QueueEntry, svc: Services, today: date, *, sync: SyncFn, 
     done = replace(seen, playlist_url=ps.url)
     queue_replace(done, svc)
     if not first:
-        return row(
-            f"{n} songs; {ps.added} added to the playlist" if ps.added else f"{n} songs; playlist unchanged", done
-        )
+        what = f"{ps.added} added to the playlist" if ps.added else "playlist unchanged"
+        if ps.swapped:
+            what = (f"{ps.added} added to the playlist, " if ps.added else "") + f"{len(ps.swapped)} swapped"
+        return row(f"{n} songs; {what}", done)
 
     made = "playlist created" if ps.status == "created" else "playlist linked"
     note, html_link = _patch_event(entry, ps.url, svc)

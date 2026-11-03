@@ -4,7 +4,9 @@ The owner pastes a setlist.fm link (of this show, or of an equivalent show on th
 songs come from the setlist.fm API, each is found on Spotify by a `track:<name> artist:<artist>` search and, when
 that finds nothing by the artist, by a plain `<name> <artist>` search whose candidates are checked by loose name
 (case, accents and punctuation ignored: `K.Flay` is `K Flay`, `Don’t` is `Don't`) and by the artist's Spotify id.
-The playlist named "YYYY-MM-DD | Artist" is created or topped up with the ones it lacks, setlist order kept. The teaser
+Among the matches the pick is the version the artist originally released (the plain title over `- Seattle Sessions`,
+the album over the single, the earliest release). The playlist named "YYYY-MM-DD | Artist" is created or topped up with
+the ones it lacks, setlist order kept; a row an earlier run filled with another version is swapped in place. The teaser
 playlist of the same show has the same name: a setlist playlist's description starts with `Setlist:`, a teaser's with
 `Teaser for`, and that first word is what tells them apart. The two descriptions link each other, and the calendar
 event's description gains `Setlist playlist: <url>` once. `sync_setlist_playlist` is the piece the weekly poll reuses.
@@ -37,11 +39,12 @@ from concert_mcp.text.reply import provider_reply, render_setlist_playlist
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, SyncResult, page_artist_of, setlist_id_of, setlist_row, songs_of
 from concert_mcp.text.topics import TopicEntry, topic_key
-from concert_mcp.text.tracks import candidate_summary, pick_track, plain_query
+from concert_mcp.text.tracks import candidate_summary, pick_track, plain_query, stale_rows, track_label
 
 REASON_LIMIT = 160
-# Candidates read per search: the first Spotify result is not always the artist's own recording.
-CANDIDATES = 5
+# Candidates read per search: the first Spotify result is not always the artist's own recording, and the original
+# release of a song may sit behind a session take, a remix, a softer version and the single of the same name.
+CANDIDATES = 10
 NOT_SETLISTFM_FIX = (
     'send a setlist.fm setlist page, like "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-'
     'san-francisco-ca-3bd6f4a.html", or leave url empty and pass artist and date'
@@ -77,7 +80,8 @@ def find_track_uri(song: Song, artist: str, api: SpotifyApi, *, artist_id: str |
     `track:<name> artist:<artist>`, then the plain `<name> <artist>` (Spotify's `artist:` filter misses some
     spellings, `K.Flay` among them). Every candidate must match the song by loose name and credit the artist, by
     Spotify id when the headliner's is known, else by loose name; a cover is matched to its original artist by name.
-    The query and the candidates are logged at debug level, so a `Not on Spotify` row explains itself.
+    Among the matches the pick is the version the artist originally released (`rank_key`). The query, the candidates
+    and the pick with its album and year are logged at debug level, so a `Not on Spotify` row explains itself.
     """
     want_artist = song.artist or artist
     want_id = None if song.artist else artist_id
@@ -86,7 +90,7 @@ def find_track_uri(song: Song, artist: str, api: SpotifyApi, *, artist_id: str |
         pick = pick_track(hits, song.name, want_artist, want_id)
         log_debug(
             f"setlist song search | song='{song.name}' query='{q}' candidates='{candidate_summary(hits)}' "
-            f"picked='{pick.get('name') if pick else None}'"
+            f"picked='{track_label(pick) if pick else None}'"
         )
         uri = str(pick.get("uri") or "") if pick else ""
         if uri:
@@ -119,8 +123,9 @@ def sync_setlist_playlist(
 ) -> SyncResult:
     """Create or top up the setlist playlist for the show; never raises except FixInput for a bad date.
 
-    Idempotent: the playlist is found by name and marker, only the URIs it lacks are added (setlist order kept for
-    the new tail), and the cross-links are written once. Tape songs (walk-on music) are not searched.
+    Idempotent: the playlist is found by name and marker, a row holding another version of a song is swapped in place
+    for the pick, only the URIs it then lacks are added (setlist order kept for the new tail), and the cross-links are
+    written once. Tape songs (walk-on music) are not searched.
     """
     date = concert_date(date)
     name = playlist_name(date, artist)
@@ -137,6 +142,7 @@ def sync_setlist_playlist(
         teaser_url = _url_of(teaser) if teaser else None
 
         uris: list[str] = []
+        picks: list[tuple[str, str]] = []  # (song name, uri) per found song, for the swap of a stale version
         missing: list[str] = []
         wanted = [s for s in songs if not s.tape]
         artist_id = _artist_id(artist, api) if wanted else None
@@ -146,6 +152,7 @@ def sync_setlist_playlist(
                 missing.append(song.name)
             elif uri not in uris:
                 uris.append(uri)
+                picks.append((song.name, uri))
 
         if existing:
             pl = existing
@@ -156,7 +163,16 @@ def sync_setlist_playlist(
             )
             log_info(f"setlist playlist created | name='{name}' id='{pl['id']}'")
         url = _url_of(pl)
-        have = {r["uri"] for r in api.playlist_items(pl["id"])}
+        rows = api.playlist_items(pl["id"])
+        # A row an earlier run filled with another version of a song (`Black Wave - Seattle Sessions` for `Black
+        # Wave`) is swapped for the pick in its own slot, so the setlist order stands and the song is not added twice.
+        swaps = stale_rows(rows, picks)
+        swapped: list[str] = []
+        for position, old, uri, song_name in swaps:
+            api.replace_item(pl["id"], position=position, old_uri=old, new_uri=uri)
+            log_info(f"setlist track swapped | song='{song_name}' position='{position}' old='{old}' new='{uri}'")
+            swapped.append(song_name)
+        have = {r["uri"] for r in rows} - {old for _, old, _, _ in swaps} | {uri for _, _, uri, _ in swaps}
         new = new_uris(uris, have)
         if new:
             api.add_items(pl["id"], new)
@@ -176,9 +192,10 @@ def sync_setlist_playlist(
             url=url,
             id=pl["id"],
             added=len(new),
-            already_there=len(uris) - len(new),
+            already_there=len(uris) - len(new) - len(swapped),
             missing=tuple(missing),
             teaser_url=teaser_url,
+            swapped=tuple(swapped),
         )
     except ProviderError as e:
         return SyncResult("failed", name, len(songs), reason=str(e.error)[:REASON_LIMIT])

@@ -234,8 +234,9 @@ def render_teaser_standalone(res: TeaserResult, *, timeout_s: int, dry: bool) ->
 
 
 def render_setlist_playlist(res: SyncResult, *, setlistfm_url: str, event: str | None, dry: bool = False) -> str:
-    """The setlist_playlist tool's reply: the playlist link, how many songs landed, which are not on Spotify,
-    and whether the calendar event got the link (`event` is None when no event was found, else a short note)."""
+    """The setlist_playlist tool's reply: the playlist link, how many songs landed, which were swapped for the
+    version the artist originally released, which are not on Spotify, and whether the calendar event got the link
+    (`event` is None when no event was found, else a short note)."""
     head = "**Setlist playlist** "
     if res.status == "unavailable":
         return head + "not made (Spotify is not set up: run `concert-mcp spotify auth`)"
@@ -252,6 +253,9 @@ def render_setlist_playlist(res: SyncResult, *, setlistfm_url: str, event: str |
     if res.status == "updated":
         text += f" (already existed, {res.added} added)"
     text += "."
+    if res.swapped:
+        k = len(res.swapped)
+        text += f"\n{k} swapped for the original version{'s' if k != 1 else ''}: " + ", ".join(res.swapped)
     if res.missing:
         text += "\nNot on Spotify: " + ", ".join(res.missing)
     if res.teaser_url:

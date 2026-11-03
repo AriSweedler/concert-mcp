@@ -143,7 +143,7 @@ def test_sync_creates_the_playlist_in_setlist_order_and_skips_tape_and_misses(sv
         "track:Unreleased Jam artist:Zed Fox",
         "Unreleased Jam Zed Fox",
     ]
-    assert {a["limit"] for m, a in sp.calls if m == "search_tracks"} == {5}
+    assert {a["limit"] for m, a in sp.calls if m == "search_tracks"} == {10}
     assert [a["q"] for m, a in sp.calls if m == "search_artists"] == ["Zed Fox"]
 
 
@@ -279,6 +279,102 @@ def test_debug_log_names_the_query_and_the_candidates(svc_cli: Services, capsys:
         "[DEBUG] setlist song search | song='Hell' query='Hell Zed Fox' candidates='Hell by Other Band' picked='None'"
         in err
     )
+
+
+# ---------- the version the artist originally released (beads-3ly) ----------
+
+ALBUM = {"name": "First Record", "album_type": "album", "release_date": "2017-04-07"}
+SESSIONS = {"name": "Harbor Sessions", "album_type": "single", "release_date": "2018-11-16"}
+THIRD_RAIL_SESSIONS = {
+    "name": "Third Rail - Harbor Sessions",
+    "artists": ["Zed Fox"],
+    "uri": "spotify:track:t3-sessions",
+    "album": SESSIONS,
+}
+THIRD_RAIL_ALBUM = {"name": "Third Rail", "artists": ["Zed Fox"], "uri": "spotify:track:t3", "album": ALBUM}
+
+
+def test_the_plain_search_picks_the_original_release_over_a_session_take_listed_first(svc_cli: Services) -> None:
+    # The field search misses `(acoustic)`; the plain search returns the session take first and the album track
+    # second, and the album track is the pick.
+    svc_cli.spotify.tracks = [THIRD_RAIL_SESSIONS, THIRD_RAIL_ALBUM]
+    res, sp = sync_one(svc_cli, Song("Third Rail (acoustic)"))
+    assert (res.added, res.missing, res.swapped) == (1, (), ())
+    assert sp.added == [("pl1", ["spotify:track:t3"])]
+
+
+def test_debug_log_names_the_album_and_year_of_the_pick(svc_cli: Services, capsys: Any) -> None:
+    from concert_mcp.log import set_level, strip_ansi
+
+    svc_cli.spotify.tracks = [THIRD_RAIL_ALBUM]
+    set_level("debug")
+    try:
+        sync_one(svc_cli, Song("Third Rail"))
+    finally:
+        set_level("info")
+    err = strip_ansi(capsys.readouterr().err)
+    assert (
+        "[DEBUG] setlist song search | song='Third Rail' query='track:Third Rail artist:Zed Fox' "
+        "candidates='Third Rail by Zed Fox' picked='Third Rail (First Record, 2017)'"
+    ) in err
+
+
+def stale_playlist(svc: Services) -> dict[str, Any]:
+    """An existing setlist playlist an earlier run filled with the session take of Third Rail, in setlist order."""
+    sp = svc.spotify
+    sp.tracks = [*TRACKS[:1], THIRD_RAIL_SESSIONS, THIRD_RAIL_ALBUM, *TRACKS[2:]]
+    pl = sp.create_playlist(name=NAME, description=setlist_description(ARTIST, DATE, PAGE_URL), public=False)
+    sp.items[pl["id"]] = [
+        {"name": "First Light", "artists": ["Zed Fox"], "uri": "spotify:track:t1"},
+        {"name": "Third Rail - Harbor Sessions", "artists": ["Zed Fox"], "uri": "spotify:track:t3-sessions"},
+    ]
+    sp.calls.clear()
+    return pl
+
+
+def test_a_top_up_swaps_another_version_in_place_for_the_original(svc_cli: Services) -> None:
+    pl = stale_playlist(svc_cli)
+    svc_cli.setlistfm = FakeSetlistFm(setlists={PAGE_ID: page()})
+    res = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
+    sp = svc_cli.spotify
+    assert res.status == "updated"
+    assert (res.added, res.already_there, res.swapped, res.missing) == (1, 1, ("Third Rail",), ("Unreleased Jam",))
+    assert res.on_spotify == 3
+    assert sp.replaced == [(pl["id"], 1, "spotify:track:t3-sessions", "spotify:track:t3")]
+    # The swap keeps the slot; the song the playlist lacked goes on the tail; the swapped song is not added twice.
+    assert sp.added == [(pl["id"], ["spotify:track:c1"])]
+    assert [r["uri"] for r in sp.items[pl["id"]]] == ["spotify:track:t1", "spotify:track:t3", "spotify:track:c1"]
+    assert res.to_json()["swapped"] == ["Third Rail"]
+
+    # A second run finds the original in place and swaps nothing.
+    sp.calls.clear()
+    again = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
+    assert (again.added, again.already_there, again.swapped) == (0, 3, ())
+    assert not [c for c in sp.calls if c[0] in ("replace_item", "add_items")]
+
+
+def test_the_reply_names_the_swapped_songs(svc_cli: Services) -> None:
+    stale_playlist(svc_cli)
+    svc_cli.setlistfm = FakeSetlistFm(setlists={PAGE_ID: page()})
+    out = setlist_playlist_outcome(PAGE_URL, "", DATE, "", svc_cli)
+    assert out.kind is Kind.OK
+    assert out.reply == (
+        "**Setlist playlist** [2026-11-14 | Zed Fox](https://open.spotify.com/playlist/pl1): 3 songs, "
+        "1 not on Spotify (already existed, 1 added).\n"
+        "1 swapped for the original version: Third Rail\n"
+        "Not on Spotify: Unreleased Jam\n"
+        "No calendar event found for this show; the link was not added to one."
+    )
+    assert out.data["swapped"] == ["Third Rail"]
+
+
+def test_a_dry_run_swaps_nothing(svc_cli: Services) -> None:
+    stale_playlist(svc_cli)
+    svc_cli.setlistfm = FakeSetlistFm(setlists={PAGE_ID: page()})
+    out = setlist_playlist_outcome(PAGE_URL, "", DATE, "", svc_cli, dry_run=True)
+    assert out.kind is Kind.DRY_RUN
+    assert svc_cli.spotify.calls == [] and svc_cli.spotify.replaced == []
+    assert [r["uri"] for r in svc_cli.spotify.items["pl1"]] == ["spotify:track:t1", "spotify:track:t3-sessions"]
 
 
 def test_sync_tops_up_an_existing_setlist_playlist_and_cross_links_the_teaser(svc_cli: Services) -> None:
