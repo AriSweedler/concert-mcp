@@ -294,6 +294,14 @@ class SpotifyClient:
         for i in range(0, len(uris), ADD_CHUNK):
             self.api("POST", f"/playlists/{playlist_id}/items", body={"uris": uris[i : i + ADD_CHUNK]})
 
+    def replace_item(self, playlist_id: str, *, position: int, old_uri: str, new_uri: str) -> None:
+        """Put `new_uri` where `old_uri` sits: DELETE /playlists/<id>/items {items: [{uri}]}, then POST
+        /playlists/<id>/items {uris, position}. The Web API has no replace call (its PUT only reorders), and the
+        remove-then-insert keeps every other slot where it was as long as `old_uri` is in the playlist once, which
+        `sync_setlist_playlist` guarantees."""
+        self.api("DELETE", f"/playlists/{playlist_id}/items", body={"items": [{"uri": old_uri}]})
+        self.api("POST", f"/playlists/{playlist_id}/items", body={"uris": [new_uri], "position": position})
+
     def rename_playlist(self, playlist_id: str, name: str) -> None:
         """PUT /playlists/<id> {name}."""
         self.api("PUT", f"/playlists/{playlist_id}", body={"name": name})

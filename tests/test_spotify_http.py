@@ -508,6 +508,20 @@ def test_add_items_nothing_posts_nothing(client: SpotifyClient, fake: FakeUrlope
     assert fake.requests == []
 
 
+def test_replace_item_removes_the_old_uri_then_inserts_the_new_one_at_the_position(
+    client: SpotifyClient, fake: FakeUrlopen
+) -> None:
+    fake.add("DELETE", f"{API}/playlists/p1/items", {"snapshot_id": "s1"})
+    fake.add("POST", f"{API}/playlists/p1/items", {"snapshot_id": "s2"})
+    client.replace_item("p1", position=3, old_uri="spotify:track:old", new_uri="spotify:track:new")
+    assert [(r[0], r[1]) for r in fake.requests] == [
+        ("DELETE", f"{API}/playlists/p1/items"),
+        ("POST", f"{API}/playlists/p1/items"),
+    ]
+    assert body_of(fake.requests[0]) == {"items": [{"uri": "spotify:track:old"}]}
+    assert body_of(fake.requests[1]) == {"uris": ["spotify:track:new"], "position": 3}
+
+
 def test_rename_playlist(client: SpotifyClient, fake: FakeUrlopen) -> None:
     fake.add("PUT", f"{API}/playlists/p1", b"")
     client.rename_playlist("p1", "New Name")

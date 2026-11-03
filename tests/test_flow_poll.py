@@ -164,6 +164,23 @@ class TestThreeWeeks:
         assert len(svc.calendar.patched) == 1 and len(svc.chat.sent) == 1
         assert one_row(svc).song_count == 12
 
+    def test_a_top_up_that_swapped_a_version_says_so(self, poll_svc: Services) -> None:
+        svc, sync = poll_svc, FakeSync()
+        set_page(svc, 5)
+        poll_setlists(svc, RUN1, sync=sync)
+
+        def swapping(entry: QueueEntry, setlist: SetlistResult, svc: Services, *, added: int) -> SyncResult:
+            name = f"{entry.date} | {entry.artist}"
+            return SyncResult("updated", name, setlist.song_count, url=PLAYLIST_URL, added=added, swapped=("Song 1",))
+
+        set_page(svc, 6)
+        r = poll_setlists(svc, RUN2, sync=lambda e, s, v: swapping(e, s, v, added=0))
+        assert [x.action for x in r.rows] == ["6 songs; 1 swapped"]
+        set_page(svc, 8)
+        svc.clock.advance(7 * 86400)
+        r = poll_setlists(svc, RUN3, sync=lambda e, s, v: swapping(e, s, v, added=2))
+        assert [x.action for x in r.rows] == ["8 songs; 2 added to the playlist, 1 swapped"]
+
     def test_a_page_that_did_not_grow_is_left_alone(self, poll_svc: Services) -> None:
         svc, sync = poll_svc, FakeSync()
         set_page(svc, 5)

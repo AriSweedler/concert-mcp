@@ -243,6 +243,7 @@ class FakeSpotify:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.created: list[dict[str, Any]] = []
         self.added: list[tuple[str, list[str]]] = []
+        self.replaced: list[tuple[str, int, str, str]] = []  # (playlist, position, old uri, new uri)
         self.deadlines: list[tuple[str, float | None]] = []  # (method, deadline) per paged read
         self.renamed: list[tuple[str, str]] = []
         self.described: list[tuple[str, str]] = []
@@ -271,7 +272,7 @@ class FakeSpotify:
         return [copy.deepcopy(a) for a in hits[:limit]]
 
     def search_tracks(self, q: str, limit: int = 1) -> list[dict[str, Any]]:
-        """Two shapes of query over the catalogue rows (name, artists, optional artist_ids, uri).
+        """Two shapes of query over the catalogue rows (name, artists, optional artist_ids and album, uri).
 
         `track:<name> artist:<artist>`: rows whose name equals the track and whose artists include the artist, both
         compared case- and whitespace-insensitively but punctuation kept, as Spotify's field filters behave. A plain
@@ -305,6 +306,7 @@ class FakeSpotify:
                     for i, a in enumerate(t.get("artists") or [])
                 ],
                 "external_urls": {"spotify": f"https://open.spotify.com/track/{str(t.get('uri')).split(':')[-1]}"},
+                "album": copy.deepcopy(t.get("album") or {}),
             }
             for t in hits[:limit]
         ]
@@ -363,6 +365,21 @@ class FakeSpotify:
             if p.get("id") == playlist_id:
                 p["items"] = {"total": len(rows)}
         self.added.append((playlist_id, list(uris)))
+
+    def replace_item(self, playlist_id: str, *, position: int, old_uri: str, new_uri: str) -> None:
+        self._record("replace_item", playlist_id=playlist_id, position=position, old_uri=old_uri, new_uri=new_uri)
+        rows = self.items.setdefault(playlist_id, [])
+        if position >= len(rows) or rows[position].get("uri") != old_uri:
+            raise AssertionError(f"FakeSpotify: {old_uri} is not at position {position} of {playlist_id}")
+        rows[position] = {
+            "name": new_uri,
+            "artists": [],
+            "artist_ids": [],
+            "uri": new_uri,
+            "url": None,
+            "added_at": None,
+        }
+        self.replaced.append((playlist_id, position, old_uri, new_uri))
 
     def rename_playlist(self, playlist_id: str, name: str) -> None:
         self._record("rename_playlist", playlist_id=playlist_id, name=name)
