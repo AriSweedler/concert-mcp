@@ -1,0 +1,1 @@
+Add a concert to the calendar and do everything that goes with it: teaser playlist, setlist.fm lookup, the chat reply. Call once per ticket with artist, start and venue as read from the ticket; paste the ticket text into source_text. If the result starts with NO_REPLY, answer exactly NO_REPLY.

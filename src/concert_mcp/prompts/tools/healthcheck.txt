@@ -1,0 +1,1 @@
+Report which credentials and tools are present for Google Calendar, Spotify, setlist.fm and OpenClaw, and what fixes each missing one. Takes no parameters.

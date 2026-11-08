@@ -15,8 +15,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from concert_mcp.prompts import load_prompt
 from concert_mcp.text.derive import PLATFORMS
 from concert_mcp.text.titles import normalize_name
+
+# The prompt templates, read once: static text, so the functions below stay pure.
+WEBSITE_PROMPT = load_prompt("venue_website")
+LINEUP_PROMPT = load_prompt("lineup_question")
 
 MAX_OPENERS = 3
 OPENER_SETLIST_PREFIX = "Opener setlist (recent): "
@@ -137,11 +142,7 @@ def listing_pages(website: str) -> tuple[str, ...]:
 
 def website_prompt(venue: str) -> str:
     """Find the venue's own website from a results page; the model reads the page named here (pure)."""
-    return (
-        f"Read {search_page(venue + ' official website')} . Which result is the official website of the venue "
-        f"{venue}? Not a listing, ticket or social site: the venue's own domain. Answer with one JSON object "
-        '{"website": "https://..."} or {"website": null}, nothing else.'
-    )
+    return WEBSITE_PROMPT.format(search_page=search_page(venue + " official website"), venue=venue)
 
 
 def parse_website(answer: GroundedAnswer) -> str | None:
@@ -169,14 +170,8 @@ def lineup_pages(
 
 def lineup_prompt(artist: str, date: str, venue: str, pages: Sequence[str]) -> str:
     """The one question asked per concert; the model reads the pages named here (url_context)."""
-    read = " ".join(pages)
-    return (
-        f"Read these pages: {read} . For the concert by {artist} at {venue} on {date}: who are the opening acts, "
-        "and what are the announced set times (doors, opener on stage, headliner on stage)? Answer only from what "
-        "those pages say; use null for anything not announced and an empty list when no opener is announced. "
-        "Do not guess. Answer with one JSON object and nothing else, in this shape: "
-        f"{json.dumps(LINEUP_SCHEMA['properties'], separators=(',', ':'))}"
-    )
+    schema = json.dumps(LINEUP_SCHEMA["properties"], separators=(",", ":"))
+    return LINEUP_PROMPT.format(pages=" ".join(pages), artist=artist, venue=venue, date=date, schema=schema)
 
 
 def _json_object(text: str) -> Mapping[str, Any] | None:

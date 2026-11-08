@@ -1,0 +1,1 @@
+Make or top up the Spotify teaser playlist for one concert: every song the user liked by the artist, oldest first, named "YYYY-MM-DD | Artist". concert_add already does this; call only when asked for the playlist alone. NO_REPLY means answer exactly NO_REPLY.

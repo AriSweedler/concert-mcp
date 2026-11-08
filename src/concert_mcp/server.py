@@ -32,6 +32,7 @@ from concert_mcp.flows.setlist import setlist_outcome
 from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import teaser_outcome
 from concert_mcp.log import set_level
+from concert_mcp.prompts import load_prompt
 from concert_mcp.result import Outcome, crash_outcome
 from concert_mcp.text.movie import parse_movie_ticket
 from concert_mcp.text.titles import clean_param, is_yes
@@ -39,78 +40,23 @@ from concert_mcp.text.titles import clean_param, is_yes
 # Every tool parameter: the schema stays {"type": "string"}, and 2 -> "2", None -> "", "\"x\"" -> "x" before validation.
 Param = Annotated[str, BeforeValidator(clean_param)]
 
-# Injected into the model's system prompt by OpenClaw (first 2000 chars).
-INSTRUCTIONS = (
-    "Concert tools (calendar, Spotify teaser, setlist.fm). Rules:\n"
-    "1. Call one tool once. Never call the same tool again unless its result starts with FIX:.\n"
-    "2. If a result starts with NO_REPLY, your entire reply is exactly: NO_REPLY\n"
-    "3. If a result starts with FIX:, change only what it names and call once more. "
-    "If it fails again, tell the user in one sentence what you need from them.\n"
-    "4. Any other result: send its text to the user unchanged. Never invent a link, time or price.\n"
-    "5. Concert ticket screenshot or text -> concert_add with artist, start (the show time, not doors; "
-    "a bare date is fine when the text has the show time), venue, and the whole text in source_text. "
-    "A repeat in the same topic updates that topic's event; pass another=yes only when the user asks for a "
-    "second event there.\n"
-    "6. Movie ticket screenshot or text -> movie_add with film, start (the showtime), theater, and the whole text "
-    "in source_text. No playlist for a movie.\n"
-    "7. Plain event (dinner, flight, appointment) -> calendar_add. Keep the user's [Type] prefix.\n"
-    '8. "delete"/"remove" an event -> event_delete. '
-    "If the user answers a numbered list with a number, call event_delete with pick=that number.\n"
-    '9. Playlist alone -> teaser_playlist. Setlist alone -> setlist_find. "what is queued" -> queue_status. '
-    '"are you healthy"/"what is missing" -> healthcheck. "who is the opener"/"set times" -> lineup. '
-    "A setlist.fm link in a topic -> setlist_playlist once, with the link as url.\n"
-    "10. Do not print tool calls as text; call the tool."
-)
+# Injected into the model's system prompt by OpenClaw (first 2000 chars): prompts/instructions.txt.
+INSTRUCTIONS = load_prompt("instructions")
 
-# Tool descriptions for the model: short and literal (docs/DESIGN.md §4, each under 300 chars).
-DESCRIPTIONS = {
-    "concert_add": (
-        "Add a concert to the calendar and do everything that goes with it: teaser playlist, setlist.fm lookup, "
-        "the chat reply. Call once per ticket with artist, start and venue as read from the ticket; paste the ticket "
-        "text into source_text. If the result starts with NO_REPLY, answer exactly NO_REPLY."
-    ),
-    "calendar_add": (
-        "Add a plain (non-concert) event to the personal calendar, keeping the title as the user wrote it. "
-        "For a concert ticket use concert_add instead. If the result starts with NO_REPLY, answer exactly NO_REPLY."
-    ),
-    "movie_add": (
-        "Add a movie ticket to the calendar: the film, showtime and theater as read from the ticket; paste the "
-        "ticket text into source_text. Code adds the runtime, seats and the Letterboxd link. No playlist. "
-        "If the result starts with NO_REPLY, answer exactly NO_REPLY."
-    ),
-    "event_delete": (
-        "Delete one calendar event by artist or title. When several match, the tool lists them with numbers and asks "
-        "the user; when the user answers with a number, call this again with pick set to that number. "
-        "If the result starts with NO_REPLY, answer exactly NO_REPLY."
-    ),
-    "teaser_playlist": (
-        "Make or top up the Spotify teaser playlist for one concert: every song the user liked by the artist, oldest "
-        'first, named "YYYY-MM-DD | Artist". concert_add already does this; call only when asked for the playlist '
-        "alone. NO_REPLY means answer exactly NO_REPLY."
-    ),
-    "setlist_find": (
-        "Look up one show on setlist.fm by artist and date. concert_add already does this; call only when asked "
-        "about a setlist alone. NO_REPLY means answer exactly NO_REPLY."
-    ),
-    "setlist_playlist": (
-        "Build or top up the Spotify playlist of one show's setlist, in setlist.fm order, named "
-        '"YYYY-MM-DD | Artist", and link it from the calendar event. Call once with the pasted setlist.fm link as '
-        "url (or artist and date when there is no link). NO_REPLY means answer exactly NO_REPLY."
-    ),
-    "lineup": (
-        "Who opens and when the acts go on for one concert, found on the web, with the opener's recent setlist. "
-        "In a chat topic the topic's show is used; pass artist and date otherwise. Call once. "
-        "NO_REPLY means answer exactly NO_REPLY."
-    ),
-    "queue_status": (
-        "List the concerts waiting for the weekly setlist.fm check. Takes no parameters. "
-        "NO_REPLY means answer exactly NO_REPLY."
-    ),
-    "healthcheck": (
-        "Report which credentials and tools are present for Google Calendar, Spotify, setlist.fm and OpenClaw, "
-        "and what fixes each missing one. Takes no parameters."
-    ),
-}
+# Tool descriptions, short and literal (docs/DESIGN.md §4, each under 300 chars): prompts/tools/<name>.txt.
+TOOL_NAMES = (
+    "concert_add",
+    "calendar_add",
+    "movie_add",
+    "event_delete",
+    "teaser_playlist",
+    "setlist_find",
+    "setlist_playlist",
+    "lineup",
+    "queue_status",
+    "healthcheck",
+)
+DESCRIPTIONS = {name: load_prompt(f"tools/{name}") for name in TOOL_NAMES}
 
 ANNOTATIONS = {
     "concert_add": ToolAnnotations(),

@@ -1,0 +1,1 @@
+Look up one show on setlist.fm by artist and date. concert_add already does this; call only when asked about a setlist alone. NO_REPLY means answer exactly NO_REPLY.

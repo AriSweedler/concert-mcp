@@ -1,0 +1,1 @@
+Add a plain (non-concert) event to the personal calendar, keeping the title as the user wrote it. For a concert ticket use concert_add instead. If the result starts with NO_REPLY, answer exactly NO_REPLY.

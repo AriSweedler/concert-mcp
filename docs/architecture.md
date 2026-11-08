@@ -18,6 +18,8 @@ Three layers, each importable without the one above it:
 - `adapters/`: one class per side effect, each behind a `Protocol` so tests use fakes: `GwsCalendar` (subprocess), `SpotifyClient`, `SetlistFmClient`, `GooglePlacesClient`, `NominatimClient` and `GeminiClient` (urllib), `OpenClawChat` and `OpenClawContext` (subprocess, sqlite, Bot API), `JsonState`, `SystemClock`.
 - `flows/`: the policy. `concert_add`, `event_delete`, `queue`, `poll`, `topics`, `venues`, `teaser`, `setlist`, `lineup`, `playlists`, `auth`, `deliver`, `healthcheck`. A flow returns an `Outcome`; it never prints and never exits. `server.py` (MCP over stdio) and `cli.py` are thin shells over the same flows.
 
+Every prompt a model sees is a plaintext file under `src/concert_mcp/prompts/`, loaded by name (`load_prompt`): the server instructions (`instructions.txt`), each tool's description (`tools/<name>.txt`), the Gemini questions (`lineup_question.txt`, `venue_website.txt`, `gemini_probe.txt`) and the failure explanation (`explain_failure.txt`). A prompt change is a text diff, not a code change. The parameter descriptions stay beside their parameters in `server.py`, as part of each tool's schema.
+
 The output contract, which every tool and every CLI subcommand ends in:
 
 1. A flow returns `Outcome(kind, reply, error, fix, data)`.

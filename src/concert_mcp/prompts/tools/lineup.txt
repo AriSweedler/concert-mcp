@@ -1,0 +1,1 @@
+Who opens and when the acts go on for one concert, found on the web, with the opener's recent setlist. In a chat topic the topic's show is used; pass artist and date otherwise. Call once. NO_REPLY means answer exactly NO_REPLY.

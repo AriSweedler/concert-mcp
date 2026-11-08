@@ -22,6 +22,7 @@ from concert_mcp.adapters.protocols import StateStore
 from concert_mcp.adapters.setlistfm_http import load_api_key, save_api_key, user_agent
 from concert_mcp.config import Settings
 from concert_mcp.log import kv, log_debug
+from concert_mcp.prompts import load_prompt
 from concert_mcp.result import ProviderError
 from concert_mcp.text.lineup import GroundedAnswer
 from concert_mcp.text.reply import provider_reply
@@ -37,7 +38,7 @@ GEMINI_FALLBACKS = tuple(
 # "url" reads the pages the prompt names (free tier); "search" adds Google Search grounding (a billed key).
 GEMINI_GROUNDING = os.environ.get("CONCERT_MCP_GEMINI_GROUNDING", "").strip().lower() or "url"
 RETRY_STATUSES = {429, 503}
-PROBE_PROMPT = "Answer with the single word: ok"
+PROBE_PROMPT = load_prompt("gemini_probe")
 
 
 def load_gemini_key(path: Path) -> str | None:

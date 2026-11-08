@@ -1,0 +1,1 @@
+Build or top up the Spotify playlist of one show's setlist, in setlist.fm order, named "YYYY-MM-DD | Artist", and link it from the calendar event. Call once with the pasted setlist.fm link as url (or artist and date when there is no link). NO_REPLY means answer exactly NO_REPLY.

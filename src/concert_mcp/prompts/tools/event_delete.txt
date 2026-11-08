@@ -1,0 +1,1 @@
+Delete one calendar event by artist or title. When several match, the tool lists them with numbers and asks the user; when the user answers with a number, call this again with pick set to that number. If the result starts with NO_REPLY, answer exactly NO_REPLY.
