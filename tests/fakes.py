@@ -723,3 +723,15 @@ class FakeGemini:
         if self.fail:
             raise ProviderError("gemini", "gemini refused | status='500' body=''", GEMINI_REFUSED)
         return GroundedAnswer(text=self.text, sources=self.sources)
+
+
+class FakeFilmLookup:
+    """FilmLookup with canned pages: {(film, year): url}. Records every call; a missing key is a miss."""
+
+    def __init__(self, pages: Mapping[tuple[str, int | None], str] | None = None) -> None:
+        self.pages = dict(pages or {})
+        self.calls: list[tuple[str, int | None]] = []
+
+    def film_url(self, film: str, year: int | None) -> str | None:
+        self.calls.append((film, year))
+        return self.pages.get((film, year))

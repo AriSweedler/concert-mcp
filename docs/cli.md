@@ -14,6 +14,10 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `del` (alias `delete`) | `concert-mcp del --title 'Zed Fox' --date 2026-11-14`, then `concert-mcp del --pick 2` after a numbered list (the list is good for 15 minutes, `CONCERT_MCP_CONTEXT_WINDOW_S`) |
 | `teaser` | `concert-mcp teaser --artist 'Zed Fox' --date 2026-11-14 [--description TEXT]` |
 | `setlist-find` | `concert-mcp setlist-find --artist 'Zed Fox' --date 2026-11-14 --venue 'The Quarry' --songs` (`--songs` adds the song list to the `--json` record) |
+| `try-image` | `concert-mcp try-image ticket.jpg --caption 'This is a movie'` (the screenshot through OpenClaw's OCR command, its model and the tool the model picks, in dry-run; prints the OCR, the call and the event it would add, for a person to approve or deny; `--text FILE` skips OCR, `--model-url`/`--model`/`--ocr-cmd`/`--tools` override OpenClaw's config) |
+| `failures collect` | `concert-mcp failures collect [--explain]` (save each screenshot turn the bot failed into `<state_dir>/failures/<epoch>/`, keep the newest 100; `--explain` asks the bot's model why, one per run) |
+| `failures list` | `concert-mcp failures list` |
+| `failures replay` | `concert-mcp failures replay 1794080325` (try-image on a saved failure) |
 | `queue` | `concert-mcp queue` (the shows waiting for the weekly setlist check, and `Last poll: <time>`) |
 | `poll` | `concert-mcp poll [--force]` (the weekly setlist check; see [poll](#poll)) |
 | `venues` | `concert-mcp venues` (every venue seen: visits, address, website) |

@@ -1,4 +1,4 @@
-"""The MCP server: nine coarse tools for a small model (unit server).
+"""The MCP server: ten coarse tools for a small model (unit server).
 
 Every parameter is a `Param`: a string with default "" whose validator runs `clean_param` before pydantic sees the
 value, so a number, a null or a quoted string from the model becomes a clean string and never a schema error (which
@@ -9,7 +9,9 @@ package that imports the MCP SDK.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+import inspect
+from collections.abc import Callable, Sequence
 from typing import Annotated
 
 from mcp.server.mcpserver import MCPServer
@@ -23,6 +25,7 @@ from concert_mcp.flows.deliver import run_tool
 from concert_mcp.flows.event_delete import DeleteRequest, delete_event
 from concert_mcp.flows.healthcheck import healthcheck_outcome
 from concert_mcp.flows.lineup import lineup_outcome
+from concert_mcp.flows.movie_add import add_movie, is_movie_title
 from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services, build_services
 from concert_mcp.flows.setlist import setlist_outcome
@@ -30,6 +33,7 @@ from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import teaser_outcome
 from concert_mcp.log import set_level
 from concert_mcp.result import Outcome, crash_outcome
+from concert_mcp.text.movie import parse_movie_ticket
 from concert_mcp.text.titles import clean_param, is_yes
 
 # Every tool parameter: the schema stays {"type": "string"}, and 2 -> "2", None -> "", "\"x\"" -> "x" before validation.
@@ -43,17 +47,19 @@ INSTRUCTIONS = (
     "3. If a result starts with FIX:, change only what it names and call once more. "
     "If it fails again, tell the user in one sentence what you need from them.\n"
     "4. Any other result: send its text to the user unchanged. Never invent a link, time or price.\n"
-    "5. Ticket screenshot or ticket text -> concert_add with artist, start (the show time, not doors; "
+    "5. Concert ticket screenshot or text -> concert_add with artist, start (the show time, not doors; "
     "a bare date is fine when the text has the show time), venue, and the whole text in source_text. "
     "A repeat in the same topic updates that topic's event; pass another=yes only when the user asks for a "
     "second event there.\n"
-    "6. Plain event (dinner, flight, appointment) -> calendar_add. Keep the user's [Type] prefix.\n"
-    '7. "delete"/"remove" an event -> event_delete. '
+    "6. Movie ticket screenshot or text -> movie_add with film, start (the showtime), theater, and the whole text "
+    "in source_text. No playlist for a movie.\n"
+    "7. Plain event (dinner, flight, appointment) -> calendar_add. Keep the user's [Type] prefix.\n"
+    '8. "delete"/"remove" an event -> event_delete. '
     "If the user answers a numbered list with a number, call event_delete with pick=that number.\n"
-    '8. Playlist alone -> teaser_playlist. Setlist alone -> setlist_find. "what is queued" -> queue_status. '
+    '9. Playlist alone -> teaser_playlist. Setlist alone -> setlist_find. "what is queued" -> queue_status. '
     '"are you healthy"/"what is missing" -> healthcheck. "who is the opener"/"set times" -> lineup. '
     "A setlist.fm link in a topic -> setlist_playlist once, with the link as url.\n"
-    "9. Do not print tool calls as text; call the tool."
+    "10. Do not print tool calls as text; call the tool."
 )
 
 # Tool descriptions for the model: short and literal (docs/DESIGN.md §4, each under 300 chars).
@@ -66,6 +72,11 @@ DESCRIPTIONS = {
     "calendar_add": (
         "Add a plain (non-concert) event to the personal calendar, keeping the title as the user wrote it. "
         "For a concert ticket use concert_add instead. If the result starts with NO_REPLY, answer exactly NO_REPLY."
+    ),
+    "movie_add": (
+        "Add a movie ticket to the calendar: the film, showtime and theater as read from the ticket; paste the "
+        "ticket text into source_text. Code adds the runtime, seats and the Letterboxd link. No playlist. "
+        "If the result starts with NO_REPLY, answer exactly NO_REPLY."
     ),
     "event_delete": (
         "Delete one calendar event by artist or title. When several match, the tool lists them with numbers and asks "
@@ -104,6 +115,7 @@ DESCRIPTIONS = {
 ANNOTATIONS = {
     "concert_add": ToolAnnotations(),
     "calendar_add": ToolAnnotations(),
+    "movie_add": ToolAnnotations(),
     "event_delete": ToolAnnotations(destructiveHint=True),
     "teaser_playlist": ToolAnnotations(),
     "setlist_find": ToolAnnotations(readOnlyHint=True),
@@ -192,15 +204,28 @@ def concert_add(
     """Add a concert and everything that goes with it; returns the output-contract string."""
     return _run(
         "concert_add",
-        lambda svc, a: add_concert(
-            artist=a["artist"],
-            start=a["start"],
-            venue=a["venue"],
-            source_text=a["source_text"],
-            notes=a["notes"],
-            another=is_yes(a["another"]),
-            svc=svc,
-            dry_run=svc.settings.dry_run,
+        # A movie ticket sent here (the model's habit for any ticket) goes to the movie flow: no playlist for a film.
+        lambda svc, a: (
+            add_movie(
+                title=a["artist"],
+                start=a["start"],
+                location=a["venue"],
+                source_text=a["source_text"],
+                notes=a["notes"],
+                svc=svc,
+                dry_run=svc.settings.dry_run,
+            )
+            if parse_movie_ticket(a["source_text"])
+            else add_concert(
+                artist=a["artist"],
+                start=a["start"],
+                venue=a["venue"],
+                source_text=a["source_text"],
+                notes=a["notes"],
+                another=is_yes(a["another"]),
+                svc=svc,
+                dry_run=svc.settings.dry_run,
+            )
         ),
         artist=artist,
         start=start,
@@ -231,20 +256,67 @@ def calendar_add(
     """Add a plain event to the personal calendar."""
     return _run(
         "calendar_add",
-        lambda svc, a: add_plain(
-            title=a["title"],
-            start=a["start"],
-            location=a["location"],
-            notes=a["notes"],
-            calendar=a["calendar"],
-            svc=svc,
-            dry_run=svc.settings.dry_run,
+        # A [Movie] title is the movie flow, which reads the ticket from the recent OCR text.
+        lambda svc, a: (
+            add_movie(
+                title=a["title"],
+                start=a["start"],
+                location=a["location"],
+                notes=a["notes"],
+                svc=svc,
+                dry_run=svc.settings.dry_run,
+            )
+            if is_movie_title(a["title"])
+            else add_plain(
+                title=a["title"],
+                start=a["start"],
+                location=a["location"],
+                notes=a["notes"],
+                calendar=a["calendar"],
+                svc=svc,
+                dry_run=svc.settings.dry_run,
+            )
         ),
         title=title,
         start=start,
         location=location,
         notes=notes,
         calendar=calendar,
+    )
+
+
+def movie_add(
+    film: Annotated[Param, Field(description='The film as printed on the ticket, e.g. "Zed Fox: The Movie".')] = "",
+    start: Annotated[Param, Field(description='Showtime, e.g. "2026-11-11 14:30" or "2026-11-11 2:30 PM".')] = "",
+    theater: Annotated[
+        Param, Field(description='Theater, and city when shown, e.g. "ZZZ Cinema, San Francisco".')
+    ] = "",
+    source_text: Annotated[
+        Param,
+        Field(
+            description="The ticket text you read these from (OCR or pasted email), whole and unedited. "
+            "Leave empty if there is none."
+        ),
+    ] = "",
+    notes: Annotated[Param, Field(description="Extra facts, one per line. Leave empty when unsure.")] = "",
+) -> str:
+    """Add a movie: [Movie] <film>, end at start plus runtime, seats, runtime, Letterboxd link, purchase."""
+    return _run(
+        "movie_add",
+        lambda svc, a: add_movie(
+            title=a["film"],
+            start=a["start"],
+            location=a["theater"],
+            source_text=a["source_text"],
+            notes=a["notes"],
+            svc=svc,
+            dry_run=svc.settings.dry_run,
+        ),
+        film=film,
+        start=start,
+        theater=theater,
+        source_text=source_text,
+        notes=notes,
     )
 
 
@@ -356,6 +428,7 @@ def healthcheck() -> str:
 TOOLS: tuple[Callable[..., str], ...] = (
     concert_add,
     calendar_add,
+    movie_add,
     event_delete,
     teaser_playlist,
     setlist_find,
@@ -380,6 +453,25 @@ def build_server(svc: Services | None = None) -> MCPServer:
             structured_output=False,
         )(fn)
     return mcp
+
+
+def tool_listing(svc: Services, names: Sequence[str]) -> list[dict[str, object]]:
+    """The named tools as MCP lists them ({name, description, inputSchema}), in the given order."""
+    by_name = {t.name: t for t in asyncio.run(build_server(svc).list_tools())}
+    return [
+        {"name": n, "description": by_name[n].description, "inputSchema": by_name[n].input_schema}
+        for n in names
+        if n in by_name
+    ]
+
+
+def call_tool(name: str, args: dict[str, str]) -> str:
+    """Call one tool function on the services build_server bound, dropping arguments it does not take."""
+    fn = {f.__name__: f for f in TOOLS}.get(name)
+    if fn is None:
+        return f"(the model called {name!r}, which is not a tool)"
+    params = inspect.signature(fn).parameters
+    return fn(**{k: v for k, v in args.items() if k in params})
 
 
 def main() -> None:

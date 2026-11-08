@@ -1,4 +1,4 @@
-"""The nine side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
+"""The ten side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
 
 from __future__ import annotations
 
@@ -104,6 +104,10 @@ class SetlistFmApi(Protocol):
 
 class VenueLookup(Protocol):
     def find_venue(self, query: str) -> VenueHit | None: ...
+
+
+class FilmLookup(Protocol):
+    def film_url(self, film: str, year: int | None) -> str | None: ...
 
 
 class GroundedModel(Protocol):

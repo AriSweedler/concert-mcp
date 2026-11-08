@@ -111,6 +111,9 @@ class AddRequest:
     tz: str | None = None
     calendar: str | None = None
     description: tuple[str, ...] = ()
+    # Lines a type module derived from the ticket itself (a movie's runtime, its Letterboxd page): kept first and
+    # never checked against the text, unlike the caller's description lines.
+    trusted: tuple[str, ...] = ()
     attendees: tuple[str, ...] = ()
     source: str = ""
     allow_past: bool = False
@@ -250,7 +253,7 @@ def prepare_event(req: AddRequest, *, context_text: str, now: datetime, settings
         if not openers:
             openers = openers_from_text(raw_source)
     lines, dropped = merge_lines(
-        derived=derived,
+        derived=[*req.trusted, *derived],
         openers=openers,
         caller=req.description,
         source_norm=source_norm,

@@ -1,6 +1,6 @@
 # Architecture and design
 
-One MCP server and CLI for the concert stack behind a small-model Telegram bot. A 9B local model behind an OpenClaw Telegram bot turns a ticket screenshot into a Google Calendar event, a Spotify teaser playlist, a setlist.fm lookup and a weekly setlist check, and renames the Telegram topic to `YYYY-MM-DD | Artist | Venue`. The same flows run from the command line, so a developer can test every step without an MCP client and the old dotfiles scripts become one-line wrappers. Credentials stay on the host in XDG directories; nothing in this repository names a person, a machine, a calendar or a chat. The rule that shapes everything: **the model supplies a few plain strings (artist, date, venue); code owns every policy, default, validation, idempotency guard, side effect and the exact reply text.**
+One MCP server and CLI for the concert stack behind a small-model Telegram bot, and for the other events a screenshot carries: each event type is its own flow and tool (`movie_add` first). A 9B local model behind an OpenClaw Telegram bot turns a ticket screenshot into a Google Calendar event, a Spotify teaser playlist, a setlist.fm lookup and a weekly setlist check, and renames the Telegram topic to `YYYY-MM-DD | Artist | Venue`. The same flows run from the command line, so a developer can test every step without an MCP client and the old dotfiles scripts become one-line wrappers. Credentials stay on the host in XDG directories; nothing in this repository names a person, a machine, a calendar or a chat. The rule that shapes everything: **the model supplies a few plain strings (artist, date, venue); code owns every policy, default, validation, idempotency guard, side effect and the exact reply text.**
 
 ```
 phone --photo--> Telegram --> OpenClaw gateway (laptop) --stdio--> `concert-mcp serve`
@@ -26,12 +26,13 @@ The output contract, which every tool and every CLI subcommand ends in:
 4. Not sent: the tool result is the reply text plus the `NOT SENT` line, and the model relays the text unchanged.
 5. The caller's input was wrong: `FIX: <what to change>`, the only retry signal. On the MCP path it ends with `Call <tool> once more with only that change.`; the third FIX for one tool within 15 minutes becomes a question to the user instead.
 
-The nine tools. Every parameter is a string with default `""`; a missing required value is answered in code (`I could not read the artist from that. Reply with it and I will add the event.`), never by a schema error:
+The ten tools. Every parameter is a string with default `""`; a missing required value is answered in code (`I could not read the artist from that. Reply with it and I will add the event.`), never by a schema error:
 
 | Tool | Parameters | What it does |
 |---|---|---|
 | `concert_add` | `artist`, `start`, `venue`, `source_text`, `notes`, `another` | the whole concert flow: venue resolved through the registry (Maps-form address, website, visit), event on the Concerts calendar (updated in place when the Telegram topic already owns one, unless `another` is `yes`), teaser playlist, setlist.fm lookup, weekly queue, topic rename, reply delivery |
 | `calendar_add` | `title`, `start`, `location`, `notes`, `calendar` | a plain event on the personal calendar, title kept as the user wrote it (`[Dinner] ...`) |
+| `movie_add` | `film`, `start`, `theater`, `source_text`, `notes` | a movie ticket (`flows/movie_add.py`): `[Movie] <film>` on the personal calendar, the end at start plus runtime, the seats, runtime, Letterboxd and purchase lines; the ticket text wins over the caller's strings, and a Letterboxd miss leaves its line out. `concert_add` with movie-ticket text and `calendar_add` with a `[Movie]` title hand off to the same flow |
 | `event_delete` | `title`, `date`, `pick` | delete one event by title; several matches become a numbered list, and `pick` (or a bare number as the title) chooses from it |
 | `teaser_playlist` | `artist`, `date` | the Spotify teaser alone: every liked song by the artist, oldest first, named `YYYY-MM-DD \| Artist` |
 | `setlist_find` | `artist`, `date`, `venue` | the setlist.fm page for one show: exact date first, then within a day at a venue sharing a word |

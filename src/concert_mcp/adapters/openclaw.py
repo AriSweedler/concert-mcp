@@ -158,6 +158,30 @@ class OpenClawContext:
             pass
         return "\n".join(p for p in parts if p)
 
+    def transcript_since(self, since_ms: int) -> list[tuple[str, int, dict[str, Any]]]:
+        """(session_id, created_at_ms, event) for every message event since a time, oldest first; [] on any error."""
+        try:
+            con = self._connect()
+            try:
+                rows = con.execute(
+                    "select session_id, created_at, event_json from transcript_events "
+                    "where created_at >= ? and event_json is not null order by created_at, seq",
+                    (since_ms,),
+                ).fetchall()
+            finally:
+                con.close()
+        except Exception:
+            return []
+        out: list[tuple[str, int, dict[str, Any]]] = []
+        for session, at, raw in rows:
+            try:
+                ev = json.loads(raw)
+            except ValueError:
+                continue
+            if ev.get("type") == "message":
+                out.append((session, int(at), ev))
+        return out
+
 
 class NullContext:
     """LiveContext for runs with no OpenClaw at all: no route, no text."""

@@ -11,9 +11,11 @@ line goes to stdout; logging goes to stderr; a traceback never reaches either. E
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, NoReturn, TextIO
@@ -42,6 +44,8 @@ DEL_JSON_HINT = 'send exactly one JSON object, e.g. {"title": "Zed Fox", "date":
 
 # `add` and `del` take their request from the arguments argparse did not recognise.
 REQUEST_COMMANDS = frozenset({"add", "del"})
+# The tools a chat message reaches, offered to the model by try-image when OpenClaw's config has no toolFilter.
+CHAT_TOOLS = ("concert_add", "movie_add", "calendar_add", "event_delete", "setlist_playlist", "lineup")
 
 SPOTIFY_COMMANDS = (
     "auth",
@@ -128,6 +132,34 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--artist", default="", help="artist, when there is no --url")
     p.add_argument("--date", default="", help="concert date, YYYY-MM-DD (names the playlist; the event's date)")
     p.add_argument("--venue", default="", help="venue name, used to break ties in the lookup")
+
+    p = add(
+        "try-image",
+        "a screenshot through the real OCR, the bot's model and the tool it picks, in dry-run: prints the event the "
+        "bot would add, for you to approve or deny",
+    )
+    p.add_argument("image", nargs="?", default="", help="the screenshot (PNG or JPEG)")
+    p.add_argument("--text", default="", help="a file of OCR text to use instead of running OCR on an image")
+    p.add_argument("--caption", default="", help="the words sent with the photo, as the user would type them")
+    p.add_argument("--model-url", dest="model_url", default="", help="OpenAI-compatible base URL; default OpenClaw's")
+    p.add_argument("--model", default="", help="model id; default OpenClaw's primary model")
+    p.add_argument("--ocr-cmd", dest="ocr_cmd", default="", help="image-to-text command; default OpenClaw's")
+    p.add_argument("--tools", default="", help="comma-separated tools to offer; default OpenClaw's toolFilter")
+
+    p = add("failures", "the screenshots the bot failed, saved on this machine: collect, list, replay")
+    fsub = p.add_subparsers(dest="failures_command", metavar="<command>", required=True)
+    q = fsub.add_parser("collect", help="save failed screenshot turns from OpenClaw's transcript (launchd runs this)")
+    q.add_argument(
+        "--explain",
+        action="store_true",
+        help="also ask the bot's model to explain one unexplained failure (off in the launchd job while a heavy "
+        "request can crash the Orin)",
+    )
+    fsub.add_parser("list", help="the saved failures, oldest first")
+    q = fsub.add_parser("replay", help="run one saved failure through try-image (dry run)")
+    q.add_argument("id", help="the folder name (epoch seconds), as `failures list` prints it")
+    for q in fsub.choices.values():
+        _add_globals(q, suppress=True)
 
     p = add("lineup", "who opens and when the acts go on, found on the web (Gemini); patches the live topic's event")
     p.add_argument("--artist", default="", help="headliner; empty takes the live topic's show")
@@ -377,6 +409,91 @@ def _cmd_lineup(args: argparse.Namespace, settings: Settings) -> int:
     return emit(outcome, delivery, text, json_mode=args.json_mode)
 
 
+def _cmd_try_image(args: argparse.Namespace, settings: Settings) -> int:
+    """Run one screenshot through OCR, the bot's model and the chosen tool with dry_run on and sending off."""
+    from concert_mcp import server  # lazy: the CLI works without the mcp SDK installed
+    from concert_mcp.adapters.chat_model_http import ChatModelClient
+    from concert_mcp.flows.try_image import ocr_image, run_trial
+    from concert_mcp.text.trial import media_command, primary_model, render_trial
+
+    settings = dataclasses.replace(settings, dry_run=True, send=False)
+    try:
+        openclaw = json.loads(settings.openclaw_config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        openclaw = {}
+    model_at = (args.model_url, args.model) if args.model_url and args.model else primary_model(openclaw)
+    if model_at is None:
+        raise FixInput("no model to ask", "pass --model-url and --model (OpenClaw's config names none)")
+    if args.text:
+        ocr = Path(args.text).read_text(encoding="utf-8")
+    elif args.image:
+        cmd = args.ocr_cmd or media_command(openclaw)
+        if not cmd:
+            raise FixInput("no OCR command", "pass --ocr-cmd, or --text with the OCR output")
+        # OpenClaw's command may be a tee that records the live OCR file the bot reads; a trial must not touch it.
+        if cmd.endswith("-tee") and Path(cmd[: -len("-tee")]).exists():
+            cmd = cmd[: -len("-tee")]
+        ocr = ocr_image(cmd, Path(args.image))
+    else:
+        raise FixInput("nothing to read", "pass a screenshot path, or --text with OCR output")
+    concert = openclaw.get("mcp", {}).get("servers", {}).get("concert", {})
+    names = [n for n in args.tools.split(",") if n] or concert.get("toolFilter", {}).get("include") or list(CHAT_TOOLS)
+
+    svc = services.build_services(settings)
+    server.build_server(svc)
+    trial = run_trial(
+        ocr=ocr,
+        caption=args.caption,
+        system=server.INSTRUCTIONS,
+        tools=server.tool_listing(svc, names),
+        model=ChatModelClient(*model_at),
+        call_tool=server.call_tool,
+    )
+    if args.json_mode:
+        print(json.dumps(dataclasses.asdict(trial), ensure_ascii=False, indent=2))
+    else:
+        print(render_trial(trial))
+    return 0
+
+
+def _cmd_failures(args: argparse.Namespace, settings: Settings) -> int:
+    """collect: save new failures; list: print them; replay: try-image on one."""
+    from concert_mcp.adapters.chat_model_http import ChatModelClient
+    from concert_mcp.adapters.openclaw import OpenClawContext
+    from concert_mcp.flows.failures import collect, saved_failures
+    from concert_mcp.text.trial import primary_model
+
+    if args.failures_command == "collect":
+        try:
+            openclaw = json.loads(settings.openclaw_config.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            openclaw = {}
+        model_at = primary_model(openclaw)
+        ask = ChatModelClient(*model_at).complete if model_at and args.explain else None
+        saved = collect(settings, OpenClawContext(settings).transcript_since, int(time.time() * 1000), ask=ask)
+        for p in saved:
+            print(p)
+        return 0
+    folders = saved_failures(settings)
+    if args.failures_command == "list":
+        for p in folders:
+            meta = json.loads((p / "meta.json").read_text(encoding="utf-8"))
+            print(f"{p.name}  {meta['error']}  {(p / 'prompt.txt').read_text(encoding='utf-8')[:60]!r}")
+        return 0
+    hits = [p for p in folders if p.name == args.id]
+    if len(hits) != 1:
+        raise FixInput(
+            f"{args.id!r} matched {len(hits)} saved failures", "pass a name from `concert-mcp failures list`"
+        )
+    folder = hits[0]
+    image = folder / "image.jpg"
+    args.image = str(image) if image.exists() else ""
+    args.text = "" if image.exists() else str(folder / "text.txt")
+    args.caption = (folder / "prompt.txt").read_text(encoding="utf-8")
+    args.model_url = args.model = args.ocr_cmd = args.tools = ""
+    return _cmd_try_image(args, settings)
+
+
 def _cmd_gemini(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     try:
@@ -542,6 +659,10 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_setlist_playlist(args, settings)
     if command == "lineup":
         return _cmd_lineup(args, settings)
+    if command == "try-image":
+        return _cmd_try_image(args, settings)
+    if command == "failures":
+        return _cmd_failures(args, settings)
     if command == "gemini":
         return _cmd_gemini(args, settings)
     if command == "queue":

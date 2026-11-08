@@ -8,12 +8,14 @@ from zoneinfo import ZoneInfo
 from concert_mcp.adapters.clock import SystemClock
 from concert_mcp.adapters.gemini_http import GeminiClient
 from concert_mcp.adapters.gws import GwsCalendar
+from concert_mcp.adapters.letterboxd_http import LetterboxdClient
 from concert_mcp.adapters.openclaw import OpenClawChat, OpenClawContext
 from concert_mcp.adapters.places_http import GooglePlacesClient, NominatimClient
 from concert_mcp.adapters.protocols import (
     Calendar,
     Chat,
     Clock,
+    FilmLookup,
     GroundedModel,
     LiveContext,
     SetlistFmApi,
@@ -32,7 +34,8 @@ class Services:
     """Settings plus one adapter per side effect.
 
     `spotify`, `setlistfm`, `places` and `gemini` are None while their provider is not set up; `geocoder` is the keyless
-    Nominatim lookup, None when venue lookups are off. When a factory is given, a None is
+    Nominatim lookup, None when venue lookups are off; `films` finds a movie's Letterboxd page, None in tests that
+    want no lookup. When a factory is given, a None is
     re-resolved on every read, so a long-running server picks up `concert-mcp spotify auth` (or `setlist-auth`)
     without a restart: the factory is one `Path.exists()` until the credentials file appears, then the client is
     kept. Tests pass fakes (or None) and no factory.
@@ -56,6 +59,7 @@ class Services:
         places_factory: Callable[[], VenueLookup | None] | None = None,
         gemini: GroundedModel | None = None,
         gemini_factory: Callable[[], GroundedModel | None] | None = None,
+        films: FilmLookup | None = None,
     ) -> None:
         self.settings = settings
         self.calendar = calendar
@@ -72,6 +76,7 @@ class Services:
         self.geocoder = geocoder
         self._gemini = gemini
         self._gemini_factory = gemini_factory
+        self.films = films
 
     @property
     def spotify(self) -> SpotifyApi | None:
@@ -136,6 +141,7 @@ def build_services(settings: Settings | None = None) -> Services:
         places_factory=lambda: GooglePlacesClient.if_configured(settings),
         gemini_factory=lambda: GeminiClient.if_configured(settings),
         geocoder=NominatimClient(settings) if settings.venue_lookup else None,
+        films=LetterboxdClient(settings),
         chat=OpenClawChat(settings, clock),
         context=OpenClawContext(settings),
         state=state,
