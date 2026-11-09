@@ -31,6 +31,18 @@ def _film_of(title: str) -> str:
     return re.sub(r"\s*\((?:19|20)\d{2}\)$", "", t)
 
 
+def _fields(t: MovieTicket) -> int:
+    """How much of the ticket was read: the fields that change the event when present."""
+    return sum(bool(x) for x in (t.runtime, t.address, t.seats, t.auditorium, t.tickets, t.time, t.year))
+
+
+def _richer(a: MovieTicket | None, b: MovieTicket | None) -> MovieTicket | None:
+    """The ticket with more fields read; the first on a tie, since it came from the model's own argument."""
+    if a is None or b is None:
+        return a or b
+    return b if _fields(b) > _fields(a) else a
+
+
 def _letterboxd(t: MovieTicket | None, film: str, svc: Services) -> str | None:
     if svc.films is None or not film:
         return None
@@ -54,8 +66,9 @@ def movie_request(
     """The AddRequest for one movie: the ticket's fields over the caller's, the derived lines trusted."""
     now_s = svc.clock.time()
     sid, _ = svc.context.live_route(now_s)
-    text = source_text or svc.context.recent_text(now_s, sid)
-    t = parse_movie_ticket(text)
+    # The model's source_text is often a trimmed copy of the screenshot (the runtime or seat lines dropped), so the
+    # chat's own recent text (the OCR as the bot read it) is parsed too, and the fuller ticket wins.
+    t = _richer(parse_movie_ticket(source_text), parse_movie_ticket(svc.context.recent_text(now_s, sid)))
 
     film = t.film if t else _film_of(title)
     start_s = show_start(t, svc.clock.now()) if t else start

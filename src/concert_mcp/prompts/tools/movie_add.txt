@@ -1,1 +1,1 @@
-Add a movie ticket to the calendar: the film, showtime and theater as read from the ticket; paste the ticket text into source_text. Code adds the runtime, seats and the Letterboxd link. No playlist. If the result starts with NO_REPLY, answer exactly NO_REPLY.
+Add a movie ticket to the calendar: the film, showtime and theater as read from the ticket; paste the ticket text whole into source_text, every line. Code adds the runtime, seats and the Letterboxd link. No playlist. If the result starts with NO_REPLY, answer exactly NO_REPLY.

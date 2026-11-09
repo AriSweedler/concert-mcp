@@ -143,3 +143,18 @@ def test_add_movie_with_no_source_reads_the_ticket_from_the_context(movie_svc: S
     out = add_movie(title="[Movie] Godzilla Minus Zero", start="2026-11-11 2:30 PM", svc=movie_svc)
     assert out.kind is Kind.OK, out.reply
     assert inserted_as_golden(movie_svc) == GOLDEN
+
+
+def test_a_trimmed_source_text_is_completed_from_the_context(movie_svc: Services) -> None:
+    # The model often pastes a shortened ticket: no runtime, no seats. The context holds the OCR as the bot read it,
+    # so the fuller ticket wins and the event is still the golden one.
+    trimmed = "\n".join(
+        ln for ln in FANDANGO.splitlines() if "hr" not in ln and "Seat" not in ln and "Auditorium" not in ln
+    )
+    t = parse_movie_ticket(trimmed)
+    assert t is None or t.runtime is None  # on its own, the trimmed text cannot give the golden end or lines
+    out = add_movie(
+        title="Godzilla Minus Zero", start="", location="", source_text=trimmed, svc=movie_svc, dry_run=False
+    )
+    assert out.kind is Kind.OK, out.reply
+    assert inserted_as_golden(movie_svc) == GOLDEN

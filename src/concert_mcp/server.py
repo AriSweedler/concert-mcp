@@ -19,6 +19,7 @@ from mcp.types import ToolAnnotations
 from pydantic import BeforeValidator, Field
 
 from concert_mcp import __version__
+from concert_mcp.calllog import record_call
 from concert_mcp.config import load_settings
 from concert_mcp.flows.concert_add import add_concert, add_plain
 from concert_mcp.flows.deliver import run_tool
@@ -103,6 +104,7 @@ def _run(name: str, make: Callable[[Services, dict[str, str]], Outcome], **args:
         svc = _services()
     except Exception as exc:
         return _crash_text(exc)
+    record_call(svc.settings.state_dir, name, args)
     try:
         return run_tool(lambda: make(svc, args), svc, tool=name, guard=True)[2]
     except Exception as exc:  # run_tool already turns a flow crash into a reply; this covers the delivery layer itself
