@@ -150,7 +150,7 @@ class TestThreeWeeks:
             "**Setlist playlist:** Zed Fox @ The Quarry, 2026-11-14\n"
             f"• **Setlist:** [setlist.fm]({PAGE_URL}) 5 songs\n"
             f"• **Playlist:** [2026-11-14 | Zed Fox]({PLAYLIST_URL})\n"
-            "• **Calendar:** [Open in Google Calendar](https://calendar.google.com/calendar/u/0/r/eventedit/"
+            "• **Calendar:** [Open in Google Calendar](https://www.google.com/calendar/event?eid="
             "ZXZ0MSBjYWwtY29uY2VydHM)"
         )
         assert one_row(svc).playlist_url == PLAYLIST_URL and one_row(svc).song_count == 5

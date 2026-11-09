@@ -126,18 +126,18 @@ def test_bullets_without_space_after_colon_is_plain() -> None:
 # ---------- the calendar link ----------
 
 
-def test_event_link_is_eventedit_form() -> None:
-    # Four link forms were tested on a phone on 2026-10-25 against a real event: the API's htmlLink
-    # (www.google.com/calendar/event?eid=), calendar.google.com/calendar/event?eid=, the day view and the share
-    # template all opened the Google Calendar app but not the event. Only the eventedit form opened the event.
-    # It is therefore the only form this package may emit; no other form and no fallback form is allowed.
+def test_event_link_is_the_htmllink_form() -> None:
+    # 2026-10-25, phone: only eventedit opened the event. 2026-11-08: eventedit no longer lands on the event; on the
+    # desktop the htmlLink form (www.google.com/calendar/event?eid=) opens it and eventedit does it worse, and on the
+    # phone from Telegram all forms are equally slow. The htmlLink form, eid only, is the one form this package emits;
+    # no other form and no fallback form is allowed (reply.event_link has the record).
     assert (
         event_link("https://www.google.com/calendar/event?eid=abc123")
-        == "https://calendar.google.com/calendar/u/0/r/eventedit/abc123"
+        == "https://www.google.com/calendar/event?eid=abc123"
     )
     assert (
         event_link("https://www.google.com/calendar/event?eid=abc123&ctz=America/Los_Angeles")
-        == "https://calendar.google.com/calendar/u/0/r/eventedit/abc123"
+        == "https://www.google.com/calendar/event?eid=abc123"
     )
     assert event_link("https://example.invalid/x") == "https://example.invalid/x"
     assert event_link(None) is None
@@ -146,8 +146,8 @@ def test_event_link_is_eventedit_form() -> None:
 
 def test_no_other_calendar_link_form_is_emitted() -> None:
     src = Path(reply.__file__).read_text(encoding="utf-8")
-    assert "calendar.google.com/calendar/u/0/r/eventedit/" in src
-    for forbidden in ("calendar/event?eid", "calendar/r/day", "calendar/render", "calendar/u/0/r/day"):
+    assert "www.google.com/calendar/event?eid=" in src
+    for forbidden in ("r/eventedit", "calendar/r/day", "calendar/render", "calendar/u/0/r/day"):
         assert forbidden not in src, forbidden
 
 
@@ -168,7 +168,7 @@ def test_render_added_new() -> None:
         "**Added to Concerts**\n"
         f"{BODY}\n"
         "Start corrected to 8:30 PM, the show time in the text.\n"
-        "[Open in Google Calendar](https://calendar.google.com/calendar/u/0/r/eventedit/abc123)"
+        "[Open in Google Calendar](https://www.google.com/calendar/event?eid=abc123)"
     )
 
 
@@ -183,7 +183,7 @@ def test_render_added_duplicate() -> None:
     assert out == (
         "**Already on Concerts** (nothing new created)\n"
         f"{BODY}\n"
-        "[Open in Google Calendar](https://calendar.google.com/calendar/u/0/r/eventedit/abc123)"
+        "[Open in Google Calendar](https://www.google.com/calendar/event?eid=abc123)"
     )
 
 

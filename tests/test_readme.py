@@ -160,8 +160,8 @@ def test_the_scan_catches_the_shapes_it_names():
 
 def test_architecture_doc_names_the_one_link_form():
     text = ARCH_DOC.read_text(encoding="utf-8")
-    assert "https://calendar.google.com/calendar/u/0/r/eventedit/<eid>" in text
-    assert "2026-10-25" in text
+    assert "https://www.google.com/calendar/event?eid=<eid>" in text
+    assert "2026-10-25" in text and "2026-11-08" in text
 
 
 @pytest.mark.parametrize("name", CHECK_NAMES)

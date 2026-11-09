@@ -74,9 +74,9 @@ SETLIST_ROW = {
 }
 
 
-def eventedit(event_id: str, calendar_id: str = "cal-concerts") -> str:
+def event_url(event_id: str, calendar_id: str = "cal-concerts") -> str:
     eid = base64.urlsafe_b64encode(f"{event_id} {calendar_id}".encode()).decode().rstrip("=")
-    return f"https://calendar.google.com/calendar/u/0/r/eventedit/{eid}"
+    return f"https://www.google.com/calendar/event?eid={eid}"
 
 
 def golden_added(event_id: str = "evt1", *, notes: str = "", when: str = "Sat Nov 14, 8:30 PM – 10:30 PM PST") -> str:
@@ -91,7 +91,7 @@ def golden_added(event_id: str = "evt1", *, notes: str = "", when: str = "Sat No
         f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify.\n"
         "• **Setlist:** not on setlist.fm yet; checking weekly for 2 months"
         f"{notes}\n"
-        f"[Open in Google Calendar]({eventedit(event_id)})"
+        f"[Open in Google Calendar]({event_url(event_id)})"
     )
 
 
@@ -230,7 +230,7 @@ class TestDuplicate:
             ("cal-concerts", e["id"], {"description": f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}"})
         ]
         assert out.reply.startswith("**Already on Concerts** (nothing new created)\n• **Artist:** Zed Fox\n")
-        assert out.reply.endswith(f"[Open in Google Calendar]({eventedit(e['id'])})")
+        assert out.reply.endswith(f"[Open in Google Calendar]({event_url(e['id'])})")
         assert out.data["id"] == e["id"]
         assert out.to_json()["duplicate"] is True
         assert [q.event_id for q in queue_list(svc)] == [e["id"]]
@@ -535,7 +535,7 @@ class TestPlainEvents:
         assert ins["description"] == ""
         assert out.data["calendar"] == "Personal"
         assert out.reply.startswith("**Added to Personal**\n• **Artist:** [Dinner] ZZZ Bistro\n")
-        assert out.reply.endswith(f"[Open in Google Calendar]({eventedit('evt1', 'primary')})")
+        assert out.reply.endswith(f"[Open in Google Calendar]({event_url('evt1', 'primary')})")
         assert "Teaser" not in out.reply and "Setlist" not in out.reply
         assert svc.spotify.calls == [] and svc.setlistfm.calls == []
         assert queue_list(svc) == []
@@ -886,7 +886,7 @@ class TestTopicRegistry:
         assert fields["description"].startswith("Doors: 7:30 PM\nPurchased: 2 tickets, $42.00 on Ticketweb\n")
         assert out.reply.startswith("**Updated on Concerts**\n• **Artist:** Zed Fox\n")
         assert "\nChanged: title Wrong Name -> Zed Fox\n" in out.reply  # the live text already set the show time
-        assert out.reply.endswith(f"[Open in Google Calendar]({eventedit(first.data['id'])})")
+        assert out.reply.endswith(f"[Open in Google Calendar]({event_url(first.data['id'])})")
         assert out.data["changed"] == ["title Wrong Name -> Zed Fox"]
         # The queue row and the topic name follow the new facts.
         [q] = queue_list(svc)
@@ -1021,7 +1021,7 @@ class TestLineup:
             f"• **Opener setlist (recent):** {self.PAGE}\n"
             f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify.\n"
             "• **Setlist:** not on setlist.fm yet; checking weekly for 2 months\n"
-            f"[Open in Google Calendar]({eventedit('evt1')})"
+            f"[Open in Google Calendar]({event_url('evt1')})"
         )
         assert out.data["lineup"]["openers"] == [{"name": "Zork", "setlist_url": self.PAGE}]
         assert out.data["description"][-1] == f"Opener setlist (recent): {self.PAGE}"

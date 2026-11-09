@@ -55,7 +55,7 @@ NO_CANDIDATES_REPLY = (
 )
 WHICH_EVENT_REPLY = "Which event? Tell me the artist or title (and the date if you know it) and I will remove it."
 
-EVENTEDIT_URL = "https://calendar.google.com/calendar/u/0/r/eventedit/{eid}"
+EVENT_URL = "https://www.google.com/calendar/event?eid={eid}"  # the API htmlLink's form, without its ctz
 MAX_KEY_LEN = 24
 REASON_LEN = 160
 
@@ -78,18 +78,20 @@ def bullets(title: str, when: str, location: str, lines: Sequence[str]) -> str:
 
 
 def event_link(html_link: str | None) -> str | None:
-    """The eventedit form of a Google Calendar link: the only form that opens the event in the phone app.
+    """The API htmlLink's form of a Google Calendar link, with only its eid: the one form this package emits.
 
-    Tested on a phone on 2026-10-25: the API htmlLink, the same eid on calendar.google.com, the day view and the share
-    template open the Google Calendar phone app but not the event; only eventedit opens the event. This is the only
-    link form this package emits. Do not add fallback forms.
+    Tested twice. 2026-10-25, on a phone: only the eventedit form (the web app's edit page for the eid) opened the
+    event. 2026-11-08, after the eventedit form stopped landing on the event: on the desktop the htmlLink
+    form and calendar.google.com/calendar/event?eid= open the event and eventedit does it worse; on the phone, from
+    Telegram, all three are slow and none is better. So the htmlLink form it is: best on the desktop, no worse on the
+    phone, nothing rewritten. One form, no fallbacks; a change needs both tests again (beads-tmr.2).
 
     None and "" come back unchanged, as does a link that carries no eid.
     """
     if not html_link:
         return html_link
     eid = parse_qs(urlparse(html_link).query).get("eid", [None])[0]
-    return EVENTEDIT_URL.format(eid=eid) if eid else html_link
+    return EVENT_URL.format(eid=eid) if eid else html_link
 
 
 def _notes(notes: Sequence[str]) -> str:
