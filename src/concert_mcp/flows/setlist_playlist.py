@@ -9,7 +9,7 @@ the album over the single, the earliest release). The playlist named "YYYY-MM-DD
 the ones it lacks, setlist order kept; a row an earlier run filled with another version is swapped in place. The teaser
 playlist of the same show has the same name: a setlist playlist's description starts with `Setlist:`, a teaser's with
 `Teaser for`, and that first word is what tells them apart. The two descriptions link each other, and the calendar
-event's description gains `Setlist playlist: <url>` once. `sync_setlist_playlist` is the piece the weekly poll reuses.
+event's description gains `Setlist playlist: <url>` once. `sync_setlist_playlist` is the piece the poll reuses.
 """
 
 from __future__ import annotations

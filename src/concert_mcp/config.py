@@ -94,7 +94,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "setlist_queue",
         "<state_dir>/setlist-queue.json",
-        "legacy fallback ~/.local/state/ari-spotify/setlist-queue.json; the weekly poller reads this file",
+        "legacy fallback ~/.local/state/ari-spotify/setlist-queue.json; `concert-mcp poll` reads this file",
     ),
     ("candidates_file", "<state_dir>/delete-candidates.json", "no legacy fallback (lists are short-lived)"),
     ("sent_log", "<state_dir>/last-sent.json", "reply dedupe memory"),
@@ -125,7 +125,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "concerts_chat",
         "",
-        "Telegram chat id the weekly setlist poll announces a new playlist to when the show's topic is unknown",
+        "Telegram chat id the setlist poll announces a new playlist to when the show's topic is unknown",
     ),
     ("default_calendar", "primary", "id used for plain events and the second delete search"),
     ("default_calendar_name", "Personal", "how replies name it"),
@@ -134,7 +134,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("teaser_timeout_s", "150", "cap on the Spotify teaser step"),
     ("http_timeout_s", "30", "per HTTP request"),
     ("liked_cache_ttl_s", "21600", "Liked Songs cache lifetime"),
-    ("setlist_queue_days", "61", "how long after the show the weekly setlist check keeps looking"),
+    ("setlist_queue_days", "61", "how long after the show a setlist check keeps looking at its page"),
     ("default_duration_h", "2", "end = start + this when no end is given"),
     ("past_grace_h", "12", "a start this far in the past is still accepted"),
     ("max_future_days", "730", "a start further out is refused"),

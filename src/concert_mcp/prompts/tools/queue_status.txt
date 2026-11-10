@@ -1,1 +1,1 @@
-List the concerts waiting for the weekly setlist.fm check. Takes no parameters. NO_REPLY means answer exactly NO_REPLY.
+List the concerts whose setlist.fm page is re-read when Ari asks for a setlist check. Takes no parameters. NO_REPLY means answer exactly NO_REPLY.

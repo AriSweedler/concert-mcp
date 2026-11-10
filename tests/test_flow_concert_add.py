@@ -89,7 +89,7 @@ def golden_added(event_id: str = "evt1", *, notes: str = "", when: str = "Sat No
         "• **Purchased:** 2 tickets, $42.00 on Ticketweb\n"
         "• **Opener:** Zork.\n"
         f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify.\n"
-        "• **Setlist:** not on setlist.fm yet; checking weekly for 2 months"
+        "• **Setlist:** not on setlist.fm yet"
         f"{notes}\n"
         f"[Open in Google Calendar]({event_url(event_id)})"
     )
@@ -457,7 +457,7 @@ class TestTeaserAndSetlist:
         svc = services(settings, now, route=forum_route, text=ticket_text, setlistfm=setlistfm)
         out = concert(svc)
         assert out.kind is Kind.OK
-        assert f"• **Setlist:** [setlist.fm]({SETLIST_URL}) 2 songs so far; checking weekly for 2 months" in out.reply
+        assert f"• **Setlist:** [setlist.fm]({SETLIST_URL}) 2 songs so far" in out.reply
         desc = svc.calendar.inserted[0]["description"].split("\n")
         assert desc[-2:] == [f"Teaser playlist: {TEASER_URL}", f"Setlist: {SETLIST_URL}"]
         [q] = queue_list(svc)
@@ -1020,7 +1020,7 @@ class TestLineup:
             "• **Expected:** doors 7:30 PM, Zork 8:00 PM, Zed Fox 9:00 PM\n"
             f"• **Opener setlist (recent):** {self.PAGE}\n"
             f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify.\n"
-            "• **Setlist:** not on setlist.fm yet; checking weekly for 2 months\n"
+            "• **Setlist:** not on setlist.fm yet\n"
             f"[Open in Google Calendar]({event_url('evt1')})"
         )
         assert out.data["lineup"]["openers"] == [{"name": "Zork", "setlist_url": self.PAGE}]

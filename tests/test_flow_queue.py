@@ -1,4 +1,4 @@
-"""flows/queue.py: the setlist queue file the weekly poller reads."""
+"""flows/queue.py: the setlist queue file the poll reads when asked."""
 
 from __future__ import annotations
 

@@ -57,7 +57,7 @@ def topic_forget(key: str, svc: Services) -> bool:
 
 
 def topic_for_event(event_id: str, svc: Services) -> str | None:
-    """The key of the topic that owns an event, if any; the weekly poll announces a playlist there."""
+    """The key of the topic that owns an event, if any; the poll announces a playlist there."""
     for key, row in _rows(svc).items():
         if isinstance(row, Mapping) and row.get("event_id") == event_id:
             return str(key)

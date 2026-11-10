@@ -50,7 +50,7 @@ FIX_GUARD_LIMIT = 3
 def deliver(outcome: Outcome, svc: Services, *, send: bool, target: ChatTarget | None = None) -> Delivery:
     """Decide whether and where the reply goes, dedupe, send it, log it. Never raises.
 
-    `target` names the chat when no one spoke: the weekly setlist poll runs from launchd and announces a playlist
+    `target` names the chat when no one spoke: the setlist poll runs from a terminal and announces a playlist
     in the show's own topic, so it hands the target in instead of asking for the live route.
     """
     try:

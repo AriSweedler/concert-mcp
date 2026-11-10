@@ -1,8 +1,8 @@
-"""The weekly setlist check queue (unit flows-calendar).
+"""The setlist check queue (unit flows-calendar).
 
-One JSON list, the shape the legacy `cal-add.py` wrote and the weekly poller reads. Every concert that lands on the
-calendar is queued (a setlist.fm page fills in over weeks, so the poller keeps checking until `until` even when songs
-are already there); a delete forgets the row.
+One JSON list, the shape the legacy `cal-add.py` wrote and `concert-mcp poll` reads when Ari asks for a check. Every
+concert that lands on the calendar is queued (a setlist.fm page fills in over weeks, so a check re-reads every row
+until `until` even when songs are already there); a delete forgets the row.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class QueueEntry:
     song_count: int
     until: str
     added: str
-    playlist_url: str | None = None  # the setlist playlist, once the weekly poll has made it
+    playlist_url: str | None = None  # the setlist playlist, once a poll has made it
 
     def to_json(self) -> dict[str, Any]:
         """The legacy queue row, plus `playlist_url` once the poll has a playlist (a legacy reader ignores it)."""
@@ -77,14 +77,14 @@ class QueueStatus:
     active: tuple[QueueEntry, ...]
     expired: tuple[QueueEntry, ...]
     path: Path
-    last_poll: str | None = None  # the weekly poll's last run, ISO time, from the stamp file
+    last_poll: str | None = None  # the poll's last run, ISO time, from the stamp file
 
 
 POLL_STAMP_NAME = "setlist-poll.stamp"
 
 
 def poll_stamp_path(svc: Services) -> Path:
-    """`<state_dir>/setlist-poll.stamp`: when the weekly poll last ran."""
+    """`<state_dir>/setlist-poll.stamp`: when the poll last ran."""
     return svc.settings.state_dir / POLL_STAMP_NAME
 
 

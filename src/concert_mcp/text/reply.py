@@ -160,11 +160,11 @@ def teaser_line(res: TeaserResult | None) -> str | None:
     return None
 
 
-def setlist_bullet(res: SetlistResult | None, *, queued: bool = True) -> str | None:
+def setlist_bullet(res: SetlistResult | None) -> str | None:
     """The Setlist bullet for every SetlistResult; None when no lookup was wanted.
 
-    `queued` adds the "checking weekly for 2 months" clause: true for concert_add, which queues the show for the
-    weekly poller, false for the standalone setlist_find tool, which queues nothing and must not promise a check.
+    No promise of a later check: the poll runs only when Ari asks for it (2026-11-10), so the bullet says what the
+    page holds today and nothing more.
     """
     if res is None:
         return None
@@ -172,12 +172,11 @@ def setlist_bullet(res: SetlistResult | None, *, queued: bool = True) -> str | N
         return bullet("Setlist", "lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)")
     if res.match == "failed":
         return bullet("Setlist", f"lookup failed ({(res.reason or 'unknown error')[:REASON_LEN]})")
-    weekly = "; checking weekly for 2 months" if queued else ""
     if not res.found:
-        return bullet("Setlist", f"not on setlist.fm yet{weekly}")
+        return bullet("Setlist", "not on setlist.fm yet")
     n = res.song_count
     what = f"{n} songs so far" if n else "no songs yet"
-    return bullet("Setlist", f"[setlist.fm]({res.url}) {what}{weekly}")
+    return bullet("Setlist", f"[setlist.fm]({res.url}) {what}")
 
 
 def setlist_line(res: SetlistResult | None) -> str | None:
@@ -289,9 +288,9 @@ def render_lineup(artist: str, date: str, venue: str, lineup: Lineup, *, patched
 
 
 def render_setlist_standalone(res: SetlistResult) -> str:
-    """The setlist_find tool's reply: no weekly-check promise (nothing is queued); a miss points at the search page."""
+    """The setlist_find tool's reply: the page as it is (nothing is queued); a miss points at the search page."""
     search = f" Search: {res.search_url}" if not res.found and res.search_url and res.match == "none" else ""
-    return "**Setlist**\n" + (setlist_bullet(res, queued=False) or "") + search
+    return "**Setlist**\n" + (setlist_bullet(res) or "") + search
 
 
 def _queue_row(e: QueueEntry, expired: bool) -> str:
@@ -300,7 +299,7 @@ def _queue_row(e: QueueEntry, expired: bool) -> str:
 
 
 def render_queue(status: QueueStatus) -> str:
-    """The setlist queue: active shows first, then expired ones, each by date; last the weekly poll's last run."""
+    """The setlist queue: active shows first, then expired ones, each by date; last the poll's last run."""
     last = f"Last poll: {status.last_poll or 'never'}"
     if not status.entries:
         return f"The setlist queue is empty.\n{last}"
@@ -310,13 +309,8 @@ def render_queue(status: QueueStatus) -> str:
 
 
 def render_poll(report: PollReport) -> str:
-    """The weekly poll's report: one line per queued show, or why the run was skipped."""
+    """The poll's report: one line per queued show."""
     last = report.last_poll or "never"
-    if not report.ran:
-        return (
-            f"**Setlist poll** skipped: last run {last}, less than {report.interval_days} days ago "
-            "(`concert-mcp poll --force` runs it now)"
-        )
     head = "**Setlist poll (dry run)**" if report.dry_run else "**Setlist poll**"
     head += f" {report.now} (last: {last})"
     if not report.rows:
@@ -335,7 +329,7 @@ def render_setlist_playlist_announce(
     playlist_url: str,
     html_link: str | None,
 ) -> str:
-    """The one Telegram message the weekly poll sends when a show's setlist playlist first exists."""
+    """The one Telegram message the poll sends when a show's setlist playlist first exists."""
     rows = [
         bullet("Setlist", f"[setlist.fm]({setlist_url}) {song_count} songs"),
         bullet("Playlist", f"[{playlist_name}]({playlist_url})"),

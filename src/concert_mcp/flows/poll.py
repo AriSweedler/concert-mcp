@@ -1,12 +1,12 @@
-"""The weekly setlist poll (unit flows-music): every queued show, once a week, until two months after it.
+"""The setlist poll (unit flows-music): every queued show, each time Ari asks, until two months after it.
 
 A setlist.fm page fills in over weeks (one person adds a few songs, others finish it), so every concert stays in the
 queue until `until` and is checked on every run, not only the empty pages. The first run that finds songs makes the
 setlist playlist (`sync_setlist_playlist`, from the page's songs), writes `Setlist playlist: <url>` into the calendar
-event and sends the Concerts group one message with the link; later runs top the playlist up without a word. A run
-less than a week after the last one is a no-op unless forced, so the launchd job can fire daily. Everything here is
-idempotent: the queue row remembers the page, the song count and the playlist, and the calendar patch and the message
-happen once per show.
+event and sends the Concerts group one message with the link; later runs top the playlist up without a word. Nothing
+schedules a run (Ari, 2026-11-10: a setlist changes only when he asks; the Monday launchd job is gone), so every call
+runs the whole queue and the stamp only records when. Everything here is idempotent: the queue row remembers the page,
+the song count and the playlist, and the calendar patch and the message happen once per show.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
 from concert_mcp.flows.setlist_playlist import sync_setlist_playlist
 from concert_mcp.flows.topics import topic_for_event
-from concert_mcp.log import log_info, log_warn
+from concert_mcp.log import log_warn
 from concert_mcp.result import FixInput, Kind, Outcome, ProviderError, crash_outcome
 from concert_mcp.text.candidates import missing_link_lines, patched_description
 from concert_mcp.text.naming import playlist_name
@@ -38,7 +38,6 @@ from concert_mcp.text.reply import SETLIST_PLAYLIST_LINE_PREFIX, render_poll, re
 from concert_mcp.text.routes import ChatTarget
 from concert_mcp.text.setlists import SetlistResult, Song, SyncResult, songs_of
 
-POLL_INTERVAL_DAYS = 7
 REASON_LIMIT = 160
 
 
@@ -98,7 +97,6 @@ class PollReport:
     last_poll: str | None
     rows: tuple[PollRow, ...]
     dry_run: bool = False
-    interval_days: int = POLL_INTERVAL_DAYS
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -118,18 +116,14 @@ def poll_setlists(
     svc: Services,
     now: datetime,
     *,
-    force: bool = False,
     dry_run: bool = False,
     send: bool = True,
     sync: SyncFn | None = None,
 ) -> PollReport:
-    """One weekly run over the whole queue; a no-op within `POLL_INTERVAL_DAYS` of the last run unless forced."""
+    """One run over the whole queue, whenever it is called; the stamp records the time for the queue report."""
     sync = sync or sync_playlist
     last = read_poll_stamp(svc)
     today = now.astimezone(svc.tz).date()
-    if last is not None and not force and (today - last.astimezone(svc.tz).date()).days < POLL_INTERVAL_DAYS:
-        log_info(f"setlist poll skipped | last='{_iso(last)}'")
-        return PollReport(ran=False, now=_iso(now) or "", last_poll=_iso(last), rows=(), dry_run=dry_run)
     rows = tuple(
         _poll_entry(entry, svc, today, sync=sync, dry_run=dry_run, send=send)
         for entry in sorted(queue_list(svc), key=lambda e: e.date)
@@ -246,12 +240,10 @@ def _announce(
     return f"not announced ({delivery.status})"
 
 
-def poll_outcome(
-    svc: Services, *, force: bool = False, dry_run: bool = False, send: bool = True, sync: SyncFn | None = None
-) -> Outcome:
+def poll_outcome(svc: Services, *, dry_run: bool = False, send: bool = True, sync: SyncFn | None = None) -> Outcome:
     """The `concert-mcp poll` Outcome: the report as the reply, its JSON as the data."""
     try:
-        report = poll_setlists(svc, svc.clock.now(), force=force, dry_run=dry_run, send=send, sync=sync)
+        report = poll_setlists(svc, svc.clock.now(), dry_run=dry_run, send=send, sync=sync)
     except Exception as e:  # noqa: BLE001 - a tool never raises
         return crash_outcome(e, svc.operator)
     return Outcome(Kind.DRY_RUN if dry_run else Kind.OK, reply=render_poll(report), data=report.to_json())

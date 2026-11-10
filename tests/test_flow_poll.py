@@ -1,4 +1,4 @@
-"""flows/poll.py: the weekly setlist poll over fakes, three runs apart, with a page that grows 0 -> 5 -> 12 songs."""
+"""flows/poll.py: the setlist poll over fakes, three runs apart, with a page that grows 0 -> 5 -> 12 songs."""
 
 from __future__ import annotations
 
@@ -231,27 +231,15 @@ class TestRealSync:
         assert one_row(svc).playlist_url is None and one_row(svc).song_count == 5
 
 
-class TestWeeklyGate:
-    def test_a_run_within_the_week_is_a_no_op(self, poll_svc: Services) -> None:
+class TestNoSchedule:
+    def test_every_call_runs_the_queue(self, poll_svc: Services) -> None:
+        """Nothing gates a run: a second ask an hour later re-reads the page again and moves the stamp."""
         svc, sync = poll_svc, FakeSync()
         set_page(svc, 5)
         poll_setlists(svc, RUN1, sync=sync)
-        again = poll_setlists(svc, RUN1 + timedelta(days=6, hours=12), sync=sync)
-        assert again.ran is False and again.rows == () and again.last_poll == RUN1.isoformat(timespec="seconds")
-        assert len(svc.setlistfm.calls) == 1 and read_poll_stamp(svc) == RUN1
-
-    def test_force_runs_it_anyway(self, poll_svc: Services) -> None:
-        svc = poll_svc
-        set_page(svc, 0)
-        poll_setlists(svc, RUN1, sync=FakeSync())
-        forced = poll_setlists(svc, RUN1 + timedelta(hours=1), force=True, sync=FakeSync())
-        assert forced.ran is True and read_poll_stamp(svc) == RUN1 + timedelta(hours=1)
-
-    def test_the_seventh_day_runs(self, poll_svc: Services) -> None:
-        svc = poll_svc
-        set_page(svc, 0)
-        poll_setlists(svc, RUN1, sync=FakeSync())
-        assert poll_setlists(svc, RUN1 + timedelta(days=7), sync=FakeSync()).ran is True
+        again = poll_setlists(svc, RUN1 + timedelta(hours=1), sync=sync)
+        assert again.ran is True and again.last_poll == RUN1.isoformat(timespec="seconds")
+        assert len(svc.setlistfm.calls) == 2 and read_poll_stamp(svc) == RUN1 + timedelta(hours=1)
 
 
 class TestQueueHousekeeping:
@@ -343,17 +331,6 @@ class TestPollOutcome:
             "• 2026-11-14 Zed Fox — 5 songs; playlist created; announced"
         )
         assert out.data["ran"] is True and out.data["rows"][0]["playlist_url"] == PLAYLIST_URL
-
-    def test_skipped_report(self, poll_svc: Services) -> None:
-        set_page(poll_svc, 0)
-        poll_outcome(poll_svc, sync=FakeSync())
-        poll_svc.clock.advance(3600)
-        out = poll_outcome(poll_svc, sync=FakeSync())
-        assert out.reply == (
-            "**Setlist poll** skipped: last run 2026-11-15T17:00:00+00:00, less than 7 days ago "
-            "(`concert-mcp poll --force` runs it now)"
-        )
-        assert out.data["ran"] is False
 
     def test_empty_queue_report(self, poll_svc: Services) -> None:
         poll_svc.state.remove(poll_svc.settings.setlist_queue)

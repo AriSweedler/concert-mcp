@@ -274,12 +274,12 @@ def test_setlist_bullet_every_branch() -> None:
     )
     assert setlist_bullet(
         SetlistResult(found=False, match="none", search_url="https://www.setlist.fm/search?query=Zed+Fox", **base)
-    ) == ("• **Setlist:** not on setlist.fm yet; checking weekly for 2 months")
+    ) == ("• **Setlist:** not on setlist.fm yet")
     assert setlist_bullet(SetlistResult(found=True, match="exact date", setlist=setlist(12), **base)) == (
-        f"• **Setlist:** [setlist.fm]({SETLIST_URL}) 12 songs so far; checking weekly for 2 months"
+        f"• **Setlist:** [setlist.fm]({SETLIST_URL}) 12 songs so far"
     )
     assert setlist_bullet(SetlistResult(found=True, match="within a day", setlist=setlist(0), **base)) == (
-        f"• **Setlist:** [setlist.fm]({SETLIST_URL}) no songs yet; checking weekly for 2 months"
+        f"• **Setlist:** [setlist.fm]({SETLIST_URL}) no songs yet"
     )
 
 

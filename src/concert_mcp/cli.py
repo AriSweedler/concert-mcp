@@ -173,10 +173,9 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--force", action="store_true", help="replace a stored key")
     q.add_argument("--manual", action="store_true", help="type the key instead of reading 1Password")
 
-    add("queue", "the concerts waiting for the weekly setlist check, and when the poll last ran")
+    add("queue", "the concerts whose setlist.fm page the poll re-reads when asked, and when it last ran")
 
-    p = add("poll", "the weekly setlist check over every queued show (a launchd job runs it; a no-op within a week)")
-    p.add_argument("--force", action="store_true", help="run even when the last run was less than a week ago")
+    add("poll", "re-read every queued show's setlist.fm page: playlist made or topped up, event and group told once")
 
     p = add("venues", "the venue registry: every venue seen, its visits, address and website")
     vsub = p.add_subparsers(dest="venues_command", metavar="<command>")
@@ -514,7 +513,7 @@ def _cmd_queue(args: argparse.Namespace, settings: Settings) -> int:
 def _cmd_poll(args: argparse.Namespace, settings: Settings) -> int:
     """The poll delivers its own messages per show; the report stays on the terminal."""
     svc = services.build_services(settings)
-    outcome = poll_outcome(svc, force=args.force, dry_run=args.dry_run, send=not args.no_send)
+    outcome = poll_outcome(svc, dry_run=args.dry_run, send=not args.no_send)
     delivery = Delivery(False, "NOT SENT: the poll report stays on the terminal")
     return emit(outcome, delivery, outcome.reply or "", json_mode=args.json_mode)
 

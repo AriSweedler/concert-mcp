@@ -196,7 +196,7 @@ def test_outcome_found_reply(svc: Services) -> None:
         "• **Setlist:** [setlist.fm](https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-abc123.html) "
         "3 songs so far"
     )
-    # The standalone tool queues nothing, so it promises no weekly check (concert_add does both).
+    # No reply promises a later check: the poll runs only when Ari asks (2026-11-10).
     assert "checking weekly" not in out.reply
     rec = out.to_json()
     assert rec["ok"] is True

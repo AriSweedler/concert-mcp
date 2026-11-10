@@ -364,7 +364,7 @@ def lineup(
 
 
 def queue_status() -> str:
-    """List the concerts waiting for the weekly setlist check."""
+    """List the concerts whose setlist.fm page the poll re-reads when asked."""
     return _run("queue_status", lambda svc, a: queue_outcome(svc))
 
 
