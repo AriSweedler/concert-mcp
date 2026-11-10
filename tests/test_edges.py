@@ -446,6 +446,18 @@ def test_config_edges(tmp_path: Path) -> None:
     settings = load_settings(settings_env(tmp_path), home=tmp_path)
     rows = migrate(settings, tmp_path, dry=True)  # env None: the process environment
     assert len(rows) == 4 and all(status.startswith(("skipped", "would copy")) for _, _, status in rows)
+    legacy = tmp_path / ".local" / "state" / "ari-spotify" / "setlist-queue.json"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("[]")
+    rows = migrate(settings, tmp_path, dry=True, env=settings_env(tmp_path))
+    assert ("would copy", legacy) in [(status, src) for src, _, status in rows]
+    # a binary found on PATH (the runner has no gws; one is planted)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "gws").write_text("#!/bin/sh\n")
+    (fake_bin / "gws").chmod(0o700)
+    on_path = load_settings(settings_env(tmp_path) | {"PATH": str(fake_bin)}, home=tmp_path)
+    assert on_path.gws_bin == str(fake_bin / "gws")
 
 
 def test_healthcheck_directory_binary_and_sdk_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -461,6 +473,13 @@ def test_healthcheck_directory_binary_and_sdk_rows(tmp_path: Path, monkeypatch: 
     assert hc._writable_dir("state-dir", a_file).fix == "move the file away"
     assert hc._writable_dir("state-dir", tmp_path / "absent" / "yet").status == "PASS"
     assert hc._binary("gws-binary", str(a_file), "x", "install", "VAR").status == "PASS"
+    planted = tmp_path / "bin"
+    planted.mkdir()
+    (planted / "planted-gws").write_text("#!/bin/sh\n")
+    (planted / "planted-gws").chmod(0o700)
+    with monkeypatch.context() as m:
+        m.setenv("PATH", str(planted))
+        assert hc._binary("gws-binary", "planted-gws", "x", "install", "VAR").evidence == str(planted / "planted-gws")
     real_import = importlib.import_module
 
     def no_mcp(name: str) -> Any:
