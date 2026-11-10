@@ -6,7 +6,7 @@ import os
 import shutil
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 
 ENV_PREFIX = "CONCERT_MCP_"
@@ -177,10 +177,6 @@ def env_name(field: str) -> str:
 def env_table() -> list[tuple[str, str, str]]:
     """(ENV_NAME, default-as-doc, meaning) for every configurable field, in FIELD_DOCS order."""
     return [(env_name(name), default, meaning) for name, default, meaning in FIELD_DOCS]
-
-
-def _field_types() -> dict[str, str]:
-    return {f.name: str(f.type) for f in fields(Settings)}
 
 
 def _expand(value: str, home: Path) -> Path:

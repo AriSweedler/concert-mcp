@@ -38,7 +38,8 @@ def entry(t: float | None, route_obj: dict | None) -> str:
 # ---------- pick_live_route ----------
 
 
-def test_pick_live_route_newest_with_route_inside_window() -> None:
+def test_routes() -> None:
+    # pick_live_route_newest_with_route_inside_window:
     rows = [
         ("s1", entry(CUTOFF_MS + 100, route(to=f"telegram:{CHAT}:topic:3", thread=3))),
         ("s2", entry(CUTOFF_MS + 500, route())),
@@ -48,8 +49,7 @@ def test_pick_live_route_newest_with_route_inside_window() -> None:
     assert sid == "s2"
     assert r == route()
 
-
-def test_pick_live_route_ignores_old_no_route_and_garbage() -> None:
+    # pick_live_route_ignores_old_no_route_and_garbage:
     rows = [
         ("old", entry(CUTOFF_MS - 1, route())),
         ("at_cutoff", entry(CUTOFF_MS, route())),
@@ -62,47 +62,34 @@ def test_pick_live_route_ignores_old_no_route_and_garbage() -> None:
     ]
     assert pick_live_route(rows, CUTOFF_MS) == ("live", route())
 
-
-def test_pick_live_route_empty_and_all_stale() -> None:
+    # pick_live_route_empty_and_all_stale:
     assert pick_live_route([], CUTOFF_MS) == (None, None)
     assert pick_live_route([("s1", entry(CUTOFF_MS - 5, route()))], CUTOFF_MS) == (None, None)
     assert pick_live_route([("s1", "garbage")], CUTOFF_MS) == (None, None)
 
-
-# ---------- chat_target ----------
-
-
-def test_chat_target_strips_prefix_and_topic() -> None:
+    # chat_target_strips_prefix_and_topic:
     assert chat_target(route()) == ChatTarget(channel="telegram", chat=CHAT, thread="7", account="acct-1")
 
-
-def test_chat_target_plain_chat_without_thread_or_account() -> None:
+    # chat_target_plain_chat_without_thread_or_account:
     assert chat_target(route(to=CHAT, thread=None, account=None)) == ChatTarget("telegram", CHAT, None, None)
 
-
-def test_chat_target_thread_and_account_are_strings() -> None:
+    # chat_target_thread_and_account_are_strings:
     t = chat_target(route(thread=42, account=12345))
     assert t is not None
     assert t.thread == "42" and isinstance(t.thread, str)
     assert t.account == "12345" and isinstance(t.account, str)
 
-
-def test_chat_target_missing_chat_is_none() -> None:
+    # chat_target_missing_chat_is_none:
     assert chat_target(route(to=None)) is None
     assert chat_target(route(to="")) is None
     assert chat_target(route(to="telegram:")) is None
     assert chat_target({}) is None
 
-
-# ---------- forum_topic ----------
-
-
-def test_forum_topic_happy_path() -> None:
+    # forum_topic_happy_path:
     assert forum_topic(route(to=CHAT)) == (CHAT, "7")
     assert forum_topic(route(to=CHAT, thread="7")) == (CHAT, "7")
 
-
-def test_forum_topic_refusals() -> None:
+    # forum_topic_refusals:
     assert forum_topic(route(to=CHAT, thread=1)) is None
     assert forum_topic(route(to=CHAT, thread="1")) is None
     assert forum_topic(route(to="123456789")) is None
@@ -114,9 +101,7 @@ def test_forum_topic_refusals() -> None:
     assert forum_topic(None) is None
     assert forum_topic({}) is None
 
-
-def test_forum_target_judges_the_stripped_chat_id() -> None:
-    # The flows rename through the same bare chat id the send goes to, whatever form the store's `to` takes.
+    # forum_target_judges_the_stripped_chat_id:
     assert forum_target(chat_target(route())) == (CHAT, "7")
     assert forum_target(chat_target(route(to=CHAT))) == (CHAT, "7")
     assert forum_target(chat_target(route(to=f"telegram:{CHAT}", thread=1))) is None
@@ -124,15 +109,7 @@ def test_forum_target_judges_the_stripped_chat_id() -> None:
     assert forum_target(chat_target(route(channel="discord"))) is None
     assert forum_target(None) is None
 
-
-# ---------- user_texts ----------
-
-
-def event(role: str, content) -> tuple[str]:
-    return (json.dumps({"message": {"role": role, "content": content}}),)
-
-
-def test_user_texts_str_and_list_content() -> None:
+    # user_texts_str_and_list_content:
     rows = [
         event("user", "first message"),
         event("assistant", "ignored reply"),
@@ -150,8 +127,20 @@ def test_user_texts_str_and_list_content() -> None:
     ]
     assert user_texts(rows) == ["first message", "second", "third"]
 
-
-def test_user_texts_skips_bad_rows() -> None:
+    # user_texts_skips_bad_rows:
     rows = [("{not json",), ("[]",), (json.dumps({"message": None}),), (json.dumps({}),), event("user", "kept")]
     assert user_texts(rows) == ["kept"]
     assert user_texts([]) == []
+
+
+# ---------- chat_target ----------
+
+
+# ---------- forum_topic ----------
+
+
+# ---------- user_texts ----------
+
+
+def event(role: str, content) -> tuple[str]:
+    return (json.dumps({"message": {"role": role, "content": content}}),)

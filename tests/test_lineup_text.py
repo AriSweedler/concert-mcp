@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from concert_mcp.text.lineup import (
     LINEUP_SCHEMA,
     GroundedAnswer,
@@ -33,7 +31,8 @@ SOURCES = ("https://venue.example/events/zed-fox", "https://tickets.example/zed-
 PAGE = "https://www.setlist.fm/setlist/zork/2026/the-hollow-oakland-ca-1a2b3c4d.html"
 
 
-def test_prompt_names_the_pages_the_show_and_the_shape() -> None:
+def test_lineup_text() -> None:
+    # prompt_names_the_pages_the_show_and_the_shape:
     pages = lineup_pages(
         "Zed Fox", "2026-11-14", "The Quarry, San Francisco", "https://venue.example", ("https://tix.example/zed",)
     )
@@ -55,14 +54,12 @@ def test_prompt_names_the_pages_the_show_and_the_shape() -> None:
         "https://lite.duckduckgo.com/lite/?q=Zed+Fox+The+Quarry+2026-11-14+tickets",
     )
 
-
-def test_ticket_urls_are_read_once_each() -> None:
+    # ticket_urls_are_read_once_each:
     text = "Your order https://tix.example/o/1. See https://tix.example/o/1 and https://venue.example/shows/zed, thanks"
     assert urls_in(text) == ("https://tix.example/o/1", "https://venue.example/shows/zed")
     assert urls_in("") == ()
 
-
-def test_website_prompt_and_answer() -> None:
+    # website_prompt_and_answer:
     assert website_prompt("The Quarry, San Francisco").startswith(
         "Read https://lite.duckduckgo.com/lite/?q=The+Quarry%2C+San+Francisco+official+website ."
     )
@@ -74,10 +71,8 @@ def test_website_prompt_and_answer() -> None:
     assert parse_website(GroundedAnswer('{"website": "https://www.yelp.com/biz/the-quarry"}', ())) is None
     assert parse_website(GroundedAnswer("no idea", ())) is None
 
-
-@pytest.mark.parametrize(
-    ("raw", "want"),
-    [
+    # clock_time:
+    for raw, want in [
         ("7:30 PM", "7:30 PM"),
         ("7pm", "7:00 PM"),
         ("7.30 p.m.", "7:30 PM"),
@@ -89,71 +84,58 @@ def test_website_prompt_and_answer() -> None:
         (None, None),
         ("13 PM", None),
         ("25:00", None),
-    ],
-)
-def test_clock_time(raw: object, want: str | None) -> None:
-    assert clock_time(raw) == want
+    ]:
+        assert clock_time(raw) == want
 
-
-def test_parse_full_answer() -> None:
+    # parse_full_answer:
     lu = parse_lineup(GroundedAnswer(FULL, SOURCES), headliner="Zed Fox", venue="The Quarry, San Francisco")
     assert lu.status == "found"
     assert lu.openers == (Opener("Zork"), Opener("Blorp"))
     assert (lu.doors, lu.opener_time, lu.headliner_time) == ("7:00 PM", "8:00 PM", "9:00 PM")
     assert lu.sources == SOURCES
 
-
-def test_parse_partial_answer_keeps_only_what_was_given() -> None:
+    # parse_partial_answer_keeps_only_what_was_given:
     lu = parse_lineup(GroundedAnswer(PARTIAL), headliner="Zed Fox", venue="The Quarry")
     assert lu.status == "found"
     assert lu.openers == ()
     assert (lu.doors, lu.opener_time, lu.headliner_time) == ("7:30 PM", None, None)
 
-
-@pytest.mark.parametrize(
-    "text",
-    [
+    # garbage_or_empty_answers_are_none_never_an_error:
+    for text in [
         "",
         "I could not find anything about this show.",
         '```json\n{"openers": [], "doors": null, "opener_on_stage": null, "headliner_on_stage": null}\n```',
         '{"openers": "Zork"}',
         "[1, 2, 3]",
         '{"openers": ["Zed Fox", "The Quarry", "DICE", "TBA", ""], "doors": "soon"}',
-    ],
-)
-def test_garbage_or_empty_answers_are_none_never_an_error(text: str) -> None:
-    lu = parse_lineup(GroundedAnswer(text, SOURCES), headliner="Zed Fox", venue="The Quarry, San Francisco")
-    assert lu == Lineup("none", sources=SOURCES)
+    ]:
+        lu = parse_lineup(GroundedAnswer(text, SOURCES), headliner="Zed Fox", venue="The Quarry, San Francisco")
+        assert lu == Lineup("none", sources=SOURCES)
 
-
-def test_code_fences_and_prose_around_the_object_are_ignored() -> None:
+    # code_fences_and_prose_around_the_object_are_ignored:
     text = "Here is what I found:\n```json\n" + FULL + "\n```\nSources: the venue page."
     lu = parse_lineup(GroundedAnswer(text), headliner="Zed Fox", venue="The Quarry")
     assert lu.status == "found" and [o.name for o in lu.openers] == ["Zork", "Blorp"]
 
-
-def test_validator_drops_headliner_venue_platform_and_duplicates_and_caps_at_three() -> None:
+    # validator_drops_headliner_venue_platform_and_duplicates_and_caps_at_three:
     raw = {"openers": ["zed fox", "The Quarry", "Ticketweb", "Zork", "ZORK", "Blorp", "Quux", "Fifth"]}
     lu = parse_lineup(GroundedAnswer(json.dumps(raw)), headliner="Zed Fox", venue="The Quarry, San Francisco")
     assert [o.name for o in lu.openers] == ["Zork", "Blorp", "Quux"]
 
-
-def test_expected_line_only_from_the_times_given() -> None:
+    # expected_line_only_from_the_times_given:
     full = Lineup("found", openers=(Opener("Zork"),), doors="7:00 PM", opener_time="8:00 PM", headliner_time="9:00 PM")
     assert expected_line(full, "Zed Fox") == "Expected: doors 7:00 PM, Zork 8:00 PM, Zed Fox 9:00 PM"
     assert expected_line(Lineup("found", doors="7:00 PM"), "Zed Fox") == "Expected: doors 7:00 PM"
     assert expected_line(Lineup("found", opener_time="8:00 PM"), "Zed Fox") == "Expected: opener 8:00 PM"
     assert expected_line(Lineup("found", openers=(Opener("Zork"),)), "Zed Fox") is None
 
-
-def test_opener_setlist_line_one_or_several() -> None:
+    # opener_setlist_line_one_or_several:
     assert opener_setlist_line(Lineup("found", openers=(Opener("Zork", PAGE),))) == f"Opener setlist (recent): {PAGE}"
     two = Lineup("found", openers=(Opener("Zork", PAGE), Opener("Blorp", None)))
     assert opener_setlist_line(two) == f"Opener setlist (recent): Zork {PAGE}"
     assert opener_setlist_line(Lineup("found", openers=(Opener("Zork"),))) is None
 
-
-def test_lineup_lines_with_and_without_known_openers() -> None:
+    # lineup_lines_with_and_without_known_openers:
     lu = Lineup("found", openers=(Opener("Zork", PAGE),), doors="7:00 PM", headliner_time="9:00 PM")
     assert lineup_lines(lu, "Zed Fox", openers_known=False) == [
         "Headliner: Zed Fox",
@@ -168,8 +150,7 @@ def test_lineup_lines_with_and_without_known_openers() -> None:
     assert lineup_lines(Lineup("none"), "Zed Fox", openers_known=False) == []
     assert lineup_lines(Lineup("unavailable"), "Zed Fox", openers_known=False) == []
 
-
-def test_merge_lineup_lines_appends_only_the_keys_the_description_lacks() -> None:
+    # merge_lineup_lines_appends_only_the_keys_the_description_lacks:
     old = "Doors: 7:30 PM\nHeadliner: Zed Fox\nOpener: Zork.\nTeaser playlist: https://open.spotify.com/playlist/pl1"
     merged, added = merge_lineup_lines(old, ["Headliner: Zed Fox", "Opener: Zork", "Expected: doors 7:30 PM"])
     assert added == ["Expected: doors 7:30 PM"]
@@ -180,8 +161,7 @@ def test_merge_lineup_lines_appends_only_the_keys_the_description_lacks() -> Non
     )
     assert merge_lineup_lines(old, []) == (old.splitlines(), [])
 
-
-def test_latest_setlist_url_prefers_a_page_with_songs() -> None:
+    # latest_setlist_url_prefers_a_page_with_songs:
     empty = {"id": "e", "url": "https://www.setlist.fm/setlist/zork/2026/empty-1.html", "sets": {"set": []}}
     full = {"id": "f", "url": PAGE, "sets": {"set": [{"song": [{"name": "A"}]}]}}
     assert latest_setlist_url({"setlist": [empty, full]}) == PAGE

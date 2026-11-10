@@ -1003,6 +1003,12 @@ with exact reply goldens and recorded adapter calls; adapters on a `FakeRunner`/
 smoke test; a docs test. No test touches the network, the keychain, `~`, gws or openclaw; `conftest` points every
 `CONCERT_MCP_*_DIR` at `tmp_path` and sets `CONCERT_MCP_SEND=0` unless the test is about delivery.
 
+Size (2026-11-10): every line and every branch is covered, and CI fails below 100% (`[tool.coverage.report]`
+`fail_under`), with as few tests as reach that: a pure text module keeps its cases in one table-driven test (a failure
+names the case in its comment line), and a flow or adapter file keeps a test only when it reaches a line or a branch
+the others do not, or pins a golden. A new branch needs a new case, not a new file; a `pragma: no cover` needs a
+comment saying why in the source.
+
 `tests/fakes.py` (scaffold): `FakeCalendar(calendars, events, fail=None)` with `calls`, `inserted`, `patched`,
 `deleted`, `seed_event()` (htmlLink `https://www.google.com/calendar/event?eid=<b64>`); `FakeSpotify(artists, liked,
 playlists, items, fail=None)` with `created`, `added`, `renamed`, `unfollowed`; `FakeSetlistFm(responses, fail=False)`

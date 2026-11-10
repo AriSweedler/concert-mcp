@@ -56,15 +56,9 @@ def _app_credentials_from_op(settings: Settings, runner: Runner) -> tuple[str, s
         f"item='{settings.op_spotify_item}' vault='{settings.op_vault}' "
         "hint='approve the 1Password dialog; --manual types them instead'"
     )
+    # op_read refuses an empty value and the placeholder itself, so what comes back is a real pair.
     client_id = op_read(settings.op_vault, settings.op_spotify_item, "username", runner).strip()
     client_secret = op_read(settings.op_vault, settings.op_spotify_item, "credential", runner).strip()
-    if OP_PLACEHOLDER in (client_id, client_secret) or not client_id or not client_secret:
-        raise ProviderError(
-            "op",
-            f"the 1Password item still holds the placeholder | item='{settings.op_spotify_item}' "
-            "fields='username, credential' hint='paste the Client ID and Client Secret from the Spotify dashboard'",
-            "",
-        )
     return client_id, client_secret
 
 

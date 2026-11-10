@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from concert_mcp.text.titles import (
     SplitTitle,
     clean_param,
@@ -17,9 +15,9 @@ from concert_mcp.text.titles import (
 )
 
 
-@pytest.mark.parametrize(
-    ("title", "expected"),
-    [
+def test_titles() -> None:
+    # split_openers:
+    for title, expected in [
         ("Zed Fox with special guest Zork.", SplitTitle("Zed Fox", ("Zork.",))),
         ("Zed Fox with special guests Zork. and Quux", SplitTitle("Zed Fox", ("Zork.", "Quux"))),
         ("Ab w/ B & C", SplitTitle("Ab", ("B", "C"))),
@@ -30,30 +28,24 @@ from concert_mcp.text.titles import (
         ("Artist with support from X, Y and Z", SplitTitle("Artist", ("X", "Y", "Z"))),
         ("Artist with A / B", SplitTitle("Artist", ("A", "B"))),
         ("Zed Fox", SplitTitle("Zed Fox", ())),
-    ],
-)
-def test_split_openers(title: str, expected: SplitTitle) -> None:
-    assert split_openers(title) == expected
+    ]:
+        assert split_openers(title) == expected
 
-
-def test_split_openers_keeps_a_one_letter_head_whole() -> None:
+    # split_openers_keeps_a_one_letter_head_whole:
     assert split_openers("A w/ B") == SplitTitle("A w/ B", ())
 
-
-def test_split_opener_list() -> None:
+    # split_opener_list:
     assert split_opener_list("X, Y and Z & W / V") == ["X", "Y", "Z", "W", "V"]
     assert split_opener_list("  ,  ") == []
     assert split_opener_list("Band of Horses") == ["Band of Horses"]
 
-
-def test_strip_concert_prefix() -> None:
+    # strip_concert_prefix:
     assert strip_concert_prefix("[Concert] X") == "X"
     assert strip_concert_prefix("[concert]X") == "X"
     assert strip_concert_prefix("X [Concert]") == "X [Concert]"
     assert strip_concert_prefix("[Dinner] ZZZ Bistro") == "[Dinner] ZZZ Bistro"
 
-
-def test_title_matches() -> None:
+    # title_matches:
     assert title_matches("zed fox", "ZED FOX & Friends")
     assert title_matches("zed a fox", "Zed Fox")  # single-letter words ignored
     assert title_matches("Zed Fox and Friends", "Zed Fox & Friends")  # & vs and
@@ -63,31 +55,24 @@ def test_title_matches() -> None:
     assert not title_matches("Zed Fox", "Zork.")
     assert not title_matches("Zed Fox Zork", "Zed Fox")
 
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
+    # normalize_name:
+    for raw, expected in [
         ("Zed Fox & Friends", "zed fox and friends"),
         ("  ZED   FOX ", "zed fox"),
         ("A&B", "aandb"),
         (None, ""),
         ("", ""),
         (42, "42"),
-    ],
-)
-def test_normalize_name(raw: object, expected: str) -> None:
-    assert normalize_name(raw) == expected
+    ]:
+        assert normalize_name(raw) == expected
 
-
-def test_squash() -> None:
+    # squash:
     assert squash("  Zed \n  Fox ") == "Zed Fox"
     assert squash(None) == ""
     assert squash(7) == "7"
 
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
+    # clean_param:
+    for raw, expected in [
         (None, ""),
         ("", ""),
         ("null", ""),
@@ -102,15 +87,11 @@ def test_squash() -> None:
         ('"Zed" Fox', '"Zed" Fox'),  # quotes that do not wrap the whole value stay
         ('"', '"'),
         ("2026-11-14 8:30 PM", "2026-11-14 8:30 PM"),
-    ],
-)
-def test_clean_param(raw: object, expected: str) -> None:
-    assert clean_param(raw) == expected
+    ]:
+        assert clean_param(raw) == expected
 
-
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
+    # looks_like_pick:
+    for raw, expected in [
         ("2", True),
         ("2.", True),
         (" 12 ", True),
@@ -119,7 +100,5 @@ def test_clean_param(raw: object, expected: str) -> None:
         ("", False),
         ("2 please", False),
         ("2026-11-14", False),
-    ],
-)
-def test_looks_like_pick(raw: str, expected: bool) -> None:
-    assert looks_like_pick(raw) is expected
+    ]:
+        assert looks_like_pick(raw) is expected

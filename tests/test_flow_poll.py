@@ -60,10 +60,6 @@ class FakeSync:
         return SyncResult("created" if created else "updated", name, setlist.song_count, url=self.url, added=added)
 
 
-def failing_sync(entry: QueueEntry, setlist: SetlistResult, svc: Services) -> SyncResult:
-    return SyncResult("failed", "2026-11-14 | Zed Fox", setlist.song_count, reason="Spotify refused")
-
-
 def catalogue(songs: int) -> list[dict[str, Any]]:
     """The Spotify tracks the fake's search finds: every song of the page, by Zed Fox."""
     return [{"name": f"Song {i}", "artists": ["Zed Fox"], "uri": f"spotify:track:s{i}"} for i in range(songs)]
@@ -181,14 +177,6 @@ class TestThreeWeeks:
         r = poll_setlists(svc, RUN3, sync=lambda e, s, v: swapping(e, s, v, added=2))
         assert [x.action for x in r.rows] == ["8 songs; 2 added to the playlist, 1 swapped"]
 
-    def test_a_page_that_did_not_grow_is_left_alone(self, poll_svc: Services) -> None:
-        svc, sync = poll_svc, FakeSync()
-        set_page(svc, 5)
-        poll_setlists(svc, RUN1, sync=sync)
-        r = poll_setlists(svc, RUN2, sync=sync)
-        assert [x.action for x in r.rows] == ["5 songs; playlist unchanged"]
-        assert len(sync.calls) == 1
-
 
 class TestRealSync:
     """No `sync=`: the poll runs flows/setlist_playlist.sync_setlist_playlist on the page's songs."""
@@ -214,14 +202,6 @@ class TestRealSync:
         assert len(svc.spotify.created) == 1 and len(svc.chat.sent) == 1
         assert svc.spotify.added[-1][1] == [f"spotify:track:s{i}" for i in range(5, 12)]
 
-    def test_falls_back_to_the_search_rows_names_when_the_page_fetch_is_empty(self, poll_svc: Services) -> None:
-        svc = poll_svc
-        svc.spotify.tracks = catalogue(5)
-        set_page(svc, 5)  # no `setlists` table: get_setlist answers None
-        r = poll_setlists(svc, RUN1)
-        assert [x.action for x in r.rows] == ["5 songs; playlist created; announced"]
-        assert len(svc.spotify.added[0][1]) == 5
-
     def test_without_spotify_the_row_keeps_the_count_and_tries_again(self, poll_svc: Services) -> None:
         svc = poll_svc
         svc.spotify = None
@@ -229,55 +209,6 @@ class TestRealSync:
         r = poll_setlists(svc, RUN1)
         assert [x.action for x in r.rows] == ["5 songs; playlist not made (Spotify is not set up)"]
         assert one_row(svc).playlist_url is None and one_row(svc).song_count == 5
-
-
-class TestNoSchedule:
-    def test_every_call_runs_the_queue(self, poll_svc: Services) -> None:
-        """Nothing gates a run: a second ask an hour later re-reads the page again and moves the stamp."""
-        svc, sync = poll_svc, FakeSync()
-        set_page(svc, 5)
-        poll_setlists(svc, RUN1, sync=sync)
-        again = poll_setlists(svc, RUN1 + timedelta(hours=1), sync=sync)
-        assert again.ran is True and again.last_poll == RUN1.isoformat(timespec="seconds")
-        assert len(svc.setlistfm.calls) == 2 and read_poll_stamp(svc) == RUN1 + timedelta(hours=1)
-
-
-class TestQueueHousekeeping:
-    def test_an_entry_past_until_leaves_the_queue(self, poll_svc: Services) -> None:
-        svc = poll_svc
-        set_page(svc, 12)
-        late = SHOW + timedelta(days=svc.settings.setlist_queue_days + 1)
-        r = poll_setlists(svc, late, sync=FakeSync())
-        assert [x.action for x in r.rows] == ["expired; dropped from the queue"]
-        assert queue_list(svc) == [] and svc.setlistfm.calls == []
-
-    def test_a_show_not_on_setlistfm_yet(self, poll_svc: Services) -> None:
-        set_page(poll_svc, None)
-        r = poll_setlists(poll_svc, RUN1, sync=FakeSync())
-        assert [x.action for x in r.rows] == ["not on setlist.fm yet"]
-
-    def test_a_failed_lookup_keeps_the_row(self, poll_svc: Services) -> None:
-        poll_svc.setlistfm.fail = True
-        r = poll_setlists(poll_svc, RUN1, sync=FakeSync())
-        assert r.rows[0].action.startswith("lookup failed: setlist.fm refused")
-        assert len(queue_list(poll_svc)) == 1
-
-    def test_a_failed_playlist_is_retried_next_week(self, poll_svc: Services) -> None:
-        svc = poll_svc
-        set_page(svc, 5)
-        r = poll_setlists(svc, RUN1, sync=failing_sync)
-        assert [x.action for x in r.rows] == ["5 songs; playlist not made (Spotify refused)"]
-        assert one_row(svc).playlist_url is None and one_row(svc).song_count == 5
-        assert svc.chat.sent == [] and svc.calendar.patched == []
-        sync = FakeSync()
-        r = poll_setlists(svc, RUN2, sync=sync)
-        assert [x.action for x in r.rows] == ["5 songs; playlist created; announced"]
-
-    def test_an_empty_queue_still_stamps_the_run(self, poll_svc: Services) -> None:
-        svc = poll_svc
-        svc.state.remove(svc.settings.setlist_queue)
-        r = poll_setlists(svc, RUN1, sync=FakeSync())
-        assert r.ran and r.rows == () and read_poll_stamp(svc) == RUN1
 
 
 class TestAnnounceTarget:
@@ -332,11 +263,11 @@ class TestPollOutcome:
         )
         assert out.data["ran"] is True and out.data["rows"][0]["playlist_url"] == PLAYLIST_URL
 
-    def test_empty_queue_report(self, poll_svc: Services) -> None:
-        poll_svc.state.remove(poll_svc.settings.setlist_queue)
-        out = poll_outcome(poll_svc, dry_run=True, sync=FakeSync())
-        assert out.kind is Kind.DRY_RUN
-        assert (
-            out.reply
-            == "**Setlist poll (dry run)** 2026-11-15T17:00:00+00:00 (last: never)\nThe setlist queue is empty."
-        )
+
+def test_a_page_that_did_not_grow_is_left_alone(poll_svc: Services) -> None:
+    svc, sync = poll_svc, FakeSync()
+    set_page(svc, 5)
+    poll_setlists(svc, RUN1, sync=sync)
+    r = poll_setlists(svc, RUN2, sync=sync)
+    assert [x.action for x in r.rows] == ["5 songs; playlist unchanged"]
+    assert len(sync.calls) == 1

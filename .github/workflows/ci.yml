@@ -25,7 +25,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --locked --dev --python ${{ matrix.python }}
-      - run: uv run pytest -q
+      # pyproject's [tool.coverage.report] fail_under = 100: every line and branch, or the job fails
+      - run: uv run pytest -q --cov=concert_mcp
 
   bare-healthcheck:
     runs-on: ubuntu-latest

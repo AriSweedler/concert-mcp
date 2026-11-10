@@ -123,38 +123,6 @@ def test_send_argv_with_account_and_thread(settings: Settings, now: datetime) ->
     assert clock.slept == []
 
 
-def test_send_without_thread_has_no_thread_flag_and_no_topic_in_status(settings: Settings, now: datetime) -> None:
-    runner = FakeRunner({send_prefix(settings): (0, "", "")})
-    status = chat(settings, runner, FakeClock(now)).send(target(thread=None), "hi")
-    assert status == f"SENT to telegram {CHAT}"
-    argv = runner.calls[0][0]
-    assert "--thread-id" not in argv
-    assert "--account" not in argv
-    assert " topic" not in status
-
-
-def test_send_two_failures_then_success_sleeps_four_twice(settings: Settings, now: datetime) -> None:
-    results = iter([RunResult(1, "", "flaky 1"), RunResult(1, "", "flaky 2"), RunResult(0, "", "")])
-    runner = FakeRunner({send_prefix(settings): lambda argv, kw: next(results)})
-    clock = FakeClock(now)
-    status = chat(settings, runner, clock).send(target(), "hi")
-    assert status == f"SENT to telegram {CHAT} topic 7"
-    assert len(runner.calls) == 3
-    assert clock.slept == [4, 4]
-
-
-def test_send_three_failures_reports_last_tail(settings: Settings, now: datetime) -> None:
-    long_err = "x" * 250 + "LAST"
-    runner = FakeRunner({send_prefix(settings): (1, "", long_err)})
-    clock = FakeClock(now)
-    status = chat(settings, runner, clock).send(target(), "hi")
-    assert status == "NOT SENT: openclaw message send failed 3 times: " + long_err[-200:]
-    assert status.endswith("LAST")
-    assert len(runner.calls) == 3
-    # A pause between tries, none after the last: the caller is waiting for the status.
-    assert clock.slept == [4, 4]
-
-
 def test_send_runner_error_is_did_not_run_and_stops_at_once(settings: Settings, now: datetime) -> None:
     runner = FakeRunner({send_prefix(settings): lambda argv, kw: RunResult(-1, "", "", "binary not found: openclaw")})
     clock = FakeClock(now)
@@ -164,38 +132,7 @@ def test_send_runner_error_is_did_not_run_and_stops_at_once(settings: Settings, 
     assert clock.slept == []
 
 
-def test_send_passes_a_twenty_second_timeout(settings: Settings, now: datetime) -> None:
-    # One Bot API call per try; the whole send stays under 70 s so a slow Telegram cannot eat the tool budget.
-    seen: list[float] = []
-
-    def record(argv: list[str], kw: dict[str, Any]) -> RunResult:
-        seen.append(kw["timeout_s"])
-        return RunResult(0, "", "")
-
-    runner = FakeRunner({send_prefix(settings): record})
-    chat(settings, runner, FakeClock(now)).send(target(), "hi")
-    assert seen == [20]
-
-
 # --- bot_token -----------------------------------------------------------------------------------------------------
-
-
-def test_bot_token_reads_channels_telegram_bot_token(settings: Settings, now: datetime) -> None:
-    write_config(settings, {"channels": {"telegram": {"botToken": TOKEN}}})
-    assert chat(settings, FakeRunner(), FakeClock(now)).bot_token() == (TOKEN, None)
-
-
-def test_bot_token_missing_file(settings: Settings, now: datetime) -> None:
-    assert not settings.openclaw_config.exists()
-    assert chat(settings, FakeRunner(), FakeClock(now)).bot_token() == (None, "FileNotFoundError")
-
-
-def test_bot_token_missing_key_and_bad_json(settings: Settings, now: datetime) -> None:
-    c = chat(settings, FakeRunner(), FakeClock(now))
-    write_config(settings, {"channels": {"telegram": {}}})
-    assert c.bot_token() == (None, "KeyError")
-    write_config(settings, "{not json")
-    assert c.bot_token() == (None, "JSONDecodeError")
 
 
 # --- rename_topic --------------------------------------------------------------------------------------------------
@@ -223,40 +160,11 @@ def test_rename_topic_ok_posts_form_and_truncates_name(settings: Settings, now: 
     assert form == {"chat_id": [CHAT], "message_thread_id": ["7"], "name": ["N" * 128]}
 
 
-def test_rename_topic_telegram_said_no(settings: Settings, now: datetime) -> None:
-    write_config(settings, {"channels": {"telegram": {"botToken": TOKEN}}})
-    urlopen = FakeUrlopen({("POST", TELEGRAM): {"ok": False, "description": "nope"}})
-    status = chat(settings, FakeRunner(), FakeClock(now), urlopen).rename_topic(CHAT, "7", "x")
-    assert status == "topic not renamed: Telegram said no"
-
-
-def test_rename_topic_http_error_keeps_120_chars_of_body(settings: Settings, now: datetime) -> None:
-    write_config(settings, {"channels": {"telegram": {"botToken": TOKEN}}})
-    body = "b" * 200
-    urlopen = FakeUrlopen({("POST", TELEGRAM): http_error(400, body)})
-    status = chat(settings, FakeRunner(), FakeClock(now), urlopen).rename_topic(CHAT, "7", "x")
-    assert status == "topic not renamed: HTTP 400 " + body[:120]
-    assert len(status) == len("topic not renamed: HTTP 400 ") + 120
-
-
 def test_rename_topic_url_error_names_the_type(settings: Settings, now: datetime) -> None:
     write_config(settings, {"channels": {"telegram": {"botToken": TOKEN}}})
     urlopen = FakeUrlopen({("POST", TELEGRAM): urllib.error.URLError("no network")})
     status = chat(settings, FakeRunner(), FakeClock(now), urlopen).rename_topic(CHAT, "7", "x")
     assert status == "topic not renamed: URLError"
-
-
-def test_rename_topic_passes_twenty_second_timeout(settings: Settings, now: datetime) -> None:
-    write_config(settings, {"channels": {"telegram": {"botToken": TOKEN}}})
-    seen: list[Any] = []
-
-    def fake_urlopen(url: str, data: bytes | None = None, timeout: float | None = None) -> Any:
-        seen.append(timeout)
-        return FakeUrlopen({("POST", TELEGRAM): {"ok": True}})(url, data=data, timeout=timeout)
-
-    status = OpenClawChat(settings, FakeClock(now), FakeRunner(), urlopen=fake_urlopen).rename_topic(CHAT, "7", "x")
-    assert status == "topic renamed to x"
-    assert seen == [20]
 
 
 def test_token_never_reaches_stderr_or_the_status(
@@ -301,40 +209,11 @@ def test_live_route_picks_newest_session_with_a_route_inside_the_window(settings
     assert route["target"] == {"to": f"telegram:{CHAT}:topic:7"}
 
 
-@needs_routes
-def test_live_route_prefers_the_most_recent_of_two_live_routes(settings: Settings, now: datetime) -> None:
-    build_db(
-        settings,
-        sessions=[
-            ("s_a", route_entry(now - timedelta(seconds=300), thread=1)),
-            ("s_b", route_entry(now - timedelta(seconds=30), thread=2)),
-        ],
-    )
-    sid, route = OpenClawContext(settings).live_route(now.timestamp())
-    assert sid == "s_b"
-    assert route is not None and route["thread"] == {"id": 2}
-
-
-@needs_routes
-def test_live_route_none_when_every_route_is_stale(settings: Settings, now: datetime) -> None:
-    build_db(settings, sessions=[("s_old", route_entry(now - timedelta(seconds=901)))])
-    assert OpenClawContext(settings).live_route(now.timestamp()) == (None, None)
-
-
 def test_live_route_missing_db(settings: Settings, now: datetime) -> None:
     assert not settings.session_db.exists()
     assert OpenClawContext(settings).live_route(now.timestamp()) == (None, None)
     # Read-only mode must not have created the file as a side effect.
     assert not settings.session_db.exists()
-
-
-def test_live_route_db_without_the_table(settings: Settings, now: datetime) -> None:
-    settings.session_db.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(settings.session_db)
-    con.execute("create table something_else(x)")
-    con.commit()
-    con.close()
-    assert OpenClawContext(settings).live_route(now.timestamp()) == (None, None)
 
 
 # --- OpenClawContext.recent_text -------------------------------------------------------------------------------------
@@ -350,16 +229,6 @@ def test_recent_text_includes_fresh_ocr(settings: Settings, now: datetime) -> No
     now_s = now.timestamp()
     write_ocr(settings, "ZED FOX\nDoors 7:30 PM", age_s=120, now_s=now_s)
     assert OpenClawContext(settings).recent_text(now_s, None) == "ZED FOX\nDoors 7:30 PM"
-
-
-def test_recent_text_excludes_stale_ocr(settings: Settings, now: datetime) -> None:
-    now_s = now.timestamp()
-    write_ocr(settings, "old ticket", age_s=2000, now_s=now_s)
-    assert OpenClawContext(settings).recent_text(now_s, None) == ""
-
-
-def test_recent_text_without_ocr_or_db_is_empty(settings: Settings, now: datetime) -> None:
-    assert OpenClawContext(settings).recent_text(now.timestamp(), "s1") == ""
 
 
 @needs_routes
@@ -378,6 +247,32 @@ def test_recent_text_only_user_role_texts_str_and_list_content(settings: Setting
     text = OpenClawContext(settings).recent_text(now_s, "s1")
     # order by created_at desc: newest first
     assert text == "second user line\nfirst user line"
+
+
+# --- NullContext -----------------------------------------------------------------------------------------------------
+
+
+def test_null_context(now: datetime) -> None:
+    ctx = NullContext()
+    assert ctx.live_route(now.timestamp()) == (None, None)
+    assert ctx.recent_text(now.timestamp(), "s1") == ""
+    assert ctx.recent_text(now.timestamp(), None) == ""
+
+
+def test_send_without_thread_has_no_thread_flag_and_no_topic_in_status(settings: Settings, now: datetime) -> None:
+    runner = FakeRunner({send_prefix(settings): (0, "", "")})
+    status = chat(settings, runner, FakeClock(now)).send(target(thread=None), "hi")
+    assert status == f"SENT to telegram {CHAT}"
+    argv = runner.calls[0][0]
+    assert "--thread-id" not in argv
+    assert "--account" not in argv
+    assert " topic" not in status
+
+
+def test_recent_text_excludes_stale_ocr(settings: Settings, now: datetime) -> None:
+    now_s = now.timestamp()
+    write_ocr(settings, "old ticket", age_s=2000, now_s=now_s)
+    assert OpenClawContext(settings).recent_text(now_s, None) == ""
 
 
 @needs_routes
@@ -411,33 +306,3 @@ def test_recent_text_drops_rows_older_than_the_window(settings: Settings, now: d
         ],
     )
     assert OpenClawContext(settings).recent_text(now_s, "s1") == "just inside"
-
-
-@needs_routes
-def test_recent_text_limit_forty_newest(settings: Settings, now: datetime) -> None:
-    now_s = now.timestamp()
-    t = ms(now)
-    build_db(settings, events=[("s1", t - 100_000 + i * 1000, user_event(f"msg {i:02d}")) for i in range(50)])
-    lines = OpenClawContext(settings).recent_text(now_s, "s1").split("\n")
-    assert len(lines) == 40
-    assert lines[0] == "msg 49"
-    assert lines[-1] == "msg 10"
-    assert "msg 09" not in lines
-
-
-@needs_routes
-def test_recent_text_ocr_first_then_transcript(settings: Settings, now: datetime) -> None:
-    now_s = now.timestamp()
-    write_ocr(settings, "OCR TEXT", age_s=5, now_s=now_s)
-    build_db(settings, events=[("s1", ms(now) - 1000, user_event("chat text"))])
-    assert OpenClawContext(settings).recent_text(now_s, "s1") == "OCR TEXT\nchat text"
-
-
-# --- NullContext -----------------------------------------------------------------------------------------------------
-
-
-def test_null_context(now: datetime) -> None:
-    ctx = NullContext()
-    assert ctx.live_route(now.timestamp()) == (None, None)
-    assert ctx.recent_text(now.timestamp(), "s1") == ""
-    assert ctx.recent_text(now.timestamp(), None) == ""

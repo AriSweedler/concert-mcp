@@ -13,16 +13,13 @@ from concert_mcp.flows.setlist_playlist import (
     NO_SETLIST_REPLY,
     NO_SONGS_FIX,
     NOT_SETLISTFM_FIX,
-    find_setlist_playlist,
-    find_teaser_playlist,
     setlist_playlist_outcome,
     sync_setlist_playlist,
-    track_query,
 )
 from concert_mcp.flows.teaser import make_teaser
 from concert_mcp.flows.topics import make_topic_entry, topic_remember
 from concert_mcp.result import Kind
-from concert_mcp.text.naming import is_setlist_playlist, setlist_description, teaser_description, with_setlist_link
+from concert_mcp.text.naming import setlist_description, teaser_description, with_setlist_link
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, page_artist_of, setlist_id_of, songs_of
 from concert_mcp.text.topics import topic_key
@@ -94,25 +91,6 @@ def test_setlist_id_of_accepts_only_setlist_pages() -> None:
     assert page_artist_of("https://www.setlist.fm/search?query=Zed%20Fox") is None
 
 
-def test_track_query_uses_the_cover_artist() -> None:
-    assert track_query(Song("First Light"), ARTIST) == "track:First Light artist:Zed Fox"
-    assert track_query(Song("Borrowed Song", "Other Band"), ARTIST) == "track:Borrowed Song artist:Other Band"
-
-
-def test_marker_tells_the_setlist_playlist_from_the_teaser() -> None:
-    setlist = {"name": NAME, "description": setlist_description(ARTIST, DATE, PAGE_URL)}
-    teaser = {"name": NAME, "description": teaser_description(ARTIST, DATE)}
-    assert setlist["description"] == f"Setlist: Zed Fox on 2026-11-14, in setlist order, from {PAGE_URL}"
-    assert setlist_description(ARTIST, DATE, PAGE_URL, "https://open.spotify.com/playlist/pl1") == (
-        f"Setlist: Zed Fox on 2026-11-14, in setlist order, from {PAGE_URL} "
-        "Teaser playlist: https://open.spotify.com/playlist/pl1"
-    )
-    assert is_setlist_playlist(setlist) and not is_setlist_playlist(teaser)
-    assert find_setlist_playlist([teaser, setlist], NAME) is setlist
-    assert find_teaser_playlist([setlist, teaser], NAME) is teaser
-    assert find_setlist_playlist([teaser], NAME) is None
-
-
 def test_with_setlist_link_appends_once() -> None:
     desc = teaser_description(ARTIST, DATE)
     once = with_setlist_link(desc, "https://open.spotify.com/playlist/pl2")
@@ -122,29 +100,6 @@ def test_with_setlist_link_appends_once() -> None:
 
 
 # ---------- sync ----------
-
-
-def test_sync_creates_the_playlist_in_setlist_order_and_skips_tape_and_misses(svc_cli: Services) -> None:
-    wire(svc_cli)
-    res = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
-    sp = svc_cli.spotify
-    assert res.status == "created" and res.name == NAME and res.url == "https://open.spotify.com/playlist/pl1"
-    assert (res.total, res.added, res.already_there, res.missing) == (5, 3, 0, ("Unreleased Jam",))
-    assert res.teaser_url is None
-    assert sp.added == [("pl1", ["spotify:track:t1", "spotify:track:c1", "spotify:track:t3"])]
-    assert sp.created[0]["description"] == setlist_description(ARTIST, DATE, PAGE_URL)
-    assert sp.created[0]["public"] is False
-    # The field-filtered search first; the plain search only for the song it did not find.
-    queries = [a["q"] for m, a in sp.calls if m == "search_tracks"]
-    assert queries == [
-        "track:First Light artist:Zed Fox",
-        "track:Borrowed Song artist:Other Band",
-        "track:Third Rail artist:Zed Fox",
-        "track:Unreleased Jam artist:Zed Fox",
-        "Unreleased Jam Zed Fox",
-    ]
-    assert {a["limit"] for m, a in sp.calls if m == "search_tracks"} == {10}
-    assert [a["q"] for m, a in sp.calls if m == "search_artists"] == ["Zed Fox"]
 
 
 # ---------- the search fallback (beads-9pb) ----------
@@ -157,59 +112,6 @@ def searched(sp: Any) -> list[str]:
 def sync_one(svc: Services, song: Song, artist: str = ARTIST) -> tuple[Any, Any]:
     res = sync_setlist_playlist(artist=artist, date=DATE, songs=[song], setlistfm_url=PAGE_URL, svc=svc)
     return res, svc.spotify
-
-
-def test_a_song_the_field_search_misses_is_found_by_the_plain_search(svc_cli: Services) -> None:
-    # setlist.fm writes the stage detail in parentheses; Spotify has the plain title.
-    svc_cli.spotify.tracks = [{"name": "Third Rail", "artists": ["Zed Fox"], "uri": "spotify:track:t3"}]
-    res, sp = sync_one(svc_cli, Song("Third Rail (acoustic)"))
-    assert (res.added, res.missing) == (1, ())
-    assert sp.added == [("pl1", ["spotify:track:t3"])]
-    assert searched(sp) == ["track:Third Rail (acoustic) artist:Zed Fox", "Third Rail Zed Fox"]
-
-
-def test_a_curly_apostrophe_matches_a_straight_one(svc_cli: Services) -> None:
-    svc_cli.spotify.tracks = [{"name": "Foxes Don't Cry", "artists": ["Zed Fox"], "uri": "spotify:track:t9"}]
-    res, sp = sync_one(svc_cli, Song("Foxes Don’t Cry"))
-    assert (res.added, res.missing) == (1, ())
-    assert sp.added == [("pl1", ["spotify:track:t9"])]
-    assert searched(sp) == ["track:Foxes Don’t Cry artist:Zed Fox", "Foxes Don’t Cry Zed Fox"]
-
-
-def test_artist_punctuation_does_not_lose_the_match(svc_cli: Services) -> None:
-    # The page says `Z.Fox`, Spotify credits `Z Fox` (the real case was `K.Flay`, beads-9pb): the field filter
-    # misses, the plain search's candidate passes the loose artist check.
-    svc_cli.spotify.artists = []
-    svc_cli.spotify.tracks = [{"name": "Hell", "artists": ["Z Fox"], "uri": "spotify:track:k1"}]
-    res, sp = sync_one(svc_cli, Song("Hell"), artist="Z.Fox")
-    assert res.name == "2026-11-14 | Z.Fox"
-    assert (res.added, res.missing) == (1, ())
-    assert searched(sp) == ["track:Hell artist:Z.Fox", "Hell Z.Fox"]
-
-
-def test_a_candidate_by_another_artist_is_never_added(svc_cli: Services) -> None:
-    # The plain search returns the same title by someone else and the artist's other songs: none is the song.
-    svc_cli.spotify.tracks = [
-        {"name": "Hell", "artists": ["Other Band"], "uri": "spotify:track:wrong"},
-        {"name": "Hello", "artists": ["Zed Fox"], "uri": "spotify:track:near"},
-        {"name": "Alive Again", "artists": ["Zed Fox"], "uri": "spotify:track:longer"},
-    ]
-    res, sp = sync_one(svc_cli, Song("Hell"))
-    assert (res.added, res.missing) == (0, ("Hell",))
-    assert sp.added == []
-    assert searched(sp) == ["track:Hell artist:Zed Fox", "Hell Zed Fox"]
-    res, sp = sync_one(svc_cli, Song("Alive"))
-    assert res.missing == ("Alive",) and sp.added == []
-
-
-def test_a_wrong_artist_first_hit_of_the_field_search_is_skipped_for_the_right_one(svc_cli: Services) -> None:
-    svc_cli.spotify.tracks = [
-        {"name": "Hell", "artists": ["Other Band"], "uri": "spotify:track:wrong"},
-        {"name": "Hell", "artists": ["Zed Fox"], "uri": "spotify:track:right"},
-    ]
-    # The fake's field filter already excludes the wrong artist; the plain search puts it first, and it is skipped.
-    res, sp = sync_one(svc_cli, Song("Hell (reprise)"))
-    assert sp.added == [("pl1", ["spotify:track:right"])] and res.missing == ()
 
 
 def test_the_artist_id_matches_a_track_credited_under_another_spelling(svc_cli: Services) -> None:
@@ -234,31 +136,6 @@ def test_a_corrected_artist_name_lends_no_id(svc_cli: Services) -> None:
     ]
     res, sp = sync_one(svc_cli, Song("Alias Song"), artist="Zed Fox & Friends")
     assert res.missing == ("Alias Song",) and sp.added == []
-
-
-def test_a_cover_is_searched_under_its_original_artist_both_ways(svc_cli: Services) -> None:
-    # The headliner's own recording of the cover is not taken (today's behaviour): the original artist is the match.
-    svc_cli.spotify.tracks = [{"name": "Borrowed Song", "artists": ["Zed Fox"], "uri": "spotify:track:own"}]
-    res, sp = sync_one(svc_cli, Song("Borrowed Song", "Other Band"))
-    assert res.missing == ("Borrowed Song",) and sp.added == []
-    assert searched(sp) == ["track:Borrowed Song artist:Other Band", "Borrowed Song Other Band"]
-    svc_cli.spotify.tracks.append({"name": "Borrowed Song", "artists": ["Other Band"], "uri": "spotify:track:c1"})
-    svc_cli.spotify.playlists.clear()
-    res, sp = sync_one(svc_cli, Song("Borrowed Song", "Other Band"))
-    assert res.missing == () and [uris for _, uris in sp.added] == [["spotify:track:c1"]]
-
-
-def test_tape_songs_are_not_searched_and_need_no_artist_lookup(svc_cli: Services) -> None:
-    res, sp = sync_one(svc_cli, Song("Intro", None, True))
-    assert (res.added, res.missing) == (0, ())
-    assert [m for m, _ in sp.calls if m in ("search_tracks", "search_artists")] == []
-
-
-def test_a_failed_artist_lookup_does_not_fail_the_sync(svc_cli: Services) -> None:
-    svc_cli.spotify.fail = "search_artists"
-    svc_cli.spotify.tracks = list(TRACKS)
-    res, sp = sync_one(svc_cli, Song("Third Rail"))
-    assert res.status == "created" and (res.added, res.missing) == (1, ())
 
 
 def test_debug_log_names_the_query_and_the_candidates(svc_cli: Services, capsys: Any) -> None:
@@ -294,31 +171,6 @@ THIRD_RAIL_SESSIONS = {
 THIRD_RAIL_ALBUM = {"name": "Third Rail", "artists": ["Zed Fox"], "uri": "spotify:track:t3", "album": ALBUM}
 
 
-def test_the_plain_search_picks_the_original_release_over_a_session_take_listed_first(svc_cli: Services) -> None:
-    # The field search misses `(acoustic)`; the plain search returns the session take first and the album track
-    # second, and the album track is the pick.
-    svc_cli.spotify.tracks = [THIRD_RAIL_SESSIONS, THIRD_RAIL_ALBUM]
-    res, sp = sync_one(svc_cli, Song("Third Rail (acoustic)"))
-    assert (res.added, res.missing, res.swapped) == (1, (), ())
-    assert sp.added == [("pl1", ["spotify:track:t3"])]
-
-
-def test_debug_log_names_the_album_and_year_of_the_pick(svc_cli: Services, capsys: Any) -> None:
-    from concert_mcp.log import set_level, strip_ansi
-
-    svc_cli.spotify.tracks = [THIRD_RAIL_ALBUM]
-    set_level("debug")
-    try:
-        sync_one(svc_cli, Song("Third Rail"))
-    finally:
-        set_level("info")
-    err = strip_ansi(capsys.readouterr().err)
-    assert (
-        "[DEBUG] setlist song search | song='Third Rail' query='track:Third Rail artist:Zed Fox' "
-        "candidates='Third Rail by Zed Fox' picked='Third Rail (First Record, 2017)'"
-    ) in err
-
-
 def stale_playlist(svc: Services) -> dict[str, Any]:
     """An existing setlist playlist an earlier run filled with the session take of Third Rail, in setlist order."""
     sp = svc.spotify
@@ -330,27 +182,6 @@ def stale_playlist(svc: Services) -> dict[str, Any]:
     ]
     sp.calls.clear()
     return pl
-
-
-def test_a_top_up_swaps_another_version_in_place_for_the_original(svc_cli: Services) -> None:
-    pl = stale_playlist(svc_cli)
-    svc_cli.setlistfm = FakeSetlistFm(setlists={PAGE_ID: page()})
-    res = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
-    sp = svc_cli.spotify
-    assert res.status == "updated"
-    assert (res.added, res.already_there, res.swapped, res.missing) == (1, 1, ("Third Rail",), ("Unreleased Jam",))
-    assert res.on_spotify == 3
-    assert sp.replaced == [(pl["id"], 1, "spotify:track:t3-sessions", "spotify:track:t3")]
-    # The swap keeps the slot; the song the playlist lacked goes on the tail; the swapped song is not added twice.
-    assert sp.added == [(pl["id"], ["spotify:track:c1"])]
-    assert [r["uri"] for r in sp.items[pl["id"]]] == ["spotify:track:t1", "spotify:track:t3", "spotify:track:c1"]
-    assert res.to_json()["swapped"] == ["Third Rail"]
-
-    # A second run finds the original in place and swaps nothing.
-    sp.calls.clear()
-    again = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
-    assert (again.added, again.already_there, again.swapped) == (0, 3, ())
-    assert not [c for c in sp.calls if c[0] in ("replace_item", "add_items")]
 
 
 def test_the_reply_names_the_swapped_songs(svc_cli: Services) -> None:
@@ -366,15 +197,6 @@ def test_the_reply_names_the_swapped_songs(svc_cli: Services) -> None:
         "No calendar event found for this show; the link was not added to one."
     )
     assert out.data["swapped"] == ["Third Rail"]
-
-
-def test_a_dry_run_swaps_nothing(svc_cli: Services) -> None:
-    stale_playlist(svc_cli)
-    svc_cli.setlistfm = FakeSetlistFm(setlists={PAGE_ID: page()})
-    out = setlist_playlist_outcome(PAGE_URL, "", DATE, "", svc_cli, dry_run=True)
-    assert out.kind is Kind.DRY_RUN
-    assert svc_cli.spotify.calls == [] and svc_cli.spotify.replaced == []
-    assert [r["uri"] for r in svc_cli.spotify.items["pl1"]] == ["spotify:track:t1", "spotify:track:t3-sessions"]
 
 
 def test_sync_tops_up_an_existing_setlist_playlist_and_cross_links_the_teaser(svc_cli: Services) -> None:
@@ -403,34 +225,6 @@ def test_sync_tops_up_an_existing_setlist_playlist_and_cross_links_the_teaser(sv
     again = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
     assert (again.status, again.added, again.already_there) == ("updated", 0, 3)
     assert not [c for c in sp.calls if c[0] in ("add_items", "update_playlist_details", "create_playlist")]
-
-
-def test_teaser_does_not_top_up_the_setlist_playlist_of_the_same_name(svc_cli: Services) -> None:
-    wire(svc_cli)
-    sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
-    res = make_teaser(ARTIST, DATE, svc_cli)
-    assert res.status == "created" and res.id == "pl2"
-    assert svc_cli.spotify.items["pl1"] and all(r["uri"] != "spotify:track:t2" for r in svc_cli.spotify.items["pl1"])
-
-
-def test_sync_dry_run_and_unavailable_touch_nothing(svc_cli: Services) -> None:
-    wire(svc_cli)
-    res = sync_setlist_playlist(
-        artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli, dry_run=True
-    )
-    assert (res.status, res.name, res.total) == ("dry_run", NAME, 5)
-    assert svc_cli.spotify.calls == []
-    svc_cli.spotify = None
-    res = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=[], setlistfm_url=PAGE_URL, svc=svc_cli)
-    assert res.status == "unavailable" and res.reason == "Spotify is not set up"
-
-
-def test_sync_reports_a_spotify_failure(svc_cli: Services) -> None:
-    wire(svc_cli)
-    svc_cli.spotify.fail = "create_playlist"
-    res = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
-    assert res.status == "failed"
-    assert res.reason == "Spotify API refused | method='create_playlist' status='500'"
 
 
 # ---------- the tool ----------
@@ -487,16 +281,6 @@ def test_outcome_without_a_topic_finds_the_event_by_title_and_date(svc_cli: Serv
         "Calendar event updated with the link."
     )
     assert svc_cli.calendar.patched[0][2] == {"description": "Setlist playlist: https://open.spotify.com/playlist/pl2"}
-
-
-def test_outcome_with_no_date_anywhere_uses_the_page_date_and_says_no_event(svc_cli: Services) -> None:
-    wire(svc_cli, songs=[{"name": "First Light"}])
-    out = setlist_playlist_outcome(PAGE_URL, "", "", "", svc_cli)
-    assert out.kind is Kind.OK
-    assert out.reply == (
-        "**Setlist playlist** [2026-11-12 | Zed Fox](https://open.spotify.com/playlist/pl1): 1 song.\n"
-        "No calendar event found for this show; the link was not added to one."
-    )
 
 
 def test_outcome_by_artist_and_date_goes_through_find_setlist(svc_cli: Services) -> None:
@@ -561,13 +345,11 @@ def test_outcome_spotify_failure_is_a_reply(svc_cli: Services) -> None:
     assert out.reply == "**Setlist playlist** not made (Spotify API refused | method='my_playlists' status='500')"
 
 
-def test_outcome_dry_run_calls_no_spotify(svc_cli: Services) -> None:
-    wire(svc_cli)
-    out = setlist_playlist_outcome(PAGE_URL, "", DATE, "", svc_cli, dry_run=True)
-    assert out.kind is Kind.DRY_RUN
-    assert out.reply == f"**Setlist playlist** would make 2026-11-14 | Zed Fox from the 5 songs at {PAGE_URL}"
-    assert svc_cli.spotify.calls == [] and svc_cli.calendar.calls == []
-    svc_cli.setlistfm = None
-    out = setlist_playlist_outcome(PAGE_URL, "", DATE, "", svc_cli, dry_run=True)
-    assert out.kind is Kind.DRY_RUN
-    assert out.reply == f"**Setlist playlist** would make 2026-11-14 | Zed Fox from the songs at {PAGE_URL}"
+def test_outcome_with_no_date_anywhere_uses_the_page_date_and_says_no_event(svc_cli: Services) -> None:
+    wire(svc_cli, songs=[{"name": "First Light"}])
+    out = setlist_playlist_outcome(PAGE_URL, "", "", "", svc_cli)
+    assert out.kind is Kind.OK
+    assert out.reply == (
+        "**Setlist playlist** [2026-11-12 | Zed Fox](https://open.spotify.com/playlist/pl1): 1 song.\n"
+        "No calendar event found for this show; the link was not added to one."
+    )

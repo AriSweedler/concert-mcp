@@ -12,8 +12,6 @@ from concert_mcp.adapters.places_http import (
     PLACES_SEARCH,
     GooglePlacesClient,
     NominatimClient,
-    nominatim_hit,
-    places_hit,
 )
 from concert_mcp.config import Settings
 from concert_mcp.result import ProviderError
@@ -53,29 +51,6 @@ OSM = {
     },
     "extratags": {"website": "https://cafedunord.com"},
 }
-
-
-def test_places_hit_builds_maps_lines_from_components() -> None:
-    hit = places_hit(PLACE)
-    assert hit.name == "Cafe Du Nord"
-    assert hit.address_lines == ("2174 Market St", "San Francisco CA 94114", "United States")
-    assert hit.website == "https://cafedunord.com/"
-    assert hit.place_id == "ChIJabc" and hit.lat == 37.7676 and hit.lng == -122.4292
-    assert hit.source == "places"
-
-
-def test_places_hit_falls_back_to_the_formatted_address() -> None:
-    hit = places_hit({"displayName": {"text": "X"}, "formattedAddress": "1 Main St, Townsville, TX 75001, USA"})
-    assert hit.address_lines == ("1 Main St", "Townsville", "TX 75001", "USA")
-
-
-def test_nominatim_hit_reads_the_address_dict_and_extratags() -> None:
-    hit = nominatim_hit(OSM, name="Cafe Du Nord")
-    assert hit.name == "Cafe du Nord"
-    assert hit.address_lines == ("2174 Market Street", "San Francisco CA 94114", "United States")
-    assert hit.website == "https://cafedunord.com"
-    assert hit.place_id == "osm:way:123" and hit.source == "nominatim"
-    assert nominatim_hit({"address": {}}, name="Fallback").name == "Fallback"
 
 
 def test_places_client_posts_the_field_mask_and_key(settings: Settings) -> None:

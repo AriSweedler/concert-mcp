@@ -598,7 +598,9 @@ def _spotify_record(args: argparse.Namespace, svc: Services, settings: Settings)
         return playlists.search_artist(args.name, svc)
     if cmd == "setlist-auth":
         return auth.setlistfm_auth(settings, svc.state, manual=args.manual, force=args.force)
-    raise FixInput(f"unknown spotify command {cmd!r}", f"use one of: {', '.join(SPOTIFY_COMMANDS)}")
+    raise FixInput(  # pragma: no cover - argparse admits only the names above; kept for a caller that bypasses it
+        f"unknown spotify command {cmd!r}", f"use one of: {', '.join(SPOTIFY_COMMANDS)}"
+    )
 
 
 def _cmd_spotify(args: argparse.Namespace, settings: Settings) -> int:
@@ -678,7 +680,9 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_migrate(args, settings, env)
     if command == "spotify":
         return _cmd_spotify(args, settings)
-    raise FixInput(f"unknown subcommand {command!r}", "run `concert-mcp --help` for the subcommands")
+    raise FixInput(  # pragma: no cover - argparse admits only the subcommands above
+        f"unknown subcommand {command!r}", "run `concert-mcp --help` for the subcommands"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

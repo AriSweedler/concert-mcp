@@ -22,7 +22,12 @@ concert-mcp = "concert_mcp.cli:main"
 Repository = "https://github.com/AriSweedler/concert-mcp"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -49,3 +54,15 @@ quote-style = "double"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = ["integration: spawns the server process"]
+
+[tool.coverage.run]
+branch = true
+source = ["concert_mcp"]
+# `python -m concert_mcp` is a three-line shim that test_smoke_stdio.py runs as a real process.
+omit = ["src/concert_mcp/__main__.py"]
+
+[tool.coverage.report]
+# Every line is reached by the suite; the three `pragma: no cover` sites each say why in a comment.
+fail_under = 100
+show_missing = true
+skip_covered = true

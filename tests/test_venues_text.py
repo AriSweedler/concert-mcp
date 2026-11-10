@@ -23,21 +23,20 @@ $20.00
 """
 
 
-def test_venue_key_drops_the_article_case_and_punctuation() -> None:
+def test_venues_text() -> None:
+    # venue_key_drops_the_article_case_and_punctuation:
     assert venue_key("The Regency Ballroom") == "regency ballroom"
     assert venue_key("Cafe Du Nord") == venue_key("cafe du nord") == "cafe du nord"
     assert venue_key("Bill Graham Civic Aud.") == "bill graham civic aud"
     assert venue_key("Mezzanine & Co") == "mezzanine and co"
 
-
-def test_venue_name_of_takes_the_text_before_the_first_comma_or_newline() -> None:
+    # venue_name_of_takes_the_text_before_the_first_comma_or_newline:
     assert venue_name_of("Cafe Du Nord, 2174 Market St, San Francisco, CA 94114, USA") == "Cafe Du Nord"
     assert venue_name_of("The Regency Ballroom\n1300 Van Ness Ave") == "The Regency Ballroom"
     assert venue_name_of("  The Quarry ") == "The Quarry"
     assert venue_name_of("") == ""
 
-
-def test_maps_lines_builds_street_city_country_and_drops_blanks() -> None:
+    # maps_lines_builds_street_city_country_and_drops_blanks:
     assert maps_lines(
         street_number="2174",
         route="Market St",
@@ -49,8 +48,7 @@ def test_maps_lines_builds_street_city_country_and_drops_blanks() -> None:
     assert maps_lines(locality="Berlin", country="Germany") == ("Berlin", "Germany")
     assert maps_lines() == ()
 
-
-def test_address_from_text_reads_the_ticket_block() -> None:
+    # address_from_text_reads_the_ticket_block:
     hit = address_from_text(TICKETWEB, "Cafe Du Nord")
     assert hit == VenueHit(
         name="Cafe Du Nord",
@@ -60,14 +58,12 @@ def test_address_from_text_reads_the_ticket_block() -> None:
     assert address_from_text("Zed Fox\nThe Quarry, San Francisco\n2 tickets $42.00", "The Quarry") is None
     assert address_from_text("", "X") is None
 
-
-def test_address_from_text_allows_one_line_between_street_and_city() -> None:
+    # address_from_text_allows_one_line_between_street_and_city:
     text = "900 Marin Street\nSuite 2\nSan Francisco, CA 94124\n"
     hit = address_from_text(text, "The Midway")
     assert hit is not None and hit.address_lines[0] == "900 Marin Street"
 
-
-def test_venue_record_short_location_and_visits() -> None:
+    # venue_record_short_location_and_visits:
     v = Venue.from_hit(
         VenueHit(
             "Cafe Du Nord",
@@ -87,8 +83,7 @@ def test_venue_record_short_location_and_visits() -> None:
     assert venue_line(v) == "Venue: https://cafedunord.com"
     assert Venue.from_json(v.to_json()) == v
 
-
-def test_venue_without_an_address_keeps_the_fallback_and_has_no_line() -> None:
+    # venue_without_an_address_keeps_the_fallback_and_has_no_line:
     v = Venue.from_hit(VenueHit("The Quarry", (), source="caller"), date="2026-11-14")
     assert v.city is None and v.short() == "The Quarry"
     assert v.location_text("The Quarry, San Francisco") == "The Quarry, San Francisco"

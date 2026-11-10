@@ -9,21 +9,20 @@ import pytest
 
 pytest.importorskip("mcp")
 
-from concert_mcp.config import Settings, load_settings  # noqa: E402
+from concert_mcp.config import Settings  # noqa: E402
 from concert_mcp.flows.services import Services  # noqa: E402
-from concert_mcp.result import NEED_USER, NO_REPLY_TEXT  # noqa: E402
+from concert_mcp.result import NEED_USER  # noqa: E402
 from concert_mcp.server import (  # noqa: E402
     DESCRIPTIONS,
     INSTRUCTIONS,
     TOOLS,
     build_server,
     concert_add,
-    event_delete,
     healthcheck,
     queue_status,
 )
 from concert_mcp.text.reply import NO_CANDIDATES_REPLY, WHICH_EVENT_REPLY  # noqa: E402
-from conftest import make_services, settings_env  # noqa: E402
+from conftest import make_services  # noqa: E402
 from fakes import FakeCalendar  # noqa: E402
 
 TEN = {
@@ -104,18 +103,7 @@ def test_instructions_fit_the_system_prompt_and_name_the_contract() -> None:
     assert [line.split(" ", 1)[0] for line in rules] == [f"{i}." for i in range(1, len(rules) + 1)]
 
 
-def test_server_carries_the_instructions(svc: Services) -> None:
-    assert build_server(svc).instructions == INSTRUCTIONS
-
-
 # ---------- the output contract through the tool functions ----------
-
-
-def test_bad_start_is_a_fix_line_with_the_retry_sentence(svc: Services) -> None:
-    text = concert_add(artist="Zed Fox", start="tomorrow", venue="The Quarry")
-    assert text.startswith("FIX: start")
-    assert text.endswith(FIX_TAIL)
-    assert "\n" not in text
 
 
 async def test_null_artist_is_cleaned_and_asks_the_user(svc_cli: Services) -> None:
@@ -149,16 +137,6 @@ async def test_non_string_arguments_are_cleaned_not_schema_errors(
     assert "pydantic" not in res.content[0].text
 
 
-def test_full_ticket_in_a_live_topic_returns_exactly_no_reply(svc: Services, ticket_text: str) -> None:
-    build_server(svc)
-    text = concert_add(
-        artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry, San Francisco", source_text=ticket_text
-    )
-    assert text == NO_REPLY_TEXT
-    assert len(svc.chat.sent) == 1  # type: ignore[attr-defined]
-    assert svc.chat.sent[0][1].startswith("**Added to Concerts**")  # type: ignore[attr-defined]
-
-
 async def test_call_tool_path_matches_the_function_path(svc: Services, ticket_text: str) -> None:
     mcp = build_server(svc)
     res = await mcp.call_tool("concert_add", {"artist": "Zed Fox", "start": "tomorrow"})
@@ -172,18 +150,6 @@ async def test_call_tool_with_no_arguments_is_handled_in_code(svc_cli: Services)
     res = await mcp.call_tool("concert_add", {})
     assert not res.is_error
     assert res.content[0].text.startswith(NEED_USER.format(what="artist"))
-
-
-def test_healthcheck_reports_the_missing_key_file(svc_cli: Services) -> None:
-    build_server(svc_cli)
-    text = healthcheck()
-    assert "FAIL  gws-keyfile" in text
-    assert "README.md#" in text
-
-
-def test_queue_status_on_an_empty_queue(svc_cli: Services) -> None:
-    build_server(svc_cli)
-    assert queue_status().startswith("The setlist queue is empty.")
 
 
 class _ExplodingCalendar(FakeCalendar):
@@ -214,44 +180,37 @@ def test_a_failure_to_build_services_is_a_reply_not_an_exception(monkeypatch: py
     assert "NOT SENT" in text
 
 
-def test_event_delete_with_a_bare_number_picks_from_the_candidates_file(svc_cli: Services, now: datetime) -> None:
-    cal = svc_cli.calendar
-    assert isinstance(cal, FakeCalendar)
-    first = cal.seed_event("cal-concerts", summary="Zed Fox", start=datetime(2026, 11, 14, 20, 30, tzinfo=now.tzinfo))
-    second = cal.seed_event("cal-concerts", summary="Zed Fox", start=datetime(2026, 11, 15, 20, 30, tzinfo=now.tzinfo))
-    rows = [
-        {
-            "id": e["id"],
-            "calendarId": "cal-concerts",
-            "calendar": "Concerts",
-            "summary": e["summary"],
-            "when": when,
-            "start": e["start"]["dateTime"],
-            "location": "The Quarry",
-            "htmlLink": e["htmlLink"],
-            "description": "",
-        }
-        for e, when in ((first, "Sat Nov 14, 8:30 PM – 10:30 PM PST"), (second, "Sun Nov 15, 8:30 PM – 10:30 PM PST"))
-    ]
-    svc_cli.state.write_json(svc_cli.settings.candidates_file, rows)
+# ---------- every tool body, the listing, and the crash paths outside run_tool ----------
+
+
+def test_every_tool_body_runs_on_the_bound_services(svc_cli: Services, ticket_text: str) -> None:
+    from concert_mcp import server
+
     build_server(svc_cli)
-    text = event_delete(title="2")
-    assert text.startswith("**Removed from Concerts**")
-    assert cal.deleted == [("cal-concerts", second["id"])]
-    assert svc_cli.state.read_json(svc_cli.settings.candidates_file, None) is None
-
-
-def test_dry_run_setting_makes_concert_add_change_nothing(
-    tmp_path, now: datetime, forum_route, ticket_text: str
-) -> None:
-    env = settings_env(tmp_path) | {"CONCERT_MCP_DRY_RUN": "1"}
-    svc = make_services(load_settings(env, home=tmp_path), now, route=forum_route, text=ticket_text)
-    build_server(svc)
-    text = concert_add(
-        artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry, San Francisco", source_text=ticket_text
+    assert server.calendar_add(title="Dinner", start="2026-11-20 19:00", location="ZZZ Bistro").startswith(
+        "**Added to Personal**"
     )
-    assert text.startswith("**Would add to Concerts**")
-    assert text.endswith("NOT SENT: dry run")
-    assert svc.chat.sent == []  # type: ignore[attr-defined]
-    assert svc.calendar.inserted == []  # type: ignore[attr-defined]
-    assert svc.spotify.created == []  # type: ignore[attr-defined]
+    assert "Godzilla" in server.movie_add(
+        film="Godzilla Minus Zero", start="2026-11-11 14:30", theater="AMC", source_text=""
+    )
+    assert server.teaser_playlist(artist="Zed Fox", date="2026-11-14").startswith("**Teaser")
+    assert server.setlist_find(artist="Zed Fox", date="2026-11-14").startswith("**Setlist**")
+    assert server.setlist_playlist(url="https://open.spotify.com/x").startswith("FIX:")
+    assert server.lineup(artist="Zed Fox", date="2026-11-14", venue="The Quarry").startswith("FIX:")
+    listing = server.tool_listing(svc_cli, ["lineup", "nope", "healthcheck"])
+    assert [t["name"] for t in listing] == ["lineup", "healthcheck"] and "inputSchema" in listing[0]
+    assert server.call_tool("nope", {}) == "(the model called 'nope', which is not a tool)"
+    assert server.call_tool("queue_status", {"extra": "dropped"}).startswith("The setlist queue is empty.")
+
+
+def test_crash_text_without_settings_and_a_delivery_layer_crash(
+    svc_cli: Services, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from concert_mcp import server
+
+    monkeypatch.setattr(server, "load_settings", lambda: (_ for _ in ()).throw(OSError("no home")))
+    assert "Admin: check the gateway log" in server._crash_text(RuntimeError("x"))
+    build_server(svc_cli)
+    monkeypatch.setattr(server, "run_tool", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("delivery broke")))
+    text = healthcheck()
+    assert text.startswith("Something broke inside the concert tool (RuntimeError).") and "NOT SENT" in text

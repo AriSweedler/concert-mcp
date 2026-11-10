@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from concert_mcp.flows.queue import QueueEntry, QueueStatus
 from concert_mcp.result import NO_REPLY_TEXT
 from concert_mcp.text import reply
@@ -101,11 +99,11 @@ def entry(date: str, artist: str, venue: str, song_count: int, until: str) -> Qu
 # ---------- bullets ----------
 
 
-def test_bullet_is_bold_key_plain_value() -> None:
+def test_reply_bullet_is_bold_key_plain_value() -> None:
+    # bullet_is_bold_key_plain_value:
     assert bullet("Doors", "7:30 PM") == "• **Doors:** 7:30 PM"
 
-
-def test_bullets_key_rule() -> None:
+    # bullets_key_rule:
     long_key = "x" * 25 + ": value"
     out = bullets("Zed Fox", WHEN, "The Quarry", ["Doors: 7:30 PM", "x" * 24 + ": ok", long_key, "no key here"])
     assert out.split("\n") == [
@@ -118,19 +116,10 @@ def test_bullets_key_rule() -> None:
         "• no key here",
     ]
 
-
-def test_bullets_without_space_after_colon_is_plain() -> None:
+    # bullets_without_space_after_colon_is_plain:
     assert bullets("A", "B", "C", ["http://x:y"]).split("\n")[-1] == "• http://x:y"
 
-
-# ---------- the calendar link ----------
-
-
-def test_event_link_is_the_htmllink_form() -> None:
-    # 2026-10-25, phone: only eventedit opened the event. 2026-11-08: eventedit no longer lands on the event; on the
-    # desktop the htmlLink form (www.google.com/calendar/event?eid=) opens it and eventedit does it worse, and on the
-    # phone from Telegram all forms are equally slow. The htmlLink form, eid only, is the one form this package emits;
-    # no other form and no fallback form is allowed (reply.event_link has the record).
+    # event_link_is_the_htmllink_form:
     assert (
         event_link("https://www.google.com/calendar/event?eid=abc123")
         == "https://www.google.com/calendar/event?eid=abc123"
@@ -143,20 +132,13 @@ def test_event_link_is_the_htmllink_form() -> None:
     assert event_link(None) is None
     assert event_link("") == ""
 
-
-def test_no_other_calendar_link_form_is_emitted() -> None:
+    # no_other_calendar_link_form_is_emitted:
     src = Path(reply.__file__).read_text(encoding="utf-8")
     assert "www.google.com/calendar/event?eid=" in src
     for forbidden in ("r/eventedit", "calendar/r/day", "calendar/render", "calendar/u/0/r/day"):
         assert forbidden not in src, forbidden
 
-
-# ---------- add replies ----------
-
-BODY = "• **Artist:** Zed Fox\n• **When:** when\n• **Where:** where"
-
-
-def test_render_added_new() -> None:
+    # render_added_new:
     out = render_added(
         calendar="Concerts",
         body=BODY,
@@ -171,8 +153,7 @@ def test_render_added_new() -> None:
         "[Open in Google Calendar](https://www.google.com/calendar/event?eid=abc123)"
     )
 
-
-def test_render_added_duplicate() -> None:
+    # render_added_duplicate:
     out = render_added(
         calendar="Concerts",
         body=BODY,
@@ -186,27 +167,20 @@ def test_render_added_duplicate() -> None:
         "[Open in Google Calendar](https://www.google.com/calendar/event?eid=abc123)"
     )
 
-
-def test_render_dry_add() -> None:
+    # render_dry_add:
     assert render_dry_add("Personal", BODY, []) == f"**Would add to Personal**\n{BODY}"
     assert render_dry_add("Personal", BODY, ["a", "b"]) == f"**Would add to Personal**\n{BODY}\na\nb"
 
-
-def test_dropped_note() -> None:
+    # dropped_note:
     assert (
         dropped_note(["Price: $99", "Doors: 6 PM"]) == "Left out (not in the text I was given): Price: $99; Doors: 6 PM"
     )
 
-
-# ---------- teaser ----------
-
-
-def test_teaser_bullet_none_when_not_wanted() -> None:
+    # teaser_bullet_none_when_not_wanted:
     assert teaser_bullet(None, timeout_s=150, dry=False) is None
     assert teaser_line(None) is None
 
-
-def test_teaser_bullet_every_status() -> None:
+    # teaser_bullet_every_status:
     kw = {"timeout_s": 150, "dry": False}
     assert teaser_bullet(teaser("unavailable", artist=None, name=None, liked_count=0), **kw) == (
         "• **Teaser:** not made (Spotify is not set up: run `concert-mcp spotify auth`)"
@@ -237,14 +211,12 @@ def test_teaser_bullet_every_status() -> None:
         "Move it to Concerts › Teasers in Spotify."
     )
 
-
-def test_teaser_bullet_dry_flag_shows_would_make_even_with_url() -> None:
+    # teaser_bullet_dry_flag_shows_would_make_even_with_url:
     assert teaser_bullet(teaser("created", url=TEASER_URL), timeout_s=150, dry=True) == (
         "• **Teaser:** would make 2026-11-14 | Zed Fox (3 liked songs)"
     )
 
-
-def test_teaser_line_only_for_real_playlists() -> None:
+    # teaser_line_only_for_real_playlists:
     assert teaser_line(teaser("created", url=TEASER_URL)) == f"Teaser playlist: {TEASER_URL}"
     assert teaser_line(teaser("updated", url=TEASER_URL)) == f"Teaser playlist: {TEASER_URL}"
     assert teaser_line(teaser("created", url=None)) is None
@@ -252,16 +224,11 @@ def test_teaser_line_only_for_real_playlists() -> None:
     assert teaser_line(teaser("none", liked_count=0)) is None
     assert teaser_line(teaser("failed", reason="x")) is None
 
-
-# ---------- setlist ----------
-
-
-def test_setlist_bullet_none_when_not_wanted() -> None:
+    # setlist_bullet_none_when_not_wanted:
     assert setlist_bullet(None) is None
     assert setlist_line(None) is None
 
-
-def test_setlist_bullet_every_branch() -> None:
+    # setlist_bullet_every_branch:
     base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": "The Quarry"}
     assert setlist_bullet(SetlistResult(found=False, match="unavailable", **base)) == (
         "• **Setlist:** lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)"
@@ -282,8 +249,7 @@ def test_setlist_bullet_every_branch() -> None:
         f"• **Setlist:** [setlist.fm]({SETLIST_URL}) no songs yet"
     )
 
-
-def test_setlist_line_only_when_found() -> None:
+    # setlist_line_only_when_found:
     base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": None}
     assert (
         setlist_line(SetlistResult(found=True, match="exact date", setlist=setlist(1), **base))
@@ -291,11 +257,7 @@ def test_setlist_line_only_when_found() -> None:
     )
     assert setlist_line(SetlistResult(found=False, match="none", **base)) is None
 
-
-# ---------- body ----------
-
-
-def test_render_body_strips_link_lines_and_appends_extras() -> None:
+    # render_body_strips_link_lines_and_appends_extras:
     lines = [
         "Doors: 7:30 PM",
         f"Teaser playlist: {TEASER_URL}",
@@ -315,17 +277,12 @@ def test_render_body_strips_link_lines_and_appends_extras() -> None:
     )
     assert LINK_LINE_PREFIXES == ("Teaser playlist: ", "Setlist: ", "Setlist playlist: ")
 
-
-# ---------- delete replies ----------
-
-
-def test_render_removed_without_teaser_line() -> None:
+    # render_removed_without_teaser_line:
     assert render_removed(candidate(description="Doors: 7:30 PM"), dry=False) == (
         f"**Removed from Concerts**\n• **Artist:** Zed Fox\n• **When:** {WHEN}\n• **Where:** The Quarry, San Francisco"
     )
 
-
-def test_render_removed_with_teaser_line_and_dry() -> None:
+    # render_removed_with_teaser_line_and_dry:
     c = candidate(location="", description=f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}\nSetlist: {SETLIST_URL}")
     assert render_removed(c, dry=True) == (
         "**Would remove from Concerts**\n• **Artist:** Zed Fox\n"
@@ -333,8 +290,7 @@ def test_render_removed_with_teaser_line_and_dry() -> None:
         f'• **Teaser:** [playlist]({TEASER_URL}) left in place; say "delete the teaser playlist" to remove it'
     )
 
-
-def test_render_candidates_numbering_and_optional_location() -> None:
+    # render_candidates_numbering_and_optional_location:
     a = candidate()
     b = Candidate(
         id="ev2",
@@ -353,8 +309,7 @@ def test_render_candidates_numbering_and_optional_location() -> None:
         "2. **Zed Fox afterparty** on Personal: Sun Nov 15 (all day)"
     )
 
-
-def test_render_none_found() -> None:
+    # render_none_found:
     names = ["Concerts", "Personal"]
     assert render_none_found("Zed Fox", None, names) == (
         "I found no event like **Zed Fox** on Concerts or Personal. Nothing deleted."
@@ -363,8 +318,7 @@ def test_render_none_found() -> None:
         "I found no event like **Zed Fox** around 2026-11-14 on Concerts or Personal. Nothing deleted."
     )
 
-
-def test_render_would_look() -> None:
+    # render_would_look:
     names = ["Concerts", "Personal"]
     assert render_would_look("Zed Fox", None, names) == (
         "**Would look for** Zed Fox on Concerts and Personal, then remove the one match."
@@ -373,8 +327,7 @@ def test_render_would_look() -> None:
         "**Would look for** Zed Fox around 2026-11-14 on Concerts and Personal, then remove the one match."
     )
 
-
-def test_fixed_replies() -> None:
+    # fixed_replies:
     assert NO_CANDIDATES_REPLY == (
         "I do not have a list to pick from any more. Tell me the event name and date and I will look again."
     )
@@ -384,18 +337,13 @@ def test_fixed_replies() -> None:
     )
     assert reply.NO_REPLY_TEXT is NO_REPLY_TEXT
 
-
-# ---------- standalone tools ----------
-
-
-def test_render_teaser_standalone() -> None:
+    # render_teaser_standalone:
     assert render_teaser_standalone(teaser("created", url=TEASER_URL), timeout_s=150, dry=False) == (
         "**Teaser playlist**\n"
         f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify."
     )
 
-
-def test_render_setlist_standalone() -> None:
+    # render_setlist_standalone:
     base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": "The Quarry"}
     found = SetlistResult(found=True, match="exact date", setlist=setlist(12), **base)
     assert render_setlist_standalone(found) == (
@@ -412,42 +360,8 @@ def test_render_setlist_standalone() -> None:
         "**Setlist**\n• **Setlist:** lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)"
     )
 
-
-# ---------- queue ----------
-
-
-def test_render_queue_empty(tmp_path: Path) -> None:
-    status = QueueStatus(entries=(), active=(), expired=(), path=tmp_path / "q.json")
-    assert render_queue(status) == "The setlist queue is empty.\nLast poll: never"
-
-
-def test_render_queue_shows_the_last_poll(tmp_path: Path) -> None:
-    status = QueueStatus(
-        entries=(), active=(), expired=(), path=tmp_path / "q.json", last_poll="2026-10-25T19:00:00+00:00"
-    )
-    assert render_queue(status) == "The setlist queue is empty.\nLast poll: 2026-10-25T19:00:00+00:00"
-
-
-def test_render_queue_active_then_expired_by_date(tmp_path: Path) -> None:
-    late = entry("2026-12-01", "Bonobo", "The Other Hall", 0, "2027-01-31")
-    early = entry("2026-11-14", "Zed Fox", "The Quarry", 12, "2027-01-14")
-    old = entry("2026-08-01", "Zork.", "Side Room", 9, "2026-10-01")
-    status = QueueStatus(entries=(late, old, early), active=(late, early), expired=(old,), path=tmp_path / "q.json")
-    assert render_queue(status) == (
-        "**Setlist queue** (3 shows)\n"
-        "• 2026-11-14 Zed Fox @ The Quarry — 12 songs, checking until 2027-01-14\n"
-        "• 2026-12-01 Bonobo @ The Other Hall — 0 songs, checking until 2027-01-31\n"
-        "• 2026-08-01 Zork. @ Side Room — 9 songs, checking until 2026-10-01 (expired)\n"
-        "Last poll: never"
-    )
-
-
-# ---------- provider replies ----------
-
-
-@pytest.mark.parametrize(
-    ("provider", "kw", "want"),
-    [
+    # provider_reply:
+    for provider, kw, want in [
         ("gws", {}, "Google Calendar refused the request. Admin: check `gws auth` on the host."),
         ("gws", {"what": "delete"}, "Google Calendar refused the delete. Admin: check `gws auth` on the host."),
         ("gws-nojson", {}, "Google Calendar gave an unreadable answer. Admin: check the host."),
@@ -469,20 +383,16 @@ def test_render_queue_active_then_expired_by_date(tmp_path: Path) -> None:
         ("setlistfm", {}, "setlist.fm refused the request. Admin: check the host log."),
         ("op", {}, "1Password did not answer. Admin: run the auth command with --manual."),
         ("telegram", {}, "telegram failed. Admin: check the host log."),
-    ],
-)
-def test_provider_reply(provider: str, kw: dict[str, str], want: str) -> None:
-    assert provider_reply(provider, "Admin", **kw) == want
+    ]:
+        assert provider_reply(provider, "Admin", **kw) == want
 
-
-def test_provider_reply_carries_no_personal_name() -> None:
+    # provider_reply_carries_no_personal_name:
     for provider in ("gws", "gws-nojson", "gws-keychain", "spotify", "setlistfm", "op"):
         text = provider_reply(provider, "Operator")
         assert "Ari" not in text
         assert "laptop" not in text
 
-
-def test_render_lineup_goldens() -> None:
+    # render_lineup_goldens:
     from concert_mcp.text.lineup import Lineup, Opener
 
     page = "https://www.setlist.fm/setlist/zork/2026/the-hollow-oakland-ca-1a2b3c4d.html"
@@ -512,11 +422,64 @@ def test_render_lineup_goldens() -> None:
         "**Lineup:** Zed Fox @ The Quarry, 2026-11-14\nNo opener or set times announced yet in the sources I can find."
     )
 
-
-def test_provider_reply_gemini() -> None:
+    # provider_reply_gemini:
     assert provider_reply("gemini-unconfigured", "Admin") == (
         "Gemini is not set up on this machine. Admin: run `concert-mcp gemini auth`."
     )
     assert provider_reply("gemini", "Admin") == (
         "The lineup lookup failed; the event keeps what the ticket said. Admin: check the host log."
     )
+
+
+# ---------- the calendar link ----------
+
+
+# ---------- add replies ----------
+
+BODY = "• **Artist:** Zed Fox\n• **When:** when\n• **Where:** where"
+
+
+# ---------- teaser ----------
+
+
+# ---------- setlist ----------
+
+
+# ---------- body ----------
+
+
+# ---------- delete replies ----------
+
+
+# ---------- standalone tools ----------
+
+
+# ---------- queue ----------
+
+
+def test_reply_render_queue_empty(tmp_path: Path) -> None:
+    # render_queue_empty:
+    status = QueueStatus(entries=(), active=(), expired=(), path=tmp_path / "q.json")
+    assert render_queue(status) == "The setlist queue is empty.\nLast poll: never"
+
+    # render_queue_shows_the_last_poll:
+    status = QueueStatus(
+        entries=(), active=(), expired=(), path=tmp_path / "q.json", last_poll="2026-10-25T19:00:00+00:00"
+    )
+    assert render_queue(status) == "The setlist queue is empty.\nLast poll: 2026-10-25T19:00:00+00:00"
+
+    # render_queue_active_then_expired_by_date:
+    late = entry("2026-12-01", "Bonobo", "The Other Hall", 0, "2027-01-31")
+    early = entry("2026-11-14", "Zed Fox", "The Quarry", 12, "2027-01-14")
+    old = entry("2026-08-01", "Zork.", "Side Room", 9, "2026-10-01")
+    status = QueueStatus(entries=(late, old, early), active=(late, early), expired=(old,), path=tmp_path / "q.json")
+    assert render_queue(status) == (
+        "**Setlist queue** (3 shows)\n"
+        "• 2026-11-14 Zed Fox @ The Quarry — 12 songs, checking until 2027-01-14\n"
+        "• 2026-12-01 Bonobo @ The Other Hall — 0 songs, checking until 2027-01-31\n"
+        "• 2026-08-01 Zork. @ Side Room — 9 songs, checking until 2026-10-01 (expired)\n"
+        "Last poll: never"
+    )
+
+
+# ---------- provider replies ----------

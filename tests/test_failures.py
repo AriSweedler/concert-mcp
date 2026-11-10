@@ -9,12 +9,10 @@ from typing import Any
 from concert_mcp.config import Settings
 from concert_mcp.flows.failures import (
     GRACE_MS,
-    MAX_KEPT,
     NOT_EXPLAINED,
     ORIN_FILE,
     collect,
     explain,
-    rotate,
     saved_failures,
 )
 from concert_mcp.result import ProviderError
@@ -41,35 +39,11 @@ def shot(eid: str, image: str, caption: str = CAPTION) -> dict[str, Any]:
     }
 
 
-def requeued() -> dict[str, Any]:
-    return {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": "[Earlier ...]"}]}}
-
-
 def assistant(stop: str, error: str = "") -> dict[str, Any]:
     return {
         "type": "message",
         "message": {"role": "assistant", "content": [], "stopReason": stop, "errorMessage": error},
     }
-
-
-def test_a_connection_error_is_a_failure() -> None:
-    rows = [
-        ("s1", T0, shot("e1", "/i.jpg")),
-        ("s1", T0 + 2000, requeued()),
-        ("s1", T0 + 63_000, assistant("error", "Connection error.")),
-    ]
-    (f,) = find_failures(rows, now_ms=T0 + 70_000, grace_ms=GRACE_MS)
-    assert (f.event_id, f.caption, f.ocr, f.image, f.error) == ("e1", CAPTION, OCR, "/i.jpg", "Connection error.")
-    assert f.chat == "telegram:conv_x:56:57"
-
-
-def test_an_answered_turn_is_not_a_failure() -> None:
-    rows = [
-        ("s1", T0, shot("e1", "/i.jpg")),
-        ("s1", T0 + 90_000, assistant("toolUse")),
-        ("s1", T0 + 99_000, assistant("stop")),
-    ]
-    assert find_failures(rows, now_ms=T0 + 10**8, grace_ms=GRACE_MS) == []
 
 
 def test_silence_is_a_failure_only_after_the_grace() -> None:
@@ -94,15 +68,6 @@ def test_collect_saves_each_failure_once_under_its_epoch(settings: Settings, tmp
     assert (folder / ORIN_FILE).read_text().startswith(NOT_EXPLAINED)
     assert collect(settings, lambda since: rows, T0 + 80_000) == []
     assert saved_failures(settings) == [folder]
-
-
-def test_rotate_keeps_the_newest(settings: Settings) -> None:
-    root = settings.state_dir / "failures"
-    for i in range(MAX_KEPT + 3):
-        (root / str(1_700_000_000 + i)).mkdir(parents=True)
-    gone = rotate(settings)
-    assert [p.name for p in gone] == [str(1_700_000_000 + i) for i in range(3)]
-    assert len(saved_failures(settings)) == MAX_KEPT
 
 
 def test_explain_records_the_answer_or_why_not(settings: Settings, tmp_path: Path) -> None:

@@ -11,11 +11,11 @@ LA = ZoneInfo("America/Los_Angeles")
 START = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
 
 
-def test_topic_key_is_chat_colon_thread():
+def test_topics_text() -> None:
+    # topic_key_is_chat_colon_thread:
     assert topic_key("-1001234567890", "7") == "-1001234567890:7"
 
-
-def test_entry_round_trips_and_tolerates_missing_keys():
+    # entry_round_trips_and_tolerates_missing_keys:
     e = TopicEntry("evt1", "cal", "Zed Fox", "2026-11-14", "2026-10-26T10:00:00-07:00")
     assert TopicEntry.from_json(e.to_json()) == e
     assert TopicEntry.from_json({}) == TopicEntry("", "", "", "", "")

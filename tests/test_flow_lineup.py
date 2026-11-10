@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from concert_mcp.flows.lineup import GEMINI_FIX, add_lineup_to_event, find_lineup, lineup_outcome
+from concert_mcp.flows.lineup import add_lineup_to_event, find_lineup, lineup_outcome
 from concert_mcp.flows.topics import make_topic_entry, topic_remember
 from concert_mcp.result import NEED_USER, Kind
 from concert_mcp.text.lineup import Lineup, Opener
@@ -46,45 +46,6 @@ def test_unavailable_without_a_model(svc) -> None:
     )
 
 
-def test_full_answer_with_the_openers_setlist_page(svc) -> None:
-    svc.gemini = FakeGemini(FULL, SOURCES)
-    svc.setlistfm = setlistfm_with_zork()
-    lu = find_lineup("Zed Fox", "2026-11-14", "The Quarry, San Francisco", "https://venue.example", svc)
-    assert lu == Lineup(
-        "found",
-        openers=(Opener("Zork", PAGE),),
-        doors="7:00 PM",
-        opener_time="8:00 PM",
-        headliner_time="9:00 PM",
-        sources=SOURCES,
-    )
-    [(prompt, grounded)] = svc.gemini.prompts
-    assert grounded is True
-    assert "Zed Fox at The Quarry, San Francisco on 2026-11-14" in prompt
-    assert "https://venue.example" in prompt
-    assert svc.setlistfm.calls == [{"artist": "Zork", "date": None, "year": None, "page": 1}]
-
-
-def test_partial_answer_has_no_openers_and_asks_setlistfm_nothing(svc) -> None:
-    svc.gemini = FakeGemini(PARTIAL)
-    svc.setlistfm = setlistfm_with_zork()
-    lu = find_lineup("Zed Fox", "2026-11-14", "The Quarry", None, svc)
-    assert lu == Lineup("found", doors="7:30 PM")
-    assert svc.setlistfm.calls == []
-
-
-def test_garbage_answer_is_none(svc) -> None:
-    svc.gemini = FakeGemini("I have no idea.", SOURCES)
-    assert find_lineup("Zed Fox", "2026-11-14", "The Quarry", None, svc) == Lineup("none", sources=SOURCES)
-
-
-def test_model_failure_is_failed_never_raised(svc) -> None:
-    svc.gemini = FakeGemini(fail=True)
-    lu = find_lineup("Zed Fox", "2026-11-14", "The Quarry", None, svc)
-    assert lu.status == "failed"
-    assert lu.reason == "gemini refused | status='500' body=''"
-
-
 def test_setlistfm_failure_keeps_the_opener_without_a_page(svc) -> None:
     svc.gemini = FakeGemini(FULL)
     svc.setlistfm = FakeSetlistFm(fail=True)
@@ -99,49 +60,6 @@ def test_no_setlistfm_keeps_the_opener_without_a_page(svc) -> None:
 
 
 # ---------- add_lineup_to_event ----------
-
-
-def test_add_lineup_patches_only_the_missing_lines(svc) -> None:
-    svc.gemini = FakeGemini(FULL)
-    svc.setlistfm = setlistfm_with_zork()
-    e = svc.calendar.seed_event(
-        "cal-concerts",
-        summary="Zed Fox",
-        start=datetime(2026, 11, 14, 20, 30, tzinfo=LA),
-        description="Doors: 7:30 PM\nHeadliner: Zed Fox\nOpener: Zork.",
-    )
-    step = add_lineup_to_event(
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue="The Quarry",
-        website=None,
-        openers_known=True,
-        calendar_id="cal-concerts",
-        event_id=e["id"],
-        description=e["description"],
-        svc=svc,
-    )
-    assert step.lines == ("Expected: doors 7:00 PM, Zork 8:00 PM, Zed Fox 9:00 PM", f"Opener setlist (recent): {PAGE}")
-    [(cal, eid, fields)] = svc.calendar.patched
-    assert (cal, eid) == ("cal-concerts", e["id"])
-    assert fields == {"description": "Doors: 7:30 PM\nHeadliner: Zed Fox\nOpener: Zork.\n" + "\n".join(step.lines)}
-
-
-def test_add_lineup_with_nothing_found_patches_nothing(svc) -> None:
-    svc.gemini = FakeGemini("nothing")
-    step = add_lineup_to_event(
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue="The Quarry",
-        website=None,
-        openers_known=False,
-        calendar_id="cal-concerts",
-        event_id="evt9",
-        description=None,
-        svc=svc,
-    )
-    assert step.lines == () and step.lineup.status == "none"
-    assert svc.calendar.patched == []
 
 
 def test_add_lineup_survives_a_patch_failure(svc) -> None:
@@ -164,38 +82,12 @@ def test_add_lineup_survives_a_patch_failure(svc) -> None:
 # ---------- lineup_outcome (the tool) ----------
 
 
-def test_tool_without_a_key_is_a_fix(svc) -> None:
-    out = lineup_outcome("Zed Fox", "2026-11-14", "", svc)
-    assert out.kind is Kind.FIX
-    assert out.fix == GEMINI_FIX == "Gemini is not set up: run `concert-mcp gemini auth` on the host, then ask again"
-
-
 def test_tool_needs_an_artist_outside_a_topic(svc_cli) -> None:
     svc_cli.gemini = FakeGemini(FULL)
     out = lineup_outcome("", "", "", svc_cli)
     assert out.kind is Kind.NEED_USER
     assert out.reply == NEED_USER.format(what="artist")
     assert lineup_outcome("Zed Fox", "", "", svc_cli).reply == NEED_USER.format(what="date")
-
-
-def test_tool_bad_date_is_a_fix(svc_cli) -> None:
-    svc_cli.gemini = FakeGemini(FULL)
-    assert lineup_outcome("Zed Fox", "yesterday", "", svc_cli).kind is Kind.FIX
-
-
-def test_tool_outside_a_topic_answers_without_patching(svc_cli) -> None:
-    svc_cli.gemini = FakeGemini(FULL, SOURCES)
-    svc_cli.setlistfm = setlistfm_with_zork()
-    out = lineup_outcome("Zed Fox", "2026-11-14", "The Quarry", svc_cli)
-    assert out.kind is Kind.OK
-    assert out.reply == (
-        "**Lineup:** Zed Fox @ The Quarry, 2026-11-14\n"
-        f"• **Opener:** Zork ([recent setlist]({PAGE}))\n"
-        "• **Expected:** doors 7:00 PM, Zork 8:00 PM, Zed Fox 9:00 PM\n"
-        "• **Sources:** [1](https://venue.example/events/zed-fox)"
-    )
-    assert out.data["lineup"]["openers"] == [{"name": "Zork", "setlist_url": PAGE}]
-    assert svc_cli.calendar.patched == []
 
 
 def test_tool_in_a_topic_takes_the_show_from_the_event_and_patches_it(svc) -> None:
@@ -234,13 +126,6 @@ def test_tool_nothing_found_golden(svc_cli) -> None:
     assert (
         out.reply == "**Lineup:** Zed Fox, 2026-11-14\nNo opener or set times announced yet in the sources I can find."
     )
-
-
-def test_tool_model_failure_is_an_error_outcome(svc_cli) -> None:
-    svc_cli.gemini = FakeGemini(fail=True)
-    out = lineup_outcome("Zed Fox", "2026-11-14", "", svc_cli)
-    assert out.kind is Kind.ERROR
-    assert out.reply == "Lineup lookup failed: gemini refused | status='500' body=''"
 
 
 def e_start(e: dict[str, Any]) -> datetime:

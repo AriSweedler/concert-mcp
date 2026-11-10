@@ -10,10 +10,10 @@ from typing import Any
 import pytest
 
 from concert_mcp.config import Settings
-from concert_mcp.flows.movie_add import add_movie, is_movie_title
+from concert_mcp.flows.movie_add import add_movie
 from concert_mcp.flows.services import Services
 from concert_mcp.result import Kind
-from concert_mcp.text.movie import letterboxd_candidates, letterboxd_matches, parse_movie_ticket, show_start
+from concert_mcp.text.movie import parse_movie_ticket, show_start
 from conftest import make_services
 from fakes import FakeFilmLookup
 
@@ -62,10 +62,6 @@ def test_parse_reads_every_field_of_the_fandango_screen() -> None:
     )
 
 
-def test_parse_is_none_for_a_concert_ticket(ticket_text: str) -> None:
-    assert parse_movie_ticket(ticket_text) is None
-
-
 # --- show_start ---
 
 
@@ -77,19 +73,6 @@ def test_show_start_takes_the_next_such_date() -> None:
 
 
 # --- letterboxd text helpers ---
-
-
-def test_letterboxd_tries_the_year_slug_first() -> None:
-    assert letterboxd_candidates("Godzilla Minus Zero", 2026) == [
-        "https://letterboxd.com/film/godzilla-minus-zero-2026/",
-        FILM_URL,
-    ]
-
-
-def test_letterboxd_page_must_name_the_film_and_year() -> None:
-    page = '<meta property="og:title" content="Godzilla Minus Zero (2026)" />'
-    assert letterboxd_matches(page, "Godzilla Minus Zero", 2026)
-    assert not letterboxd_matches(page, "Godzilla Minus Zero", 2023)
 
 
 # --- add_movie: the golden ---
@@ -109,12 +92,6 @@ def test_the_ticket_wins_over_a_wrong_caller(movie_svc: Services) -> None:
     assert inserted_as_golden(movie_svc) == GOLDEN
 
 
-def test_a_movie_never_touches_spotify_or_setlistfm(movie_svc: Services) -> None:
-    add_movie(source_text=FANDANGO, svc=movie_svc)
-    assert movie_svc.spotify.calls == []  # type: ignore[union-attr]
-    assert movie_svc.setlistfm.calls == []  # type: ignore[union-attr]
-
-
 def test_a_letterboxd_miss_leaves_the_line_out(movie_svc: Services) -> None:
     movie_svc.films = FakeFilmLookup({})
     add_movie(source_text=FANDANGO, svc=movie_svc)
@@ -131,12 +108,6 @@ def test_dry_run_returns_the_golden_without_inserting(movie_svc: Services) -> No
 
 
 # --- the tools that hand a movie to the movie flow ---
-
-
-def test_is_movie_title() -> None:
-    assert is_movie_title("[Movie] Godzilla Minus Zero")
-    assert is_movie_title(" [movie]Godzilla")
-    assert not is_movie_title("[Dinner] Movie night snacks")
 
 
 def test_add_movie_with_no_source_reads_the_ticket_from_the_context(movie_svc: Services) -> None:

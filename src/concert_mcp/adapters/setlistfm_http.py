@@ -80,7 +80,8 @@ class SetlistFmClient:
         """One GET; None on 404; 429 waits 1, 2, 3 s; any other failure is ProviderError('setlistfm')."""
         url = f"{SETLISTFM_API}{path}?{urllib.parse.urlencode(dict(params))}"
         log_debug("setlist.fm get " + kv(path=path))
-        for attempt in range(retries + 1):
+        attempt = 0
+        while True:  # returns, or raises; a 429 comes round again up to `retries` times
             req = urllib.request.Request(url)
             req.add_header("x-api-key", self._api_key)
             req.add_header("Accept", "application/json")
@@ -93,8 +94,13 @@ class SetlistFmClient:
                     return None
                 if e.code == 429:
                     if attempt == retries:
-                        break
+                        raise ProviderError(
+                            "setlistfm",
+                            f"setlist.fm kept rate-limiting | path='{path}'",
+                            provider_reply("setlistfm", self.operator),
+                        ) from e
                     self.clock.sleep(1 + attempt)
+                    attempt += 1
                     continue
                 try:
                     body = e.read().decode("utf-8", "replace")[:200]
@@ -111,11 +117,6 @@ class SetlistFmClient:
                     f"setlist.fm unreachable | path='{path}' reason='{e.reason}'",
                     provider_reply("setlistfm", self.operator),
                 ) from e
-        raise ProviderError(
-            "setlistfm",
-            f"setlist.fm kept rate-limiting | path='{path}'",
-            provider_reply("setlistfm", self.operator),
-        )
 
     def search_setlists(
         self,

@@ -145,12 +145,8 @@ def queue_list(svc: Services) -> list[QueueEntry]:
     """Every readable row of the queue file."""
     out: list[QueueEntry] = []
     for row in _raw_rows(svc):
-        if not isinstance(row, Mapping):
-            continue
-        try:
-            out.append(QueueEntry.from_json(row))
-        except Exception:
-            continue
+        if isinstance(row, Mapping):
+            out.append(QueueEntry.from_json(row))  # tolerant: a missing or odd value becomes its empty form
     return out
 
 

@@ -422,7 +422,7 @@ def call_tool(name: str, args: dict[str, str]) -> str:
     return fn(**{k: v for k, v in args.items() if k in params})
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover - the stdio loop; test_smoke_stdio.py drives it as a real process
     """Serve over stdio; nothing but JSON-RPC on stdout."""
     settings = load_settings()
     set_level(settings.log_level)

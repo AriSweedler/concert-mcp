@@ -173,7 +173,8 @@ class SpotifyClient:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(dict(params))
         data = json.dumps(body).encode("utf-8") if body is not None else None
         log_debug("spotify api " + kv(method=method, path=path))
-        for attempt in range(retries + 1):
+        attempt = 0
+        while True:  # returns, or raises; a 429 or a 401 comes round again up to `retries` times
             req = urllib.request.Request(url, data=data, method=method)
             req.add_header("Authorization", f"Bearer {self.access_token()}")
             if data is not None:
@@ -185,13 +186,19 @@ class SpotifyClient:
             except urllib.error.HTTPError as e:
                 if e.code == 429:
                     if attempt == retries:
-                        break
+                        raise ProviderError(
+                            "spotify",
+                            f"Spotify API kept rate-limiting | path='{path}' retries='{retries}'",
+                            provider_reply("spotify", self.operator),
+                        ) from e
                     wait = min(_retry_after(e.headers), MAX_RETRY_AFTER_S)
                     log_warn(f"rate limited, waiting | retry_after_s='{wait}'")
                     self.clock.sleep(wait)
+                    attempt += 1
                     continue
                 if e.code == 401 and attempt < retries:
                     self.creds.expires_at = 0  # force a refresh and retry
+                    attempt += 1
                     continue
                 raise ProviderError(
                     "spotify",
@@ -204,11 +211,6 @@ class SpotifyClient:
                     f"Spotify API unreachable | path='{path}' reason='{e.reason}'",
                     provider_reply("spotify", self.operator),
                 ) from e
-        raise ProviderError(
-            "spotify",
-            f"Spotify API kept rate-limiting | path='{path}' retries='{retries}'",
-            provider_reply("spotify", self.operator),
-        )
 
     def paged(
         self,

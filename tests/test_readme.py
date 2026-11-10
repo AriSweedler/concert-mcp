@@ -77,18 +77,18 @@ def test_slug_rule_matches_github():
     assert github_slug("OpenClaw configuration") == "openclaw-configuration"
 
 
-@pytest.mark.parametrize("anchor", sorted(ANCHORS.values()))
-def test_every_health_anchor_is_a_readme_heading(anchor: str):
+def test_every_health_anchor_is_a_readme_heading():
     """The README is the quickstart: every FAIL row of the healthcheck must land on a heading there."""
-    file, _, fragment = anchor.partition("#")
-    assert file == "README.md"
-    slugs = {github_slug(h) for h in readme_headings()}
-    assert fragment in slugs, f"{anchor} points at a heading README.md does not have; headings: {sorted(slugs)}"
+    for anchor in sorted(ANCHORS.values()):
+        file, _, fragment = anchor.partition("#")
+        assert file == "README.md"
+        slugs = {github_slug(h) for h in readme_headings()}
+        assert fragment in slugs, f"{anchor} points at a heading README.md does not have; headings: {sorted(slugs)}"
 
 
-@pytest.mark.parametrize("name", [row[0] for row in env_table()])
-def test_every_env_var_is_documented(name: str):
-    assert name in CONFIG_DOC.read_text(encoding="utf-8"), f"{name} is missing from docs/configuration.md"
+def test_every_env_var_is_documented():
+    for name in [row[0] for row in env_table()]:
+        assert name in CONFIG_DOC.read_text(encoding="utf-8"), f"{name} is missing from docs/configuration.md"
 
 
 def _snippet_json(text: str) -> dict:
@@ -120,12 +120,12 @@ def test_homelab_doc_carries_the_doctor_pair():
     assert "openclaw mcp doctor concert --probe" in text
 
 
-@pytest.mark.parametrize("path", text_files(), ids=lambda p: str(p.relative_to(ROOT)))
-def test_no_personal_data_in_any_text_file(path: Path):
-    text = path.read_text(encoding="utf-8", errors="replace")
-    for what, pattern in PERSONAL_DATA.items():
-        hits = [m.group(0) for m in pattern.finditer(text) if not _allowed(m.group(0))]
-        assert not hits, f"{path.relative_to(ROOT)} contains {what}: {hits[0]!r}"
+def test_no_personal_data_in_any_text_file():
+    for path in text_files():
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for what, pattern in PERSONAL_DATA.items():
+            hits = [m.group(0) for m in pattern.finditer(text) if not _allowed(m.group(0))]
+            assert not hits, f"{path.relative_to(ROOT)} contains {what}: {hits[0]!r}"
 
 
 def test_the_scan_covers_source_tests_docs_and_workflows():
@@ -164,12 +164,12 @@ def test_architecture_doc_names_the_one_link_form():
     assert "2026-10-25" in text and "2026-11-08" in text
 
 
-@pytest.mark.parametrize("name", CHECK_NAMES)
-def test_every_health_check_appears_in_the_configuration_doc(name: str):
+def test_every_health_check_appears_in_the_configuration_doc():
     """docs/configuration.md pastes a real healthcheck run; a renamed or added check must land there too."""
-    assert name in CONFIG_DOC.read_text(encoding="utf-8"), (
-        f"healthcheck row {name} is missing from docs/configuration.md"
-    )
+    for name in CHECK_NAMES:
+        assert name in CONFIG_DOC.read_text(encoding="utf-8"), (
+            f"healthcheck row {name} is missing from docs/configuration.md"
+        )
 
 
 def test_architecture_doc_tool_table_lists_every_tool():

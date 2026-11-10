@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import io
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from concert_mcp import config
+from concert_mcp import cli, config
 from concert_mcp.config import Settings, load_settings
+from concert_mcp.flows import services
 from concert_mcp.flows.services import Services
-from fakes import FakeCalendar, FakeChat, FakeClock, FakeContext, FakeSetlistFm, FakeSpotify, MemoryState, ms
+from fakes import FakeCalendar, FakeChat, FakeClock, FakeContext, FakeSetlistFm, FakeSpotify, MemoryState, ms, plain
 
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone(timedelta(hours=-7)))
 
@@ -130,3 +133,43 @@ def svc(settings: Settings, now: datetime, forum_route: dict[str, Any], ticket_t
 def svc_cli(settings: Settings, now: datetime, ticket_text: str) -> Services:
     """Services on fakes with no live chat, as a CLI run sees it."""
     return make_services(settings, now, route=None, text=ticket_text)
+
+
+# ---------- the CLI harness (test_cli.py, test_cli_commands.py) ----------
+
+
+@pytest.fixture
+def cli_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, svc_cli: Services) -> Services:
+    """The CLI's environment: every CONCERT_MCP_* dir under tmp_path, HOME in tmp, services replaced by the fakes."""
+    for k, v in settings_env(tmp_path).items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(services, "build_services", lambda settings=None: svc_cli)
+    return svc_cli
+
+
+def run(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], argv: list[str], stdin: str = ""):
+    """Run main(argv) with `stdin` as its input; returns (exit code, stdout, stderr without colour)."""
+    monkeypatch.setattr("sys.stdin", io.StringIO(stdin))
+    code = cli.main(argv)
+    cap = capsys.readouterr()
+    return code, cap.out, plain(cap.err)
+
+
+def one_json_line(out: str) -> dict[str, Any]:
+    """stdout must be exactly one JSON line."""
+    assert out.endswith("\n") and out.count("\n") == 1, out
+    return json.loads(out)
+
+
+def assert_clean_stdout(out: str, err: str) -> None:
+    assert "[INFO]" not in out and "[WARN]" not in out and "[ERROR]" not in out
+    assert "Traceback" not in out and "Traceback" not in err
+    for line in err.splitlines():
+        assert line.startswith(("[INFO]", "[WARN]", "[ERROR]", "[DEBUG]")), err
+
+
+# --- read_request: the legacy flag / JSON / stdin parse ---------------------------------------------------------------

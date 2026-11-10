@@ -19,31 +19,101 @@ from concert_mcp.text.derive import (
 # ---- derived_lines ---------------------------------------------------------------------------------------------------
 
 
-def test_derived_lines_on_the_ticket(ticket_text: str) -> None:
+def test_derive_derived_lines_on_the_ticket(ticket_text: str) -> None:
+    # derived_lines_on_the_ticket:
     assert derived_lines(ticket_text) == ["Doors: 7:30 PM", "Purchased: 2 tickets, $42.00 on Ticketweb"]
 
+    # openers_from_text_only_on_its_own_line:
+    assert openers_from_text(ticket_text) == ["Zork."]
+    assert openers_from_text("Zed Fox with special guest Zork.\nThe Quarry") == []
+    assert openers_from_text("  w/ support from A, B and C  \n") == ["A", "B", "C"]
+    assert openers_from_text("with Zork.") == []  # 'with' alone is not the opener form
+    assert openers_from_text("") == []
 
-@pytest.mark.parametrize(
-    ("text", "doors"),
-    [
+
+def test_derive_derived_lines_doors_normalisation() -> None:
+    # derived_lines_doors_normalisation:
+    for text, doors in [
         ("Doors 7.30 p.m.", "Doors: 7:30 PM"),
         ("doors open 7pm", "Doors: 7 PM"),
         ("Doors: 7:00PM", "Doors: 7:00 PM"),
         ("Door @ 8 pm", "Doors: 8 PM"),
         ("Doors at 7:30 P.M. sharp", "Doors: 7:30 PM"),
-    ],
-)
-def test_derived_lines_doors_normalisation(text: str, doors: str) -> None:
-    assert derived_lines(text) == [doors]
+    ]:
+        assert derived_lines(text) == [doors]
 
-
-def test_derived_lines_purchased_forms() -> None:
+    # derived_lines_purchased_forms:
     assert derived_lines("1 ticket $45") == ["Purchased: 1 ticket, $45"]
     assert derived_lines("2 x tickets, $90 on Ticketmaster") == ["Purchased: 2 tickets, $90 on Ticketmaster"]
     assert derived_lines("Total $ 1,234.56") == ["Purchased: $1,234.56"]
     assert derived_lines("3 tickets via AXS") == ["Purchased: 3 tickets on AXS"]
     assert derived_lines("Just a venue name and Ticketweb") == []
     assert derived_lines("") == []
+
+    # derived_lines_take_the_total_not_the_subtotal:
+    assert derived_lines(TICKETWEB_RECEIPT) == ["Doors: 7:00 PM", "Purchased: 1 ticket, $28.30 on Ticketweb"]
+
+    # derived_lines_total_on_the_same_line_and_grand_total:
+    assert derived_lines("Subtotal: $40.00\nFees: $12.50\nTotal: $52.50 via AXS") == ["Purchased: $52.50 on AXS"]
+    assert derived_lines("2 tickets\n$30 each\nGrand Total $72.00") == ["Purchased: 2 tickets, $72.00"]
+
+    # derived_lines_without_a_total_label_take_the_largest_amount:
+    assert derived_lines("Qty: 2\n2 x $20.00\n$46.50 charged") == ["Purchased: 2 tickets, $46.50"]
+    assert derived_lines("Quantity 3 General Admission $15") == ["Purchased: 3 tickets, $15"]
+
+    # derived_lines_platform_is_word_bounded:
+    assert derived_lines("1 ticket at the Grand Opera") == ["Purchased: 1 ticket"]
+    assert derived_lines("1 ticket via RA") == ["Purchased: 1 ticket on RA"]
+
+    # norm_claims:
+    assert norm_claims(" $ 42.00 ") == "$42.00"
+    assert norm_claims("https://x.example/a/") == "https://x.example/a"
+    assert norm_claims("7:30 PM.") == "7:30pm"
+    assert norm_claims(42) == "42"
+
+    # build_source:
+    raw, norm = build_source("caller text", "context text")
+    assert raw == "caller text\ncontext text"
+    assert norm == "callertextcontexttext"
+    assert build_source(None, "ctx") == ("ctx", "ctx")
+    assert build_source("caller", "") == ("caller", "caller")
+    assert build_source(None, "") == ("", None)
+    assert build_source("   ", "") == ("   ", None)
+
+    # verify_line_without_a_source:
+    assert verify_line("Seat: GA", None) is True
+    assert verify_line("Price: $42.00", None) is False
+    assert verify_line("Doors: 7:30 PM", None) is False
+
+    # merge_lines_with_no_source_drops_every_claim:
+    kept, dropped = merge_lines(derived=[], openers=[], caller=["Seat: GA", "Price: $5"], source_norm=None, title="X")
+    assert kept == ["Seat: GA"]
+    assert dropped == ["Price: $5"]
+
+    # coerce_description:
+    assert coerce_description(None) == []
+    assert coerce_description("") == []
+    assert coerce_description([]) == []
+    assert coerce_description("Doors: 7 PM\\nSeat: GA") == ["Doors: 7 PM", "Seat: GA"]  # literal backslash-n
+    assert coerce_description("Doors: 7 PM\nSeat: GA") == ["Doors: 7 PM", "Seat: GA"]
+    assert coerce_description("one line") == ["one line"]
+    assert coerce_description(["Doors: 7 PM", 42]) == ["Doors: 7 PM", "42"]
+    with pytest.raises(FixInput) as ei:
+        coerce_description(42)
+    assert ei.value.error == "description must be a list of lines"
+    assert ei.value.fix == 'use ["Doors: 7:00 PM", "Purchased: 1 ticket, $45"]'
+    with pytest.raises(FixInput):
+        coerce_description({"Doors": "7 PM"})
+
+    # check_attendees:
+    assert check_attendees(None) == []
+    assert check_attendees([]) == []
+    assert check_attendees(["name@example.com", "other@example.org"]) == ["name@example.com", "other@example.org"]
+    for bad in (["name"], "name@example.com", ["name@example.com", "nope"], 42):
+        with pytest.raises(FixInput) as ei:
+            check_attendees(bad)
+        assert ei.value.error == "attendees must be a list of email addresses"
+        assert ei.value.fix == 'use ["name@example.com"]'
 
 
 TICKETWEB_RECEIPT = """Wed Nov 4 2026
@@ -70,55 +140,10 @@ ticketweb.com
 """
 
 
-def test_derived_lines_take_the_total_not_the_subtotal() -> None:
-    assert derived_lines(TICKETWEB_RECEIPT) == ["Doors: 7:00 PM", "Purchased: 1 ticket, $28.30 on Ticketweb"]
-
-
-def test_derived_lines_total_on_the_same_line_and_grand_total() -> None:
-    assert derived_lines("Subtotal: $40.00\nFees: $12.50\nTotal: $52.50 via AXS") == ["Purchased: $52.50 on AXS"]
-    assert derived_lines("2 tickets\n$30 each\nGrand Total $72.00") == ["Purchased: 2 tickets, $72.00"]
-
-
-def test_derived_lines_without_a_total_label_take_the_largest_amount() -> None:
-    assert derived_lines("Qty: 2\n2 x $20.00\n$46.50 charged") == ["Purchased: 2 tickets, $46.50"]
-    assert derived_lines("Quantity 3 General Admission $15") == ["Purchased: 3 tickets, $15"]
-
-
-def test_derived_lines_platform_is_word_bounded() -> None:
-    # "RA" must not match inside "Opera" or "Grand".
-    assert derived_lines("1 ticket at the Grand Opera") == ["Purchased: 1 ticket"]
-    assert derived_lines("1 ticket via RA") == ["Purchased: 1 ticket on RA"]
-
-
 # ---- openers_from_text -----------------------------------------------------------------------------------------------
 
 
-def test_openers_from_text_only_on_its_own_line(ticket_text: str) -> None:
-    assert openers_from_text(ticket_text) == ["Zork."]
-    assert openers_from_text("Zed Fox with special guest Zork.\nThe Quarry") == []
-    assert openers_from_text("  w/ support from A, B and C  \n") == ["A", "B", "C"]
-    assert openers_from_text("with Zork.") == []  # 'with' alone is not the opener form
-    assert openers_from_text("") == []
-
-
 # ---- norm_claims / build_source --------------------------------------------------------------------------------------
-
-
-def test_norm_claims() -> None:
-    assert norm_claims(" $ 42.00 ") == "$42.00"
-    assert norm_claims("https://x.example/a/") == "https://x.example/a"
-    assert norm_claims("7:30 PM.") == "7:30pm"
-    assert norm_claims(42) == "42"
-
-
-def test_build_source() -> None:
-    raw, norm = build_source("caller text", "context text")
-    assert raw == "caller text\ncontext text"
-    assert norm == "callertextcontexttext"
-    assert build_source(None, "ctx") == ("ctx", "ctx")
-    assert build_source("caller", "") == ("caller", "caller")
-    assert build_source(None, "") == ("", None)
-    assert build_source("   ", "") == ("   ", None)
 
 
 # ---- verify_line -----------------------------------------------------------------------------------------------------
@@ -131,9 +156,9 @@ def source_norm(ticket_text: str) -> str:
     return norm
 
 
-@pytest.mark.parametrize(
-    ("line", "ok"),
-    [
+def test_derive_verify_line(source_norm: str) -> None:
+    # verify_line:
+    for line, ok in [
         ("Order: https://www.ticketweb.com/order/abc123", True),
         ("Order: https://other.example/order/abc123", False),
         ("Price: $42.00", True),
@@ -147,16 +172,39 @@ def source_norm(ticket_text: str) -> str:
         ("Price: $ 42.00", True),  # spaces ignored
         ("Doors: 7:30pm", True),  # case ignored
         ("Two facts: $42.00 and 9 PM", False),  # every claim must be present
-    ],
-)
-def test_verify_line(line: str, ok: bool, source_norm: str) -> None:
-    assert verify_line(line, source_norm) is ok
+    ]:
+        assert verify_line(line, source_norm) is ok
 
+    # merge_lines_key_match_is_case_insensitive_and_ignores_the_value:
+    kept, dropped = merge_lines(
+        derived=["Doors: 7:30 PM"],
+        openers=[],
+        caller=["doors: 7:30 PM", "DOORS 7:30 PM"],
+        source_norm=source_norm,
+        title="X",
+    )
+    # "DOORS 7:30 PM" has no colon, so its key is the whole line and it is a new, verified line.
+    assert kept == ["Doors: 7:30 PM", "DOORS 7:30 PM"]
+    assert dropped == []
 
-def test_verify_line_without_a_source() -> None:
-    assert verify_line("Seat: GA", None) is True
-    assert verify_line("Price: $42.00", None) is False
-    assert verify_line("Doors: 7:30 PM", None) is False
+    # merge_lines_drops_an_opener_equal_to_the_title:
+    kept, _ = merge_lines(derived=[], openers=["zed fox", "Zork."], caller=[], source_norm=source_norm, title="Zed Fox")
+    assert kept == ["Headliner: Zed Fox", "Opener: Zork."]
+
+    # merge_lines_keeps_dropped_order:
+    kept, dropped = merge_lines(
+        derived=[],
+        openers=[],
+        caller=["Link: https://evil.example/x", "Seat: GA", "Price: $99", "Show: 11 PM"],
+        source_norm=source_norm,
+        title="X",
+    )
+    assert kept == ["Seat: GA"]
+    assert dropped == ["Link: https://evil.example/x", "Price: $99", "Show: 11 PM"]
+
+    # merge_lines_squashes_caller_lines:
+    kept, _ = merge_lines(derived=[], openers=[], caller=["  Seat:   GA  "], source_norm=source_norm, title="X")
+    assert kept == ["Seat: GA"]
 
 
 # ---- merge_lines -----------------------------------------------------------------------------------------------------
@@ -180,72 +228,4 @@ def test_merge_lines_derived_beats_caller(ticket_text: str, source_norm: str) ->
     assert dropped == ["Price: $99"]
 
 
-def test_merge_lines_key_match_is_case_insensitive_and_ignores_the_value(source_norm: str) -> None:
-    kept, dropped = merge_lines(
-        derived=["Doors: 7:30 PM"],
-        openers=[],
-        caller=["doors: 7:30 PM", "DOORS 7:30 PM"],
-        source_norm=source_norm,
-        title="X",
-    )
-    # "DOORS 7:30 PM" has no colon, so its key is the whole line and it is a new, verified line.
-    assert kept == ["Doors: 7:30 PM", "DOORS 7:30 PM"]
-    assert dropped == []
-
-
-def test_merge_lines_drops_an_opener_equal_to_the_title(source_norm: str) -> None:
-    kept, _ = merge_lines(derived=[], openers=["zed fox", "Zork."], caller=[], source_norm=source_norm, title="Zed Fox")
-    assert kept == ["Headliner: Zed Fox", "Opener: Zork."]
-
-
-def test_merge_lines_keeps_dropped_order(source_norm: str) -> None:
-    kept, dropped = merge_lines(
-        derived=[],
-        openers=[],
-        caller=["Link: https://evil.example/x", "Seat: GA", "Price: $99", "Show: 11 PM"],
-        source_norm=source_norm,
-        title="X",
-    )
-    assert kept == ["Seat: GA"]
-    assert dropped == ["Link: https://evil.example/x", "Price: $99", "Show: 11 PM"]
-
-
-def test_merge_lines_squashes_caller_lines(source_norm: str) -> None:
-    kept, _ = merge_lines(derived=[], openers=[], caller=["  Seat:   GA  "], source_norm=source_norm, title="X")
-    assert kept == ["Seat: GA"]
-
-
-def test_merge_lines_with_no_source_drops_every_claim() -> None:
-    kept, dropped = merge_lines(derived=[], openers=[], caller=["Seat: GA", "Price: $5"], source_norm=None, title="X")
-    assert kept == ["Seat: GA"]
-    assert dropped == ["Price: $5"]
-
-
 # ---- coerce_description / check_attendees ----------------------------------------------------------------------------
-
-
-def test_coerce_description() -> None:
-    assert coerce_description(None) == []
-    assert coerce_description("") == []
-    assert coerce_description([]) == []
-    assert coerce_description("Doors: 7 PM\\nSeat: GA") == ["Doors: 7 PM", "Seat: GA"]  # literal backslash-n
-    assert coerce_description("Doors: 7 PM\nSeat: GA") == ["Doors: 7 PM", "Seat: GA"]
-    assert coerce_description("one line") == ["one line"]
-    assert coerce_description(["Doors: 7 PM", 42]) == ["Doors: 7 PM", "42"]
-    with pytest.raises(FixInput) as ei:
-        coerce_description(42)
-    assert ei.value.error == "description must be a list of lines"
-    assert ei.value.fix == 'use ["Doors: 7:00 PM", "Purchased: 1 ticket, $45"]'
-    with pytest.raises(FixInput):
-        coerce_description({"Doors": "7 PM"})
-
-
-def test_check_attendees() -> None:
-    assert check_attendees(None) == []
-    assert check_attendees([]) == []
-    assert check_attendees(["name@example.com", "other@example.org"]) == ["name@example.com", "other@example.org"]
-    for bad in (["name"], "name@example.com", ["name@example.com", "nope"], 42):
-        with pytest.raises(FixInput) as ei:
-            check_attendees(bad)
-        assert ei.value.error == "attendees must be a list of email addresses"
-        assert ei.value.fix == 'use ["name@example.com"]'

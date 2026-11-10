@@ -21,28 +21,26 @@ def _report() -> HealthReport:
     )
 
 
-def test_failures_and_ok() -> None:
+def test_health_render() -> None:
+    # failures_and_ok:
     report = _report()
     assert report.failures == 2
     assert report.ok is False
     assert HealthReport((Check("python", "PASS", "3.12.1"),)).ok is True
     assert HealthReport(()).ok is True
 
-
-def test_every_check_row_matches_the_doctor_shape() -> None:
+    # every_check_row_matches_the_doctor_shape:
     lines = render_health(_report()).split("\n")
     rows = [ln for ln in lines if not ln.startswith("  ->") and ln not in ("all good",) and not ln.endswith("failing")]
     assert len(rows) == 5
     for ln in rows:
         assert ROW_RE.match(ln), ln
 
-
-def test_row_is_status_two_spaces_name_padded_to_16() -> None:
+    # row_is_status_two_spaces_name_padded_to_16:
     text = render_health(HealthReport((Check("python", "PASS", "3.12.1"),)))
     assert text.split("\n")[0] == "PASS  python           3.12.1"
 
-
-def test_fix_line_carries_the_readme_anchor() -> None:
+    # fix_line_carries_the_readme_anchor:
     lines = render_health(_report()).split("\n")
     fixes = [ln for ln in lines if ln.startswith("  ->")]
     assert fixes == [
@@ -52,27 +50,23 @@ def test_fix_line_carries_the_readme_anchor() -> None:
     for ln in fixes:
         assert any(anchor in ln for anchor in ANCHORS.values())
 
-
-def test_fix_lines_follow_all_rows_and_precede_the_summary() -> None:
+    # fix_lines_follow_all_rows_and_precede_the_summary:
     lines = render_health(_report()).split("\n")
     first_fix = next(i for i, ln in enumerate(lines) if ln.startswith("  ->"))
     assert all(ROW_RE.match(ln) for ln in lines[:first_fix])
     assert lines[-1] == "2 failing"
 
-
-def test_summary_all_good_vs_n_failing() -> None:
+    # summary_all_good_vs_n_failing:
     good = HealthReport((Check("python", "PASS", "3.12.1"), Check("gws-auth", "SKIP", "pass --probe")))
     assert render_health(good).split("\n")[-1] == "all good"
     assert "  ->" not in render_health(good)
     assert render_health(_report()).split("\n")[-1] == "2 failing"
 
-
-def test_fail_without_fix_or_anchor_still_renders() -> None:
+    # fail_without_fix_or_anchor_still_renders:
     text = render_health(HealthReport((Check("x", "FAIL", "boom"),)))
     assert text.split("\n") == ["FAIL  x                boom", "  ->  x                 ()", "1 failing"]
 
-
-def test_to_json_round_trip() -> None:
+    # to_json_round_trip:
     report = _report()
     data = report.to_json()
     assert data["ok"] is False
@@ -81,8 +75,7 @@ def test_to_json_round_trip() -> None:
     rebuilt = HealthReport(tuple(Check(**c) for c in data["checks"]))
     assert rebuilt == report
 
-
-def test_anchors_point_into_the_readme() -> None:
+    # anchors_point_into_the_readme:
     assert set(ANCHORS) == {"getting-started", "configuration", "google-calendar", "spotify", "setlistfm", "openclaw"}
     for value in ANCHORS.values():
         assert value.startswith("README.md#")
