@@ -15,6 +15,12 @@ from it:
   claude-explanation.txt  Claude's account, written by the fallback (beads-afj), to improve the MCP later
 
 A launchd job on the gateway runs `collect` every few minutes.
+
+A failure inside a tool (Google Calendar refusing, a crash, a fix the guard gave up on) is different: the model
+answered, so the transcript shows nothing wrong. `save_tool_failure` writes that one from the server, the moment it
+happens, into the same folders: `meta.json` says `"kind": "tool"`, `args.json` holds the call, `reply.txt` what the
+chat was told, and `request.txt` the ticket text so the bot can be handed it again. No screenshot: the tool never
+sees one.
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ from __future__ import annotations
 import json
 import shlex
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -75,6 +81,44 @@ def save_failure(f: Failure, root: Path) -> Path | None:
     (folder / "replay.sh").write_text(f"#!/bin/sh\n{replay_line(folder)}\n", encoding="utf-8")
     (folder / "replay.sh").chmod(0o700)
     (folder / ORIN_FILE).write_text(f"{NOT_EXPLAINED}not asked yet\n", encoding="utf-8")
+    return folder
+
+
+def save_tool_failure(
+    settings: Settings,
+    *,
+    tool: str,
+    args: Mapping[str, str],
+    kind: str,
+    error: str | None,
+    reply: str | None,
+    chat: str,
+    now_s: float,
+) -> Path | None:
+    """Write one failed tool call's folder and rotate; None when that second already has a folder."""
+    folder = failures_dir(settings) / str(int(now_s))
+    if folder.exists():
+        return None
+    folder.mkdir(parents=True, mode=0o700)
+    source = args.get("source_text", "")
+    notes = args.get("notes", "")
+    request = "\n\n".join(x for x in (notes, source) if x) or json.dumps(dict(args), indent=2)
+    (folder / "prompt.txt").write_text(notes, encoding="utf-8")
+    (folder / "text.txt").write_text(source, encoding="utf-8")
+    (folder / "request.txt").write_text(request, encoding="utf-8")
+    (folder / "args.json").write_text(json.dumps(dict(args), indent=2) + "\n", encoding="utf-8")
+    (folder / "reply.txt").write_text((reply or "") + "\n", encoding="utf-8")
+    meta = {
+        "kind": "tool",
+        "at_ms": int(now_s * 1000),
+        "tool": tool,
+        "outcome": kind,
+        "error": error or "",
+        "chat": chat,
+        "image_saved": False,
+    }
+    (folder / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    rotate(settings)
     return folder
 
 

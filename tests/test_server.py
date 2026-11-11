@@ -214,3 +214,50 @@ def test_crash_text_without_settings_and_a_delivery_layer_crash(
     monkeypatch.setattr(server, "run_tool", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("delivery broke")))
     text = healthcheck()
     assert text.startswith("Something broke inside the concert tool (RuntimeError).") and "NOT SENT" in text
+
+
+# ---------- a failed tool call is kept under failures/ ----------
+
+
+def _kept(settings: Settings) -> list[dict[str, Any]]:
+    import json
+
+    from concert_mcp.flows.failures import saved_failures
+
+    return [json.loads((p / "meta.json").read_text(encoding="utf-8")) | {"folder": p} for p in saved_failures(settings)]
+
+
+def test_a_calendar_refusal_is_saved_with_the_call_and_the_reply(
+    settings: Settings, now: datetime, ticket_text: str
+) -> None:
+    # 2026-11-10: gws's token had expired, the model answered normally, and nothing was kept for replay.
+    svc = make_services(settings, now, route=None, text=ticket_text)
+    svc.calendar = FakeCalendar(calendars=[{"id": "cal-concerts", "summary": "Concerts"}], fail="insert_event")
+    build_server(svc)
+    text = concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
+    assert "Google Calendar refused" in text
+    (meta,) = _kept(settings)
+    assert (meta["kind"], meta["tool"], meta["outcome"], meta["image_saved"]) == ("tool", "concert_add", "error", False)
+    folder = meta["folder"]
+    assert (folder / "text.txt").read_text(encoding="utf-8") == ticket_text
+    assert ticket_text in (folder / "request.txt").read_text(encoding="utf-8")
+    assert "Google Calendar refused" in (folder / "reply.txt").read_text(encoding="utf-8")
+    import json
+
+    assert json.loads((folder / "args.json").read_text(encoding="utf-8"))["artist"] == "Zed Fox"
+
+
+def test_a_crash_inside_the_flow_is_saved_too(settings: Settings, now: datetime, ticket_text: str) -> None:
+    svc = make_services(settings, now, route=None, text=ticket_text)
+    svc.calendar = _ExplodingCalendar(calendars=[{"id": "cal-concerts", "summary": "Concerts"}])
+    build_server(svc)
+    concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
+    (meta,) = _kept(settings)
+    assert meta["tool"] == "concert_add"
+    assert "RuntimeError" in meta["error"]
+
+
+def test_a_successful_call_saves_nothing(svc_cli: Services, ticket_text: str) -> None:
+    build_server(svc_cli)
+    concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
+    assert _kept(svc_cli.settings) == []

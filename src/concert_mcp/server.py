@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from collections.abc import Callable, Sequence
 from typing import Annotated
 
@@ -24,6 +25,7 @@ from concert_mcp.config import load_settings
 from concert_mcp.flows.concert_add import add_concert, add_plain
 from concert_mcp.flows.deliver import run_tool
 from concert_mcp.flows.event_delete import DeleteRequest, delete_event
+from concert_mcp.flows.failures import save_tool_failure
 from concert_mcp.flows.healthcheck import healthcheck_outcome
 from concert_mcp.flows.lineup import lineup_outcome
 from concert_mcp.flows.movie_add import add_movie, is_movie_title
@@ -32,9 +34,9 @@ from concert_mcp.flows.services import Services, build_services
 from concert_mcp.flows.setlist import setlist_outcome
 from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import teaser_outcome
-from concert_mcp.log import set_level
+from concert_mcp.log import kv, log_info, log_warn, set_level
 from concert_mcp.prompts import load_prompt
-from concert_mcp.result import Outcome, crash_outcome
+from concert_mcp.result import Kind, Outcome, crash_outcome
 from concert_mcp.text.movie import parse_movie_ticket
 from concert_mcp.text.titles import clean_param, is_yes
 
@@ -106,9 +108,31 @@ def _run(name: str, make: Callable[[Services, dict[str, str]], Outcome], **args:
         return _crash_text(exc)
     record_call(svc.settings.state_dir, name, args)
     try:
-        return run_tool(lambda: make(svc, args), svc, tool=name, guard=True)[2]
+        outcome, delivery, text = run_tool(lambda: make(svc, args), svc, tool=name, guard=True)
     except Exception as exc:  # run_tool already turns a flow crash into a reply; this covers the delivery layer itself
+        _keep_failure(svc, name, args, "crash", repr(exc)[:300], None)
         return _crash_text(exc, svc.operator)
+    # An error, or a fix the guard stopped asking for and told the chat about: the user saw a failure, so keep it.
+    if outcome.kind is Kind.ERROR or (outcome.kind is Kind.FIX and delivery.sent):
+        _keep_failure(svc, name, args, outcome.kind.value, outcome.error or outcome.fix, outcome.reply)
+    return text
+
+
+def _keep_failure(
+    svc: Services, tool: str, args: dict[str, str], kind: str, error: str | None, reply: str | None
+) -> None:
+    """Save a failed tool call under failures/ for replay. Never raises: the reply matters more than the record."""
+    try:
+        now_s = svc.clock.time()
+        sid, route = svc.context.live_route(now_s)
+        chat = json.dumps({"session": sid, "route": route}, default=str) if sid else ""
+        folder = save_tool_failure(
+            svc.settings, tool=tool, args=args, kind=kind, error=error, reply=reply, chat=chat, now_s=now_s
+        )
+        if folder:
+            log_info(f"saved a failed tool call | {kv(tool=tool, folder=str(folder))}")
+    except Exception as e:  # noqa: BLE001
+        log_warn(f"could not save the failed tool call | {kv(tool=tool, error=repr(e)[:200])}")
 
 
 def concert_add(
