@@ -86,3 +86,21 @@ def test_nothing_stored_is_an_empty_description() -> None:
 def test_description_of_reads_an_event() -> None:
     assert description_of({"description": "Doors: 7:00 PM"}) == "Doors: 7:00 PM"
     assert description_of({}) == ""
+
+
+def test_tags_with_no_meaning_here_are_read_through() -> None:
+    stored = HtmlDescription('<span style="x">Doors: <strong>7:00 PM</strong></span><hr>')
+    assert to_plain(stored) == "Doors: 7:00 PM"
+
+
+def test_leading_and_doubled_newlines_in_old_plain_text_are_kept_as_lines() -> None:
+    assert lines_of(to_plain(HtmlDescription("\nDoors: 7:00 PM\n\nSeat: GA"))) == ["", "Doors: 7:00 PM", "", "Seat: GA"]
+
+
+def test_a_bare_address_inside_a_sentence_stays_the_address() -> None:
+    stored = HtmlDescription('Tickets: <a href="https://axs.example">https://axs.example</a> or the door')
+    assert to_plain(stored) == "Tickets: https://axs.example or the door"
+
+
+def test_trailing_breaks_are_not_lines() -> None:
+    assert to_plain(HtmlDescription("Doors: 7:00 PM<br><br>")) == "Doors: 7:00 PM"

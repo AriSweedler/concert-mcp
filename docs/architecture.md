@@ -24,7 +24,7 @@ The output contract, which every tool and every CLI subcommand ends in:
 
 1. A flow returns `Outcome(kind, reply, error, fix, data)`.
 2. `deliver()` sends the reply itself through `openclaw message send` when a chat spoke in the last 15 minutes and the same text was not sent in the last 10; otherwise the status is `NOT SENT: <why>`.
-3. Sent: the tool result is the `NO_REPLY` block, and the model's whole answer is `NO_REPLY`.
+3. Sent: the tool result is the `NO_REPLY` block, and the model's whole answer is `NO_REPLY`. OpenClaw accepts that silence in a group chat only with `agents.defaults.silentReply.group: "allow"`; without it the gateway treats the empty answer as missing, asks the model again and posts a second message (healthcheck row `openclaw-silent-reply`).
 4. Not sent: the tool result is the reply text plus the `NOT SENT` line, and the model relays the text unchanged.
 5. The caller's input was wrong: `FIX: <what to change>`, the only retry signal. On the MCP path it ends with `Call <tool> once more with only that change.`; the third FIX for one tool within 15 minutes becomes a question to the user instead.
 

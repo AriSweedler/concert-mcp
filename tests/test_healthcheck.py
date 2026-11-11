@@ -55,7 +55,7 @@ SPOTIFY_JSON = json.dumps({"client_id": "a" * 32, "client_secret": "b" * 32, "re
 def test_send_false_skips_the_openclaw_rows(tmp_path: Path) -> None:
     settings = load_settings(bare_env(tmp_path, send="0"), home=tmp_path)
     rows = by_name(run_healthcheck(settings))
-    for name in ("openclaw-binary", "openclaw-config", "openclaw-session-db"):
+    for name in ("openclaw-binary", "openclaw-config", "openclaw-silent-reply", "openclaw-session-db"):
         assert rows[name] == Check(name, "SKIP", "delivery off (CONCERT_MCP_SEND=0)")
 
 
@@ -230,9 +230,31 @@ def test_a_check_raising_becomes_a_fail_with_the_type_name(bare: Settings, monke
     assert row.fix
 
 
+def test_openclaw_silent_reply_rows(bare: Settings) -> None:
+    # 2026-11-10: without this setting OpenClaw took the model's NO_REPLY for a missing answer and posted a second
+    # message after the tool's own reply.
+    def row() -> Check:
+        return by_name(run_healthcheck(bare))["openclaw-silent-reply"]
+
+    assert row() == Check("openclaw-silent-reply", "SKIP", "absent")
+    _write(bare.openclaw_config, json.dumps({"agents": {"defaults": {"silentReply": {"group": "allow"}}}}), mode=0o600)
+    assert row() == Check("openclaw-silent-reply", "PASS", "group replies may end silently (one message per tool call)")
+    for cfg in ({}, {"agents": {"defaults": {"silentReply": {"group": "disallow"}}}}, {"agents": {"defaults": {}}}):
+        _write(bare.openclaw_config, json.dumps(cfg), mode=0o600)
+        got = row()
+        assert (got.status, got.anchor, got.fix) == (
+            "FAIL",
+            "openclaw",
+            "openclaw config set agents.defaults.silentReply.group allow",
+        )
+        assert "second message" in got.evidence
+    _write(bare.openclaw_config, "{broken", mode=0o600)
+    assert row() == Check("openclaw-silent-reply", "SKIP", "unreadable")
+
+
 def test_check_names_and_registry_agree() -> None:
     assert tuple(mod.CHECKS) == CHECK_NAMES
-    assert len(CHECK_NAMES) == 19
+    assert len(CHECK_NAMES) == 20
 
 
 # ---------- the outcome ----------

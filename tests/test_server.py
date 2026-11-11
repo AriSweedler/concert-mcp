@@ -261,3 +261,17 @@ def test_a_successful_call_saves_nothing(svc_cli: Services, ticket_text: str) ->
     build_server(svc_cli)
     concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
     assert _kept(svc_cli.settings) == []
+
+
+def test_a_capture_that_fails_never_costs_the_reply(
+    settings: Settings, now: datetime, ticket_text: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from concert_mcp import server
+
+    svc = make_services(settings, now, route=None, text=ticket_text)
+    svc.calendar = FakeCalendar(calendars=[{"id": "cal-concerts", "summary": "Concerts"}], fail="insert_event")
+    build_server(svc)
+    monkeypatch.setattr(server, "save_tool_failure", lambda *a, **kw: (_ for _ in ()).throw(OSError("disk full")))
+    text = concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
+    assert "Google Calendar refused" in text
+    assert _kept(settings) == []

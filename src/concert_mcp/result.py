@@ -86,9 +86,13 @@ class ProviderError(Exception):
 
 
 NEED_USER = "I could not read the {what} from that. Reply with it and I will add the event."
+# The first line is OpenClaw's silent token; the rest tells the model why silence is the right answer. OpenClaw
+# honors it in a group only with `agents.defaults.silentReply.group: "allow"`; without that setting it treats the
+# silence as a missing answer and posts a second message (healthcheck row openclaw-silent-reply).
 NO_REPLY_TEXT = (
     "NO_REPLY\n"
-    "The chat already received the full answer. Do not describe it or add anything. "
+    "The tool answered the user itself: the chat already has the full reply. Anything more from you before the "
+    "user writes again would be redundant. Do not describe, repeat or summarize it. "
     "Your entire reply must be exactly: NO_REPLY"
 )
 

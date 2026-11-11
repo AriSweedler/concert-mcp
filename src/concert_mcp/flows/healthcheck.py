@@ -43,6 +43,7 @@ CHECK_NAMES = (
     "gemini-key",
     "openclaw-binary",
     "openclaw-config",
+    "openclaw-silent-reply",
     "openclaw-session-db",
     "setlist-queue",
 )
@@ -52,6 +53,7 @@ SKIP_DELIVERY_OFF = "delivery off (CONCERT_MCP_SEND=0)"
 SKIP_GWS_AUTH_FAILED = "gws-auth failed"
 KEYFILE_FIX = "create the file keyring key: GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file gws auth login"
 GWS_AUTH_FIX = "gws auth login"
+SILENT_REPLY_FIX = "openclaw config set agents.defaults.silentReply.group allow"
 # The artist one setlist.fm probe searches for; any well-documented act works, the count is only evidence of auth.
 PROBE_ARTIST = "Radiohead"
 EVIDENCE_MAX = 120
@@ -339,6 +341,31 @@ def _check_openclaw_config(ctx: _Ctx) -> Check:
     return Check("openclaw-config", "SKIP", "no bot token: topics are not renamed")
 
 
+def _check_openclaw_silent_reply(ctx: _Ctx) -> Check:
+    """The tool delivers its own reply and the model answers NO_REPLY. OpenClaw accepts that silence in a group
+    only when told to; otherwise it asks the model again and posts a second, confused message (2026-11-10)."""
+    if not ctx.settings.send:
+        return Check("openclaw-silent-reply", "SKIP", SKIP_DELIVERY_OFF)
+    path = ctx.settings.openclaw_config
+    if not path.exists():
+        return Check("openclaw-silent-reply", "SKIP", "absent")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return Check("openclaw-silent-reply", "SKIP", "unreadable")
+    defaults = ((data.get("agents") or {}).get("defaults") or {}) if isinstance(data, dict) else {}
+    policy = (defaults.get("silentReply") or {}).get("group") if isinstance(defaults.get("silentReply"), dict) else None
+    if policy == "allow":
+        return Check("openclaw-silent-reply", "PASS", "group replies may end silently (one message per tool call)")
+    return Check(
+        "openclaw-silent-reply",
+        "FAIL",
+        f"agents.defaults.silentReply.group is {policy!r}: the chat gets a second message after every tool reply",
+        "openclaw",
+        SILENT_REPLY_FIX,
+    )
+
+
 def _check_openclaw_session_db(ctx: _Ctx) -> Check:
     if not ctx.settings.send:
         return Check("openclaw-session-db", "SKIP", SKIP_DELIVERY_OFF)
@@ -382,6 +409,7 @@ CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "gemini-key": (_check_gemini_key, "configuration"),
     "openclaw-binary": (_check_openclaw_binary, "openclaw"),
     "openclaw-config": (_check_openclaw_config, "openclaw"),
+    "openclaw-silent-reply": (_check_openclaw_silent_reply, "openclaw"),
     "openclaw-session-db": (_check_openclaw_session_db, "openclaw"),
     "setlist-queue": (_check_setlist_queue, "configuration"),
 }

@@ -217,3 +217,8 @@ def test_a_description_comes_back_plain_whichever_way_google_holds_it(settings: 
 
     one = make(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps({"id": "new", "description": stored}), "")}))
     assert one.get_event("cal-concerts", "new")["description"] == old
+
+
+def test_an_answer_that_is_not_an_event_is_an_empty_event(settings: Settings) -> None:
+    cal = make(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps(["not", "an", "event"]), "")}))
+    assert cal.get_event("cal-concerts", "e1") == {}

@@ -101,6 +101,7 @@ SKIP  places-key       optional: concert-mcp venues auth stores a Google Places 
 SKIP  gemini-key       optional: concert-mcp gemini auth stores a Gemini key (openers, set times)
 FAIL  openclaw-binary  openclaw not found
 SKIP  openclaw-config  absent
+SKIP  openclaw-silent-reply absent
 SKIP  openclaw-session-db absent or unreadable: replies are not delivered
 PASS  setlist-queue    0 shows queued
   ->  gws-keyfile      create the file keyring key: GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file gws auth login (README.md#google-calendar)

@@ -68,11 +68,12 @@ uv run concert-mcp spotify setlist-auth --manual
 ```sh
 openclaw mcp set concert '{"command":"uv","args":["run","--project","/path/to/concert-mcp","concert-mcp","serve"],"env":{"CONCERT_MCP_OPERATOR_NAME":"${CONCERT_MCP_OPERATOR_NAME}","CONCERT_MCP_GWS_BIN":"${CONCERT_MCP_GWS_BIN}","CONCERT_MCP_OPENCLAW_BIN":"${CONCERT_MCP_OPENCLAW_BIN}"},"toolFilter":{"include":["concert_add","calendar_add","event_delete"]},"requestTimeoutMs":480000,"enabled":true}'
 openclaw config set tools.alsoAllow '["exec","read","concert__concert_add","concert__calendar_add","concert__event_delete"]'
+openclaw config set agents.defaults.silentReply.group allow
 openclaw mcp reload
 openclaw mcp probe concert
 ```
 
-An unset `${...}` variable falls back to its default. Without the `alsoAllow` line, OpenClaw's `minimal` tool profile hides the tools. Then send the bot a ticket screenshot: the reply lands in the chat that asked. [Details](docs/credentials.md#openclaw).
+An unset `${...}` variable falls back to its default. Without the `alsoAllow` line, OpenClaw's `minimal` tool profile hides the tools. Without the `silentReply` line, every tool reply in a group is followed by a second message from the model: the tool sends its own reply and the model then answers nothing, which OpenClaw only accepts in a group when told to. Then send the bot a ticket screenshot: the reply lands in the chat that asked. [Details](docs/credentials.md#openclaw).
 
 ## Configuration
 
