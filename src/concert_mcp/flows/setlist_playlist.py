@@ -33,10 +33,10 @@ from concert_mcp.text.dates import concert_date
 from concert_mcp.text.description import description_of
 from concert_mcp.text.naming import (
     SETLIST_LINK,
+    has_dated_setlist_description,
     is_setlist_playlist,
     playlist_name,
     setlist_description,
-    with_setlist_link,
 )
 from concert_mcp.text.reply import provider_reply, render_setlist_playlist
 from concert_mcp.text.routes import chat_target, forum_target
@@ -140,6 +140,7 @@ def sync_setlist_playlist(
     api = svc.spotify
     try:
         playlists = api.my_playlists()
+        description = setlist_description(setlistfm_url, svc.clock.now().astimezone(svc.tz).date().isoformat())
         existing = find_setlist_playlist(playlists, name)
         teaser = find_teaser_playlist(playlists, name)
         teaser_url = _url_of(teaser) if teaser else None
@@ -161,9 +162,7 @@ def sync_setlist_playlist(
             pl = existing
             log_info(f"setlist playlist exists; topping it up | name='{name}' id='{pl['id']}'")
         else:
-            pl = api.create_playlist(
-                name=name, description=setlist_description(artist, date, setlistfm_url, teaser_url), public=False
-            )
+            pl = api.create_playlist(name=name, description=description, public=False)
             log_info(f"setlist playlist created | name='{name}' id='{pl['id']}'")
         url = _url_of(pl)
         rows = api.playlist_items(pl["id"])
@@ -180,14 +179,9 @@ def sync_setlist_playlist(
         if new:
             api.add_items(pl["id"], new)
 
-        # Cross-links, each written once: the teaser's description names the setlist playlist and the setlist
-        # playlist's names the teaser (an existing setlist playlist may predate the teaser).
-        if teaser and url and SETLIST_LINK not in str(teaser.get("description") or ""):
-            api.update_playlist_details(teaser["id"], description=with_setlist_link(teaser.get("description"), url))
-        if existing and teaser_url and teaser_url not in str(existing.get("description") or ""):
-            api.update_playlist_details(
-                existing["id"], description=setlist_description(artist, date, setlistfm_url, teaser_url)
-            )
+        # The page was read again today: the description's day (and its page, when the user chose another) follows.
+        if existing and has_dated_setlist_description(existing) and existing.get("description") != description:
+            api.update_playlist_details(existing["id"], description=description)
         return SyncResult(
             "updated" if existing else "created",
             name,

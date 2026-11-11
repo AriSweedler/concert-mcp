@@ -190,7 +190,7 @@ class TestRealSync:
         assert [x.action for x in r.rows] == ["5 songs; playlist created; announced"]
         assert svc.setlistfm.fetched == ["abc"]
         (created,) = svc.spotify.created
-        assert created["name"] == "2026-11-14 | Zed Fox" and created["description"].startswith("Setlist:")
+        assert created["name"] == "2026-11-14 | Zed Fox" and created["description"].startswith("Setlist, according to ")
         assert [uris for _pl, uris in svc.spotify.added] == [[f"spotify:track:s{i}" for i in range(5)]]
         assert one_row(svc).playlist_url == created["external_urls"]["spotify"]
         assert len(svc.chat.sent) == 1 and "[2026-11-14 | Zed Fox](" in svc.chat.sent[0][1]

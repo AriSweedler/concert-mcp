@@ -19,7 +19,7 @@ from concert_mcp.flows.setlist_playlist import (
 from concert_mcp.flows.teaser import make_teaser
 from concert_mcp.flows.topics import make_topic_entry, topic_remember
 from concert_mcp.result import Kind
-from concert_mcp.text.naming import setlist_description, teaser_description, with_setlist_link
+from concert_mcp.text.naming import is_setlist_playlist, setlist_description, teaser_description
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, page_artist_of, setlist_id_of, songs_of
 from concert_mcp.text.topics import topic_key
@@ -91,12 +91,25 @@ def test_setlist_id_of_accepts_only_setlist_pages() -> None:
     assert page_artist_of("https://www.setlist.fm/search?query=Zed%20Fox") is None
 
 
-def test_with_setlist_link_appends_once() -> None:
-    desc = teaser_description(ARTIST, DATE)
-    once = with_setlist_link(desc, "https://open.spotify.com/playlist/pl2")
-    assert once == desc + " Setlist playlist: https://open.spotify.com/playlist/pl2"
-    assert with_setlist_link(once, "https://open.spotify.com/playlist/pl9") == once
-    assert with_setlist_link(None, "u") == "Setlist playlist: u"
+OLD_SETLIST = f"Setlist: {ARTIST} on {DATE}, in setlist order, from {PAGE_URL}"  # as written before 2026-11-10
+
+
+def today(svc: Services) -> str:
+    return svc.clock.now().astimezone(svc.tz).date().isoformat()
+
+
+def test_the_descriptions_say_what_the_name_does_not() -> None:
+    # One line (Spotify refuses a newline), no link to the other playlist (it cannot be clicked), the repo last.
+    assert setlist_description(PAGE_URL, "2026-11-20") == (
+        f"Setlist, according to {PAGE_URL} on 2026-11-20 · Created by AriSweedler/concert-mcp"
+    )
+    assert teaser_description(ARTIST, "Ari") == "Ari's liked songs from Zed Fox · Created by AriSweedler/concert-mcp"
+    # Both playlists of a show share a name; the description's start tells them apart, in either form.
+    assert is_setlist_playlist({"description": setlist_description(PAGE_URL, "2026-11-20")})
+    assert is_setlist_playlist({"description": OLD_SETLIST})
+    assert not is_setlist_playlist({"description": teaser_description(ARTIST, "Ari")})
+    assert not is_setlist_playlist({"description": "Teaser for Zed Fox on 2026-11-14: every liked song by them."})
+    assert not is_setlist_playlist({})
 
 
 # ---------- sync ----------
@@ -175,7 +188,7 @@ def stale_playlist(svc: Services) -> dict[str, Any]:
     """An existing setlist playlist an earlier run filled with the session take of Third Rail, in setlist order."""
     sp = svc.spotify
     sp.tracks = [*TRACKS[:1], THIRD_RAIL_SESSIONS, THIRD_RAIL_ALBUM, *TRACKS[2:]]
-    pl = sp.create_playlist(name=NAME, description=setlist_description(ARTIST, DATE, PAGE_URL), public=False)
+    pl = sp.create_playlist(name=NAME, description=OLD_SETLIST, public=False)
     sp.items[pl["id"]] = [
         {"name": "First Light", "artists": ["Zed Fox"], "uri": "spotify:track:t1"},
         {"name": "Third Rail - Harbor Sessions", "artists": ["Zed Fox"], "uri": "spotify:track:t3-sessions"},
@@ -199,12 +212,12 @@ def test_the_reply_names_the_swapped_songs(svc_cli: Services) -> None:
     assert out.data["swapped"] == ["Third Rail"]
 
 
-def test_sync_tops_up_an_existing_setlist_playlist_and_cross_links_the_teaser(svc_cli: Services) -> None:
+def test_sync_tops_up_an_existing_setlist_playlist_and_leaves_its_old_description(svc_cli: Services) -> None:
     wire(svc_cli)
     teaser = make_teaser(ARTIST, DATE, svc_cli)
     assert teaser.status == "created" and teaser.url == "https://open.spotify.com/playlist/pl1"
     sp = svc_cli.spotify
-    existing = sp.create_playlist(name=NAME, description=setlist_description(ARTIST, DATE, PAGE_URL), public=False)
+    existing = sp.create_playlist(name=NAME, description=OLD_SETLIST, public=False)
     sp.add_items(existing["id"], ["spotify:track:t1"])
     sp.calls.clear()
     sp.added.clear()
@@ -214,10 +227,8 @@ def test_sync_tops_up_an_existing_setlist_playlist_and_cross_links_the_teaser(sv
     assert (res.added, res.already_there, res.missing) == (2, 1, ("Unreleased Jam",))
     assert res.teaser_url == "https://open.spotify.com/playlist/pl1"
     assert sp.added == [("pl2", ["spotify:track:c1", "spotify:track:t3"])]
-    assert sp.described == [
-        ("pl1", teaser_description(ARTIST, DATE) + " Setlist playlist: https://open.spotify.com/playlist/pl2"),
-        ("pl2", setlist_description(ARTIST, DATE, PAGE_URL, "https://open.spotify.com/playlist/pl1")),
-    ]
+    # No cross-links, and a playlist made before the new text keeps the description it was given.
+    assert sp.described == []
     assert not [c for c in sp.calls if c[0] == "create_playlist"]
 
     # A third run changes nothing.
@@ -291,7 +302,6 @@ def test_outcome_without_a_topic_finds_the_event_by_title_and_date(svc_cli: Serv
         "**Setlist playlist** [2026-11-14 | Zed Fox](https://open.spotify.com/playlist/pl2): 3 songs, "
         "1 not on Spotify.\n"
         "Not on Spotify: Unreleased Jam\n"
-        "Linked with the teaser playlist.\n"
         "Calendar event updated with the link."
     )
     assert svc_cli.calendar.patched[0][2] == {"description": "Setlist playlist: https://open.spotify.com/playlist/pl2"}
@@ -388,3 +398,24 @@ def test_remember_in_queue_finds_the_show_by_artist_and_date_and_never_raises(sv
 
     svc_cli.state = Broken()  # type: ignore[assignment]
     assert remember_in_queue(None, "Zed Fox", "2026-11-14", PAGE_URL, 4, "https://p", svc_cli) is False
+
+
+def test_a_new_setlist_playlist_carries_the_read_date_and_a_later_read_moves_it(svc_cli: Services) -> None:
+    wire(svc_cli)
+    sp = svc_cli.spotify
+    res = sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
+    assert res.status == "created"
+    first = setlist_description(PAGE_URL, today(svc_cli))
+    made = [c for c in sp.calls if c[0] == "create_playlist"]
+    assert made and made[0][1]["description"] == first
+
+    # The same day: nothing to rewrite.
+    sp.described.clear()
+    sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
+    assert sp.described == []
+
+    # A week later the page is read again: the day in the description follows.
+    svc_cli.clock.advance(7 * 86400)
+    sync_setlist_playlist(artist=ARTIST, date=DATE, songs=songs_of(page()), setlistfm_url=PAGE_URL, svc=svc_cli)
+    later = setlist_description(PAGE_URL, today(svc_cli))
+    assert later != first and sp.described == [(res.id, later)]

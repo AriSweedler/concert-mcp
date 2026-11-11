@@ -31,33 +31,37 @@ def topic_name(start: datetime, title: str, location: str) -> str:
     return f"{start.strftime('%Y-%m-%d')} | {title} | {location.split(',')[0].strip()}"
 
 
-def teaser_description(artist: str, date: str) -> str:
-    """The teaser playlist's description."""
-    return f"Teaser for {artist} on {date}: every liked song by them, in the order they were liked."
+# A Spotify description is one line (the API refuses a newline, and a link in it cannot be clicked), so its parts
+# are set apart by a dot and it ends with where the playlist came from, for whoever it is shared with. The name
+# already carries the artist and the date; the description says only what the name does not.
+SEPARATOR = " · "
+CREDIT = "Created by AriSweedler/concert-mcp"
+
+
+def teaser_description(artist: str, owner: str) -> str:
+    """The teaser playlist's description: whose liked songs these are."""
+    return f"{owner}'s liked songs from {artist}{SEPARATOR}{CREDIT}"
 
 
 # The two playlists of one show share the name; the description's first word tells them apart. A setlist
-# playlist's description starts with this marker, a teaser's with "Teaser for".
-SETLIST_MARK = "Setlist:"
-SETLIST_LINK = "Setlist playlist: "
+# playlist's description starts with "Setlist," ("Setlist:" on one made before 2026-11-10), a teaser's does not.
+SETLIST_READ = "Setlist, according to "
+SETLIST_MARKS = ("Setlist,", "Setlist:")
+SETLIST_LINK = "Setlist playlist: "  # the calendar event's line, not a playlist's
 
 
-def setlist_description(artist: str, date: str, setlistfm_url: str, teaser_url: str | None = None) -> str:
-    """The setlist playlist's description: the show, the setlist.fm page, and the teaser playlist when one exists."""
-    text = f"{SETLIST_MARK} {artist} on {date}, in setlist order, from {setlistfm_url}"
-    if teaser_url:
-        text += f" Teaser playlist: {teaser_url}"
-    return text
+def setlist_description(setlistfm_url: str, read_date: str) -> str:
+    """The setlist playlist's description: the page the songs came from and the day it was read. The page fills in
+    over weeks, so the day moves forward each time the playlist is brought up to date."""
+    return f"{SETLIST_READ}{setlistfm_url} on {read_date}{SEPARATOR}{CREDIT}"
 
 
 def is_setlist_playlist(pl: Mapping[str, Any]) -> bool:
-    """Whether a Spotify playlist row is a setlist playlist (description starts with the marker)."""
-    return str(pl.get("description") or "").lstrip().startswith(SETLIST_MARK)
+    """Whether a Spotify playlist row is a setlist playlist (description starts with a marker, old or new)."""
+    return str(pl.get("description") or "").lstrip().startswith(SETLIST_MARKS)
 
 
-def with_setlist_link(description: str | None, url: str) -> str:
-    """The description with `Setlist playlist: <url>` appended once."""
-    text = (description or "").rstrip()
-    if SETLIST_LINK in text:
-        return text
-    return f"{text} {SETLIST_LINK}{url}".strip()
+def has_dated_setlist_description(pl: Mapping[str, Any]) -> bool:
+    """Whether the row carries the description with a read date: only those are brought up to date, so a playlist
+    made before 2026-11-10 keeps the text it was given."""
+    return str(pl.get("description") or "").lstrip().startswith(SETLIST_READ)

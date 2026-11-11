@@ -403,7 +403,7 @@ OLD_CONCERT_NAME = re.compile(r"^\s*(\d{4})[/-](\d{2})[/-](\d{2})\s*(?:[-|]\s*)?
 def playlist_name(date: str, artist: str) -> str
 def canonical_concert_name(name: str | None) -> str | None
 def topic_name(start: datetime, title: str, location: str) -> str       # f"{start:%Y-%m-%d} | {title} | {location.split(',')[0].strip()}"
-def teaser_description(artist: str, date: str) -> str                   # f"Teaser for {artist} on {date}: every liked song by them, in the order they were liked."
+def teaser_description(artist: str, owner: str) -> str                  # f"{owner}'s liked songs from {artist} · Created by AriSweedler/concert-mcp"; setlist_description(setlistfm_url, read_date) -> "Setlist, according to {url} on {read_date} · Created by …". One line, no cross-links: Spotify refuses a newline and its links cannot be clicked.
 ```
 
 ### 6.9 `text/reply.py` — unit **text-render**

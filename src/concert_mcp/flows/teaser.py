@@ -89,7 +89,7 @@ def make_teaser(
             log_info(f"teaser exists; topping it up | name='{name}' id='{pl['id']}'")
         else:
             pl = api.create_playlist(
-                name=name, description=description or teaser_description(a.name, date), public=False
+                name=name, description=description or teaser_description(a.name, svc.operator), public=False
             )
             log_info(f"teaser created | name='{name}' id='{pl['id']}'")
         have = {r["uri"] for r in api.playlist_items(pl["id"], deadline=deadline)}

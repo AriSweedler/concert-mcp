@@ -274,8 +274,6 @@ def render_setlist_playlist(res: SyncResult, *, setlistfm_url: str, event: str |
         text += f"\n{k} swapped for the original version{'s' if k != 1 else ''}: " + ", ".join(res.swapped)
     if res.missing:
         text += "\nNot on Spotify: " + ", ".join(res.missing)
-    if res.teaser_url:
-        text += "\nLinked with the teaser playlist."
     text += "\n" + (event or "No calendar event found for this show; the link was not added to one.")
     return text
 
