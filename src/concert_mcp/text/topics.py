@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from concert_mcp.text.description import PlainDescription
+
 # A description line the ticket text cannot supply: kept from the old description when the new lines lack it,
 # so a Spotify or setlist.fm hiccup during an update never erases a link the event already had.
 KEPT_LINE_PREFIXES = (
@@ -56,7 +58,7 @@ class TopicEntry:
         )
 
 
-def carry_lines(old_description: str | None, lines: Sequence[str]) -> list[str]:
+def carry_lines(old_description: PlainDescription | None, lines: Sequence[str]) -> list[str]:
     """The new lines, plus each kept-prefix line of the old description whose prefix the new lines lack."""
     out = list(lines)
     have = {ln.partition(": ")[0] for ln in out}

@@ -13,6 +13,8 @@ jobs:
       - run: uv sync --locked --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      # The event description's two forms are separate types; strict here keeps HTML and plain from mixing.
+      - run: uv run mypy --strict src/concert_mcp/text/description.py
 
   test:
     runs-on: ubuntu-latest

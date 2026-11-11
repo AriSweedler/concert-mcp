@@ -20,6 +20,7 @@ from concert_mcp.config import Settings
 from concert_mcp.log import kv, log_debug
 from concert_mcp.proc import Runner, run
 from concert_mcp.result import ProviderError
+from concert_mcp.text.description import HtmlDescription, PlainDescription, to_html, to_plain
 from concert_mcp.text.reply import provider_reply
 
 KEYRING_ENV = "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND"
@@ -128,12 +129,14 @@ class GwsCalendar:
             "maxResults": max_results,
             "q": q,
         }
-        return self._items(self.json("calendar", "events", "list", "--params", _json.dumps(params)))
+        return [
+            _plain(e) for e in self._items(self.json("calendar", "events", "list", "--params", _json.dumps(params)))
+        ]
 
     def get_event(self, calendar_id: str, event_id: str) -> dict[str, Any]:
         """gws calendar events get."""
         params = {"calendarId": calendar_id, "eventId": event_id}
-        return self.json("calendar", "events", "get", "--params", _json.dumps(params))
+        return _plain(self.json("calendar", "events", "get", "--params", _json.dumps(params)))
 
     def insert_event(
         self,
@@ -143,10 +146,10 @@ class GwsCalendar:
         start: datetime,
         end: datetime,
         location: str,
-        description: str | None,
+        description: PlainDescription | None,
         attendees: Sequence[str],
     ) -> dict[str, Any]:
-        """gws calendar +insert."""
+        """gws calendar +insert; the description goes to Google as HTML."""
         cmd = [
             "calendar",
             "+insert",
@@ -162,10 +165,10 @@ class GwsCalendar:
             location,
         ]
         if description:
-            cmd += ["--description", description]
+            cmd += ["--description", to_html(description)]
         for a in attendees:
             cmd += ["--attendee", str(a)]
-        return self.json(*cmd)
+        return _plain(self.json(*cmd))
 
     def patch_event(
         self,
@@ -176,7 +179,7 @@ class GwsCalendar:
         start: datetime | None = None,
         end: datetime | None = None,
         location: str | None = None,
-        description: str | None = None,
+        description: PlainDescription | None = None,
     ) -> None:
         """gws calendar events patch --json with the given fields only (a None is left as it is)."""
         params = {"calendarId": calendar_id, "eventId": event_id}
@@ -190,7 +193,7 @@ class GwsCalendar:
         if location is not None:
             body["location"] = location
         if description is not None:
-            body["description"] = description
+            body["description"] = to_html(description)
         if not body:
             return
         self.raw("calendar", "events", "patch", "--params", _json.dumps(params), "--json", _json.dumps(body))
@@ -208,3 +211,16 @@ class GwsCalendar:
         finally:
             Path(d, DELETE_OUT).unlink(missing_ok=True)
             shutil.rmtree(d, ignore_errors=True)
+
+
+def _plain(event: Any) -> dict[str, Any]:
+    """The event with its description as the flows read it: Google's HTML (or an old plain text) to plain lines.
+
+    This and to_html above are the only places a description changes form.
+    """
+    if not isinstance(event, Mapping):
+        return {}
+    out = dict(event)
+    if isinstance(out.get("description"), str):
+        out["description"] = to_plain(HtmlDescription(out["description"]))
+    return out

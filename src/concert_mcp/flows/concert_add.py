@@ -30,6 +30,7 @@ from concert_mcp.text.dates import (
     check_window,
     default_end,
     fmt_range,
+    fmt_start,
     is_date_only,
     parse_time,
     start_from_date,
@@ -45,6 +46,7 @@ from concert_mcp.text.derive import (
     norm_claims,
     openers_from_text,
 )
+from concert_mcp.text.description import description_of, from_lines
 from concert_mcp.text.naming import topic_name
 from concert_mcp.text.reply import (
     changed_note,
@@ -331,15 +333,17 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     t_line, s_line, v_line = teaser_line(teaser), setlist_line(setlist), venue_line(venue)
     lines = list(p.lines) + [ln for ln in (v_line, t_line, s_line) if ln]
 
-    when = fmt_range(p.start, p.end) + (" (end assumed)" if p.end_assumed else "")
+    # An end the ticket did not state is the default length: the calendar needs one, the reply does not guess.
+    when = fmt_start(p.start) if p.end_assumed else fmt_range(p.start, p.end)
 
-    def body_of(extra: Sequence[str] = ()) -> str:
+    def body_of(extra: Sequence[str] = (), links: Mapping[str, str] | None = None) -> str:
         return render_body(
             p.title,
             when,
             where,
             [*lines, *extra],
             [teaser_bullet(teaser, timeout_s=s.teaser_timeout_s, dry=req.dry_run), setlist_bullet(setlist)],
+            links,
         )
 
     body = body_of()
@@ -377,6 +381,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         topic, build the reply."""
         more_notes = list(notes)
         extra: tuple[str, ...] = ()
+        links: dict[str, str] = {}
         if req.concert and event_id and svc.gemini is not None:
             # After the insert, so the link is never held hostage by the lookup; one grounded call, capped.
             step = add_lineup_to_event(
@@ -387,11 +392,13 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 openers_known=bool(p.openers),
                 calendar_id=event_cal_id,
                 event_id=event_id,
-                description="\n".join(common["description"]),
+                description=from_lines(common["description"]),
                 svc=svc,
                 source_text=req.source,
             )
             extra = step.lines
+            if step.lineup.sources:
+                links["Expected"] = step.lineup.sources[0]  # the page the set times were read from
             common["lineup"] = step.lineup.to_json()
             common["description"] = [*common["description"], *extra]
         if updated:
@@ -435,7 +442,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             topic_status = NO_LIVE_CHAT
         reply = render_added(
             calendar=cal_name,
-            body=body_of(extra),
+            body=body_of(extra, links),
             notes=more_notes,
             html_link=html_link,
             duplicate=duplicate,
@@ -462,7 +469,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             topic_forget(key, svc)  # the event was deleted elsewhere; the topic is free again
         if prior and live is not None:
             changed = changed_fields(live, summary=p.title, start=p.start, location=location)
-            kept = carry_lines(live.get("description"), lines)
+            kept = carry_lines(description_of(live), lines)
             svc.calendar.patch_event(
                 prior.calendar_id,
                 prior.event_id,
@@ -470,7 +477,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 start=p.start,
                 end=p.end,
                 location=location,
-                description="\n".join(kept),
+                description=from_lines(kept),
             )
             common["description"] = kept
             return finish(
@@ -487,9 +494,9 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     e = duplicate_of(existing, p.title)
     if e is not None:
         # The event predates the playlist or the setlist page: add the missing link lines to its description.
-        missing = missing_link_lines(e.get("description"), [t_line, s_line])
+        missing = missing_link_lines(description_of(e), [t_line, s_line])
         if missing:
-            svc.calendar.patch_event(cal_id, e["id"], description=patched_description(e.get("description"), missing))
+            svc.calendar.patch_event(cal_id, e["id"], description=patched_description(description_of(e), missing))
         return finish(e.get("id"), e.get("htmlLink"), True)
 
     r = svc.calendar.insert_event(
@@ -498,7 +505,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         start=p.start,
         end=p.end,
         location=location,
-        description="\n".join(lines) if lines else None,
+        description=from_lines(lines) if lines else None,
         attendees=p.attendees,
     )
     return finish(r.get("id"), r.get("htmlLink") or "", False)

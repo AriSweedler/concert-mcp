@@ -33,6 +33,7 @@ from concert_mcp.flows.topics import topic_for_event
 from concert_mcp.log import log_warn
 from concert_mcp.result import FixInput, Kind, Outcome, ProviderError, crash_outcome
 from concert_mcp.text.candidates import missing_link_lines, patched_description
+from concert_mcp.text.description import description_of
 from concert_mcp.text.naming import playlist_name
 from concert_mcp.text.reply import SETLIST_PLAYLIST_LINE_PREFIX, render_poll, render_setlist_playlist_announce
 from concert_mcp.text.routes import ChatTarget
@@ -194,11 +195,11 @@ def _patch_event(entry: QueueEntry, url: str, svc: Services) -> tuple[str | None
         return f"event not patched ({str(exc.error)[:REASON_LIMIT]})", None
     if not e.get("id") or e.get("status") == "cancelled":
         return "event gone from the calendar", None
-    missing = missing_link_lines(e.get("description"), [f"{SETLIST_PLAYLIST_LINE_PREFIX}{url}"])
+    missing = missing_link_lines(description_of(e), [f"{SETLIST_PLAYLIST_LINE_PREFIX}{url}"])
     if missing:
         try:
             svc.calendar.patch_event(
-                entry.calendar_id, entry.event_id, description=patched_description(e.get("description"), missing)
+                entry.calendar_id, entry.event_id, description=patched_description(description_of(e), missing)
             )
         except ProviderError as exc:
             return f"event not patched ({str(exc.error)[:REASON_LIMIT]})", e.get("htmlLink")

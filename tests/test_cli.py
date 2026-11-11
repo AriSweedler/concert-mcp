@@ -135,8 +135,8 @@ def test_del_invalid_json_has_its_own_hint(cli_env: Services, monkeypatch, capsy
 def test_teaser_prints_the_standalone_block_and_not_sent(cli_env: Services, monkeypatch, capsys) -> None:
     code, out, err = run(monkeypatch, capsys, ["teaser", "--artist", "Zed Fox", "--date", "2026-11-14", "--no-send"])
     assert code == 0
-    assert out.startswith("**Teaser playlist**\n• **Teaser:** ")
-    assert "2026-11-14 | Zed Fox" in out
+    assert out.startswith("**Teaser playlist**\n• [Teaser playlist](")
+    assert ", 3 liked songs" in out
     assert out.rstrip("\n").splitlines()[-1] == "NOT SENT: delivery disabled"
     assert_clean_stdout(out, err)
 

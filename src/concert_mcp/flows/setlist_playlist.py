@@ -28,6 +28,7 @@ from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError,
 from concert_mcp.text.artists import NoArtistMatch, find_playlist_named, new_uris
 from concert_mcp.text.candidates import missing_link_lines, patched_description
 from concert_mcp.text.dates import concert_date
+from concert_mcp.text.description import description_of
 from concert_mcp.text.naming import (
     SETLIST_LINK,
     is_setlist_playlist,
@@ -233,10 +234,10 @@ def link_event(artist: str, date: str, url: str, svc: Services) -> str | None:
             return None
         cal_id, e = hit
         line = f"{SETLIST_LINK}{url}"
-        missing = missing_link_lines(e.get("description"), [line])
+        missing = missing_link_lines(description_of(e), [line])
         if not missing:
             return EVENT_HAD_LINK
-        svc.calendar.patch_event(cal_id, e["id"], description=patched_description(e.get("description"), missing))
+        svc.calendar.patch_event(cal_id, e["id"], description=patched_description(description_of(e), missing))
         return EVENT_PATCHED
     except ProviderError as e:
         log_warn(f"event not linked | error='{e.error[:200]}'")

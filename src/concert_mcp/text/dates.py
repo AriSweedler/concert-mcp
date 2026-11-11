@@ -24,6 +24,7 @@ __all__ = [
     "doors_time",
     "far_future_reply",
     "fmt_range",
+    "fmt_start",
     "is_date_only",
     "parse_time",
     "past_reply",
@@ -194,6 +195,11 @@ def fmt_range(start: datetime, end: datetime) -> str:
     a = start.strftime("%a %b %-d, %-I:%M %p")
     b = end.strftime("%-I:%M %p" if same_day else "%a %b %-d, %-I:%M %p")
     return f"{a} – {b} {start.tzname()}"
+
+
+def fmt_start(start: datetime) -> str:
+    """'Sat Nov 14, 8:30 PM PST': the start alone, for a reply about an event whose end nobody stated."""
+    return f"{start.strftime('%a %b %-d, %-I:%M %p')} {start.tzname()}"
 
 
 def concert_date(text: str) -> str:

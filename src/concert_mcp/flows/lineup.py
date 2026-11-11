@@ -17,6 +17,7 @@ from concert_mcp.flows.venues import load_registry, save_registry
 from concert_mcp.log import kv, log_info, log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
 from concert_mcp.text.dates import concert_date
+from concert_mcp.text.description import PlainDescription, description_of, from_lines, lines_of
 from concert_mcp.text.lineup import (
     Lineup,
     Opener,
@@ -148,7 +149,7 @@ def add_lineup_to_event(
     openers_known: bool,
     calendar_id: str,
     event_id: str,
-    description: str | None,
+    description: PlainDescription | None,
     svc: Services,
     source_text: str = "",
 ) -> LineupStep:
@@ -158,7 +159,7 @@ def add_lineup_to_event(
     merged, added = merge_lineup_lines(description, wanted)
     if added:
         try:
-            svc.calendar.patch_event(calendar_id, event_id, description="\n".join(merged))
+            svc.calendar.patch_event(calendar_id, event_id, description=from_lines(merged))
         except Exception as e:  # noqa: BLE001 - the reply still carries the facts; the log carries the failure
             log_warn("lineup not written to the event | " + kv(event_id=event_id, error=f"{type(e).__name__}: {e}"))
     return LineupStep(lineup, tuple(added))
@@ -200,10 +201,10 @@ def lineup_outcome(artist: str, date: str, venue: str, svc: Services) -> Outcome
                 date=date,
                 venue=venue,
                 website=website,
-                openers_known=any(ln.startswith("Opener: ") for ln in str(event.get("description") or "").splitlines()),
+                openers_known=any(ln.startswith("Opener: ") for ln in lines_of(description_of(event))),
                 calendar_id=show[1],
                 event_id=show[2],
-                description=event.get("description"),
+                description=description_of(event),
                 svc=svc,
             )
             lineup, patched = step.lineup, bool(step.lines)

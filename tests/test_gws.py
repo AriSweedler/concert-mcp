@@ -105,7 +105,7 @@ def test_insert_event_exact_argv_and_parsed_json(settings: Settings) -> None:
         "--location",
         "The Quarry, San Francisco",
         "--description",
-        "Doors: 7:30 PM\nOpener: Zork.",
+        "Doors: 7:30 PM<br>Opener: Zork.",  # the plain lines go to Google as HTML
         "--attendee",
         "a@example.com",
         "--attendee",
@@ -121,7 +121,7 @@ def test_patch_event_passes_only_the_given_fields_as_json(settings: Settings) ->
     assert argv[:5] == [settings.gws_bin, "calendar", "events", "patch", "--params"]
     assert json.loads(argv[5]) == {"calendarId": "cal-concerts", "eventId": "e1"}
     assert argv[6] == "--json"
-    assert json.loads(argv[7]) == {"description": "Doors: 7:30 PM\nTeaser playlist: https://x"}
+    assert json.loads(argv[7]) == {"description": 'Doors: 7:30 PM<br><a href="https://x">Teaser playlist</a>'}
     assert len(argv) == 8
 
 
@@ -203,3 +203,17 @@ def test_not_json_is_gws_nojson(settings: Settings) -> None:
     assert ei.value.provider == "gws-nojson"
     assert ei.value.error == "gws returned no JSON"
     assert ei.value.reply == NOJSON
+
+
+def test_a_description_comes_back_plain_whichever_way_google_holds_it(settings: Settings) -> None:
+    # Google's HTML (an anchor for a link line, <br> between lines) and an event written before the bot sent HTML
+    # both reach the flows as the same plain lines.
+    stored = 'Doors: 7:30 PM<br><a href="https://x">Teaser playlist</a>'
+    old = "Doors: 7:30 PM\nTeaser playlist: https://x"
+    listing = {"items": [{"id": "new", "description": stored}, {"id": "old", "description": old}, {"id": "bare"}]}
+    cal = make(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps(listing), "")}))
+    events = cal.list_events("cal-concerts", time_min=START, time_max=END)
+    assert [e.get("description") for e in events] == [old, old, None]
+
+    one = make(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps({"id": "new", "description": stored}), "")}))
+    assert one.get_event("cal-concerts", "new")["description"] == old

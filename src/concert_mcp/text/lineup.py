@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 from concert_mcp.prompts import load_prompt
 from concert_mcp.text.derive import PLATFORMS
+from concert_mcp.text.description import PlainDescription
 from concert_mcp.text.titles import normalize_name
 
 # The prompt templates, read once: static text, so the functions below stay pure.
@@ -282,7 +283,7 @@ def lineup_lines(lineup: Lineup, headliner: str, *, openers_known: bool) -> list
     return out
 
 
-def merge_lineup_lines(old_description: str | None, lines: Sequence[str]) -> tuple[list[str], list[str]]:
+def merge_lineup_lines(old_description: PlainDescription | None, lines: Sequence[str]) -> tuple[list[str], list[str]]:
     """(the description's lines with the lineup lines whose key it lacks appended, the lines appended)."""
     old = [ln for ln in (old_description or "").splitlines()]
     have = {ln.partition(": ")[0] for ln in old if ln.strip()}

@@ -204,11 +204,10 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
         "• **Teaser:** would make 2026-11-14 | Zed Fox (3 liked songs)"
     )
     assert teaser_bullet(teaser("created", url=TEASER_URL, id="pl1", added=3), **kw) == (
-        f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify."
+        f"• [Teaser playlist]({TEASER_URL}), 3 liked songs"
     )
     assert teaser_bullet(teaser("updated", url=TEASER_URL, id="pl1", added=1, already_there=2), **kw) == (
-        f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs (already existed, topped up). "
-        "Move it to Concerts › Teasers in Spotify."
+        f"• [Teaser playlist]({TEASER_URL}), 3 liked songs"
     )
 
     # teaser_bullet_dry_flag_shows_would_make_even_with_url:
@@ -239,14 +238,18 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
     assert setlist_bullet(SetlistResult(found=False, match="failed", reason=None, **base)) == (
         "• **Setlist:** lookup failed (unknown error)"
     )
-    assert setlist_bullet(
-        SetlistResult(found=False, match="none", search_url="https://www.setlist.fm/search?query=Zed+Fox", **base)
-    ) == ("• **Setlist:** not on setlist.fm yet")
+    # Nothing on setlist.fm yet is nothing to link: no bullet.
+    assert (
+        setlist_bullet(
+            SetlistResult(found=False, match="none", search_url="https://www.setlist.fm/search?query=Zed+Fox", **base)
+        )
+        is None
+    )
     assert setlist_bullet(SetlistResult(found=True, match="exact date", setlist=setlist(12), **base)) == (
-        f"• **Setlist:** [setlist.fm]({SETLIST_URL}) 12 songs so far"
+        f"• [Setlist]({SETLIST_URL}), 12 songs so far"
     )
     assert setlist_bullet(SetlistResult(found=True, match="within a day", setlist=setlist(0), **base)) == (
-        f"• **Setlist:** [setlist.fm]({SETLIST_URL}) no songs yet"
+        f"• [Setlist]({SETLIST_URL})"
     )
 
     # setlist_line_only_when_found:
@@ -339,19 +342,16 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
 
     # render_teaser_standalone:
     assert render_teaser_standalone(teaser("created", url=TEASER_URL), timeout_s=150, dry=False) == (
-        "**Teaser playlist**\n"
-        f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify."
+        f"**Teaser playlist**\n• [Teaser playlist]({TEASER_URL}), 3 liked songs"
     )
 
     # render_setlist_standalone:
     base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": "The Quarry"}
     found = SetlistResult(found=True, match="exact date", setlist=setlist(12), **base)
-    assert render_setlist_standalone(found) == (
-        f"**Setlist**\n• **Setlist:** [setlist.fm]({SETLIST_URL}) 12 songs so far"
-    )
+    assert render_setlist_standalone(found) == (f"**Setlist**\n• [Setlist]({SETLIST_URL}), 12 songs so far")
     miss = SetlistResult(found=False, match="none", search_url="https://www.setlist.fm/search?query=Zed+Fox", **base)
     assert render_setlist_standalone(miss) == (
-        "**Setlist**\n• **Setlist:** not on setlist.fm yet Search: https://www.setlist.fm/search?query=Zed+Fox"
+        "**Setlist**\nNot on setlist.fm yet. Search: https://www.setlist.fm/search?query=Zed+Fox"
     )
     unavailable = SetlistResult(
         found=False, match="unavailable", search_url="https://www.setlist.fm/search?query=x", **base
@@ -483,3 +483,16 @@ def test_reply_render_queue_empty(tmp_path: Path) -> None:
 
 
 # ---------- provider replies ----------
+
+
+def test_a_line_that_is_one_url_is_its_key_as_a_link() -> None:
+    out = bullets("A", "B", "C", ["Venue: https://thequarry.example/", "Doors: 7:30 PM"]).split("\n")
+    assert out[-2:] == ["• [Venue](https://thequarry.example/)", "• **Doors:** 7:30 PM"]
+
+
+def test_a_key_named_in_links_is_a_link_to_that_page() -> None:
+    line = "Expected: doors 7:30 PM, Zed Fox 9:00 PM"
+    assert bullets("A", "B", "C", [line], {"Expected": "https://src.example/x"}).split("\n")[-1] == (
+        "• [Expected](https://src.example/x): doors 7:30 PM, Zed Fox 9:00 PM"
+    )
+    assert bullets("A", "B", "C", [line]).split("\n")[-1] == "• **Expected:** doors 7:30 PM, Zed Fox 9:00 PM"

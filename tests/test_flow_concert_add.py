@@ -64,17 +64,16 @@ def event_url(event_id: str, calendar_id: str = "cal-concerts") -> str:
     return f"https://www.google.com/calendar/event?eid={eid}"
 
 
-def golden_added(event_id: str = "evt1", *, notes: str = "", when: str = "Sat Nov 14, 8:30 PM – 10:30 PM PST") -> str:
+def golden_added(event_id: str = "evt1", *, notes: str = "", when: str = "Sat Nov 14, 8:30 PM PST") -> str:
     return (
         "**Added to Concerts**\n"
         "• **Artist:** Zed Fox\n"
-        f"• **When:** {when} (end assumed)\n"
+        f"• **When:** {when}\n"
         "• **Where:** The Quarry, San Francisco\n"
         "• **Doors:** 7:30 PM\n"
         "• **Purchased:** 2 tickets, $42.00 on Ticketweb\n"
         "• **Opener:** Zork.\n"
-        f"• **Teaser:** [2026-11-14 | Zed Fox]({TEASER_URL}) 3 liked songs. Move it to Concerts › Teasers in Spotify.\n"
-        "• **Setlist:** not on setlist.fm yet"
+        f"• [Teaser playlist]({TEASER_URL}), 3 liked songs"
         f"{notes}\n"
         f"[Open in Google Calendar]({event_url(event_id)})"
     )
@@ -317,6 +316,17 @@ class TestLineup:
             gemini=gemini,
             setlistfm=FakeSetlistFm({("Zork", None, None): {"setlist": [self.ZORK_ROW]}}),
         )
+
+    def test_found_set_times_link_to_their_source_and_the_opener_page_is_a_link(
+        self, settings, now, forum_route, ticket_text
+    ):
+        source = "https://thequarry.example/shows/zed-fox"
+        svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=FakeGemini(self.FULL, sources=[source]))
+        out = concert(svc, source_text=ticket_text)
+        assert out.kind is Kind.OK, out.reply
+        assert f"• [Expected]({source}): doors 7:30 PM, Zork 8:00 PM, Zed Fox 9:00 PM" in out.reply
+        assert f"• [Opener setlist (recent)]({self.PAGE})" in out.reply
+        assert self.PAGE + ")" in out.reply and f": {self.PAGE}" not in out.reply  # never the bare address
 
     def test_nothing_found_leaves_the_event_and_the_reply_as_they_were(self, settings, now, forum_route, ticket_text):
         svc = self.svc_with(settings, now, forum_route, ticket_text, gemini=FakeGemini("no idea"))

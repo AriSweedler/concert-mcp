@@ -5,7 +5,8 @@ Telegram renders **bold** and [text](url); every key is bold, every row a bullet
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import re
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
 
@@ -57,6 +58,7 @@ WHICH_EVENT_REPLY = "Which event? Tell me the artist or title (and the date if y
 
 EVENT_URL = "https://www.google.com/calendar/event?eid={eid}"  # the API htmlLink's form, without its ctz
 MAX_KEY_LEN = 24
+_ONE_URL_RE = re.compile(r"^https?://\S+$")
 REASON_LEN = 160
 
 
@@ -65,15 +67,26 @@ def bullet(key: str, value: str) -> str:
     return f"• **{key}:** {value}"
 
 
-def bullets(title: str, when: str, location: str, lines: Sequence[str]) -> str:
+def link_bullet(label: str, url: str, rest: str = "") -> str:
+    """'• [Label](url)' with the label as the link text, then ': rest' or ', rest' as given."""
+    return f"• [{label}]({url}){rest}"
+
+
+def bullets(title: str, when: str, location: str, lines: Sequence[str], links: Mapping[str, str] | None = None) -> str:
     """Artist / When / Where bullets, then one bullet per line (a short 'Key: value' keeps its bold key). The
-    description's Headliner line repeats the Artist bullet, so the reply skips it."""
+    description's Headliner line repeats the Artist bullet, so the reply skips it. A line whose value is one URL
+    is its key as a link, as the calendar shows it; a key named in `links` is a link to that page."""
     rows = [bullet("Artist", title), bullet("When", when), bullet("Where", location)]
     for ln in lines:
         if ln.lower().startswith("headliner:"):
             continue
         k, sep, v = ln.partition(": ")
-        rows.append(bullet(k, v) if sep and len(k) <= MAX_KEY_LEN else f"• {ln}")
+        if sep and _ONE_URL_RE.match(v):
+            rows.append(link_bullet(k, v))
+        elif sep and links and k in links:
+            rows.append(link_bullet(k, links[k], f": {v}"))
+        else:
+            rows.append(bullet(k, v) if sep and len(k) <= MAX_KEY_LEN else f"• {ln}")
     return "\n".join(rows)
 
 
@@ -146,11 +159,7 @@ def teaser_bullet(res: TeaserResult | None, *, timeout_s: int, dry: bool) -> str
         return bullet("Teaser", f"none, no liked songs by {res.artist.name if res.artist else '?'} yet")
     if res.status == "dry_run" or dry or not res.url:
         return bullet("Teaser", f"would make {res.name} ({res.liked_count} liked songs)")
-    verb = "" if res.status == "created" else " (already existed, topped up)"
-    return bullet(
-        "Teaser",
-        f"[{res.name}]({res.url}) {res.liked_count} liked songs{verb}. Move it to Concerts › Teasers in Spotify.",
-    )
+    return link_bullet("Teaser playlist", res.url, f", {res.liked_count} liked songs")
 
 
 def teaser_line(res: TeaserResult | None) -> str | None:
@@ -161,7 +170,7 @@ def teaser_line(res: TeaserResult | None) -> str | None:
 
 
 def setlist_bullet(res: SetlistResult | None) -> str | None:
-    """The Setlist bullet for every SetlistResult; None when no lookup was wanted.
+    """The Setlist bullet; None when no lookup was wanted or the show is not on setlist.fm yet (nothing to link).
 
     No promise of a later check: the poll runs only when Ari asks for it (2026-11-10), so the bullet says what the
     page holds today and nothing more.
@@ -172,11 +181,10 @@ def setlist_bullet(res: SetlistResult | None) -> str | None:
         return bullet("Setlist", "lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)")
     if res.match == "failed":
         return bullet("Setlist", f"lookup failed ({(res.reason or 'unknown error')[:REASON_LEN]})")
-    if not res.found:
-        return bullet("Setlist", "not on setlist.fm yet")
+    if not res.found or not res.url:
+        return None
     n = res.song_count
-    what = f"{n} songs so far" if n else "no songs yet"
-    return bullet("Setlist", f"[setlist.fm]({res.url}) {what}")
+    return link_bullet("Setlist", res.url, f", {n} songs so far" if n else "")
 
 
 def setlist_line(res: SetlistResult | None) -> str | None:
@@ -186,9 +194,16 @@ def setlist_line(res: SetlistResult | None) -> str | None:
     return None
 
 
-def render_body(title: str, when: str, location: str, lines: Sequence[str], extras: Sequence[str | None]) -> str:
+def render_body(
+    title: str,
+    when: str,
+    location: str,
+    lines: Sequence[str],
+    extras: Sequence[str | None],
+    links: Mapping[str, str] | None = None,
+) -> str:
     """bullets() without the link lines, then each extra bullet (teaser, setlist) that is not None."""
-    body = bullets(title, when, location, [ln for ln in lines if not ln.startswith(LINK_LINE_PREFIXES)])
+    body = bullets(title, when, location, [ln for ln in lines if not ln.startswith(LINK_LINE_PREFIXES)], links)
     return body + "".join("\n" + e for e in extras if e)
 
 
@@ -290,7 +305,7 @@ def render_lineup(artist: str, date: str, venue: str, lineup: Lineup, *, patched
 def render_setlist_standalone(res: SetlistResult) -> str:
     """The setlist_find tool's reply: the page as it is (nothing is queued); a miss points at the search page."""
     search = f" Search: {res.search_url}" if not res.found and res.search_url and res.match == "none" else ""
-    return "**Setlist**\n" + (setlist_bullet(res) or "") + search
+    return "**Setlist**\n" + (setlist_bullet(res) or "Not on setlist.fm yet.") + search
 
 
 def _queue_row(e: QueueEntry, expired: bool) -> str:

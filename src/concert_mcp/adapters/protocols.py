@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
+from concert_mcp.text.description import PlainDescription
 from concert_mcp.text.lineup import GroundedAnswer
 from concert_mcp.text.routes import ChatTarget
 from concert_mcp.text.venues import VenueHit
@@ -37,7 +38,7 @@ class Calendar(Protocol):
         start: datetime,
         end: datetime,
         location: str,
-        description: str | None,
+        description: PlainDescription | None,
         attendees: Sequence[str],
     ) -> dict[str, Any]: ...
 
@@ -50,7 +51,7 @@ class Calendar(Protocol):
         start: datetime | None = None,
         end: datetime | None = None,
         location: str | None = None,
-        description: str | None = None,
+        description: PlainDescription | None = None,
     ) -> None: ...
 
     def delete_event(self, calendar_id: str, event_id: str) -> None: ...

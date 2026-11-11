@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from concert_mcp.result import FixInput
 from concert_mcp.text.dates import when_of
+from concert_mcp.text.description import PlainDescription
 from concert_mcp.text.titles import title_matches
 
 TEASER_LINE_PREFIX = "Teaser playlist: "
@@ -109,15 +110,15 @@ def duplicate_of(events: Iterable[Mapping[str, Any]], title: str) -> Mapping[str
     return None
 
 
-def missing_link_lines(description: str | None, lines: Sequence[str | None]) -> list[str]:
+def missing_link_lines(description: PlainDescription | None, lines: Sequence[str | None]) -> list[str]:
     """The given lines that are not already in the description."""
     have = description or ""
     return [ln for ln in lines if ln and ln not in have]
 
 
-def patched_description(description: str | None, missing: Sequence[str]) -> str:
+def patched_description(description: PlainDescription | None, missing: Sequence[str]) -> PlainDescription:
     """The description with the missing lines appended."""
-    return "\n".join([(description or "").rstrip(), *missing]).strip()
+    return PlainDescription("\n".join([(description or "").rstrip(), *missing]).strip())
 
 
 def teaser_url_in(description: str) -> str | None:

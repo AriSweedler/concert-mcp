@@ -19,6 +19,7 @@ from concert_mcp.text.dates import (
     doors_time,
     far_future_reply,
     fmt_range,
+    fmt_start,
     is_date_only,
     parse_time,
     past_reply,
@@ -174,6 +175,9 @@ def test_dates_parse_time_formats() -> None:
 
     # fmt_range_same_day:
     assert fmt_range(START, START + timedelta(hours=2)) == "Sat Nov 14, 8:30 PM – 10:30 PM PST"
+
+    # fmt_start_is_the_range_without_its_end:
+    assert fmt_start(START) == "Sat Nov 14, 8:30 PM PST"
 
     # fmt_range_cross_day:
     assert fmt_range(START, START + timedelta(hours=5)) == "Sat Nov 14, 8:30 PM – Sun Nov 15, 1:30 AM PST"
