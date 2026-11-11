@@ -240,6 +240,12 @@ def test_outcome_from_a_pasted_link_in_a_topic_takes_the_topic_event_date(svc: S
     chat, thread = forum_target(chat_target(svc.context.route))  # type: ignore[attr-defined,misc]
     topic_remember(topic_key(chat, thread), entry, svc)
 
+    # The show is queued with no page and no playlist yet, as concert_add left it, next to another show.
+    queued = {"event_id": e["id"], "calendar_id": "cal-concerts", "artist": ARTIST, "date": "2026-11-14"}
+    queued |= {"venue": "The Quarry", "setlistfm_url": None, "song_count": 0, "until": "2027-01-14", "added": "x"}
+    other = queued | {"event_id": "someone-else", "artist": "Other Act"}
+    svc.state.write_json(svc.settings.setlist_queue, [other, queued])
+
     out = setlist_playlist_outcome(PAGE_URL, "", "", "", svc)
     assert out.kind is Kind.OK
     assert out.reply == (
@@ -254,6 +260,14 @@ def test_outcome_from_a_pasted_link_in_a_topic_takes_the_topic_event_date(svc: S
         "Teaser playlist: https://open.spotify.com/playlist/t\nSetlist playlist: https://open.spotify.com/playlist/pl1"
     )
     assert out.data["setlistfm_url"] == PAGE_URL and out.data["event"] == EVENT_PATCHED
+    # The queue row now holds the page the user chose and the playlist, so a later poll does not announce it again.
+    rows = svc.state.read_json(svc.settings.setlist_queue, [])
+    assert rows[0] == other
+    assert (rows[1]["setlistfm_url"], rows[1]["song_count"], rows[1]["playlist_url"]) == (
+        PAGE_URL,
+        5,
+        "https://open.spotify.com/playlist/pl1",
+    )
 
     # A repeat call: nothing new, the event keeps one link line.
     out = setlist_playlist_outcome(PAGE_URL, "", "", "", svc)
@@ -353,3 +367,24 @@ def test_outcome_with_no_date_anywhere_uses_the_page_date_and_says_no_event(svc_
         "**Setlist playlist** [2026-11-12 | Zed Fox](https://open.spotify.com/playlist/pl1): 1 song.\n"
         "No calendar event found for this show; the link was not added to one."
     )
+
+
+def test_remember_in_queue_finds_the_show_by_artist_and_date_and_never_raises(svc_cli: Services) -> None:
+    from concert_mcp.flows.setlist_playlist import remember_in_queue
+
+    row = {"event_id": "evt9", "calendar_id": "cal-concerts", "artist": "ZED FOX", "date": "2026-11-14"}
+    row |= {"venue": "", "setlistfm_url": None, "song_count": 0, "until": "2027-01-14", "added": "x"}
+    svc_cli.state.write_json(svc_cli.settings.setlist_queue, [row])
+    assert remember_in_queue(None, "Zed Fox", "2026-11-14", PAGE_URL, 4, "https://p", svc_cli) is True
+    assert svc_cli.state.read_json(svc_cli.settings.setlist_queue, [])[0]["playlist_url"] == "https://p"
+    # No such show: nothing to record.
+    assert remember_in_queue(None, "Nobody", "2026-11-14", PAGE_URL, 4, "https://p", svc_cli) is False
+    assert remember_in_queue("other-event", "Zed Fox", "2026-11-14", PAGE_URL, 4, "https://p", svc_cli) is False
+
+    # A queue file that cannot be written costs the record, never the playlist.
+    class Broken:
+        def read_json(self, *a: Any, **kw: Any) -> Any:
+            raise OSError("disk")
+
+    svc_cli.state = Broken()  # type: ignore[assignment]
+    assert remember_in_queue(None, "Zed Fox", "2026-11-14", PAGE_URL, 4, "https://p", svc_cli) is False
