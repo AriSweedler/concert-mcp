@@ -325,3 +325,19 @@ def test_liked_rows_refresh_ignores_cache(
     rows = client.liked_rows(refresh=True)
     assert [r["name"] for r in rows] == ["First Light", "Second Wind", "Third Rail"]
     assert state.files[settings.liked_cache] == rows
+
+
+def test_a_playlist_description_comes_back_as_it_was_written(client: SpotifyClient, fake: FakeUrlopen) -> None:
+    # 2026-11-10: Spotify returned the DICE setlist playlist's description with every slash as &#x2F;, so the
+    # setlist.fm and teaser URLs in it never compared equal to the ones the flow held.
+    escaped = "Setlist: DICE on 2026-11-04, from https:&#x2F;&#x2F;www.setlist.fm&#x2F;setlist&#x2F;dice&#x2F;x.html Rock &amp; roll"
+    plain = "Setlist: DICE on 2026-11-04, from https://www.setlist.fm/setlist/dice/x.html Rock & roll"
+    rows = [{"id": "a", "description": escaped}, {"id": "b", "description": "no entities"}, {"id": "c"}]
+    fake.add("GET", f"{API}/me/playlists?limit=50", {"items": rows, "next": None})
+    assert [pl.get("description") for pl in client.my_playlists()] == [plain, "no entities", None]
+
+    fake.add("GET", f"{API}/playlists/a", {"id": "a", "description": escaped})
+    assert client.playlist("a", "id,description")["description"] == plain
+
+    fake.add("POST", f"{API}/me/playlists", {"id": "p9", "description": escaped})
+    assert client.create_playlist(name="n", description=plain, public=False)["description"] == plain

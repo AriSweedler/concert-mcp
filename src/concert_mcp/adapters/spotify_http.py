@@ -7,6 +7,7 @@ pagination, and the Liked Songs cache. `die()` became ProviderError; logging sta
 from __future__ import annotations
 
 import base64
+import html
 import json
 import urllib.error
 import urllib.parse
@@ -270,11 +271,11 @@ class SpotifyClient:
 
     def my_playlists(self, deadline: float | None = None) -> list[dict[str, Any]]:
         """GET /me/playlists, every page; ProviderError('spotify-timeout') past the deadline."""
-        return list(self.paged("/me/playlists", deadline=deadline))
+        return [_plain_playlist(pl) for pl in self.paged("/me/playlists", deadline=deadline)]
 
     def playlist(self, playlist_id: str, fields: str) -> dict[str, Any]:
         """GET /playlists/<id>?fields=..."""
-        return self.api("GET", f"/playlists/{playlist_id}", params={"fields": fields}) or {}
+        return _plain_playlist(self.api("GET", f"/playlists/{playlist_id}", params={"fields": fields}) or {})
 
     def playlist_items(self, playlist_id: str, deadline: float | None = None) -> list[dict[str, Any]]:
         """The playlist's tracks as track rows with added_at; entries carry `item` (2025 API) or `track` (older)."""
@@ -288,7 +289,7 @@ class SpotifyClient:
     def create_playlist(self, *, name: str, description: str, public: bool) -> dict[str, Any]:
         """POST /me/playlists (2025 API; the older /users/<id>/playlists answers 403)."""
         body = {"name": name, "description": description, "public": public}
-        return self.api("POST", "/me/playlists", body=body) or {}
+        return _plain_playlist(self.api("POST", "/me/playlists", body=body) or {})
 
     def add_items(self, playlist_id: str, uris: Sequence[str]) -> None:
         """POST /playlists/<id>/items in chunks of 100."""
@@ -315,3 +316,16 @@ class SpotifyClient:
     def unfollow_playlist(self, playlist_id: str) -> None:
         """DELETE /playlists/<id>/followers."""
         self.api("DELETE", f"/playlists/{playlist_id}/followers")
+
+
+def _plain_playlist(pl: dict[str, Any]) -> dict[str, Any]:
+    """The playlist row with its description as it was written.
+
+    Spotify answers with the description HTML-escaped (`https:&#x2F;&#x2F;www.setlist.fm&#x2F;…`, `&amp;`), so a
+    URL written into it never compares equal to the one read back, and a description read and written again
+    would be escaped twice. Every playlist row leaves this adapter through here; nothing else unescapes.
+    """
+    description = pl.get("description")
+    if isinstance(description, str) and "&" in description:
+        return {**pl, "description": html.unescape(description)}
+    return pl
