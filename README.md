@@ -28,8 +28,10 @@ uv run concert-mcp add --concert --dry-run --no-send --title 'ZZZ Test Band' --s
    ```sh
    echo 'export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file' >> ~/.zprofile   # or your shell's profile
    export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file
-   gws auth login
+   gws auth login -s calendar
    ```
+
+   `-s calendar` asks Google for the Calendar scope alone, which is all this package uses; add the services your other tools need (`-s calendar,docs,drive`), not every scope the picker offers. The OAuth app behind the login must be published (Google Auth Platform › Audience › In production): a refresh token from an app left in Testing expires after seven days, and every add then answers "Google Calendar refused the request".
 
 3. Create a calendar named `Concerts` in Google Calendar.
 

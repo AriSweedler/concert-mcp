@@ -11,8 +11,10 @@ The package shells out to the [gws](https://github.com/googleworkspace/cli) CLI 
    ```sh
    echo 'export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file' >> ~/.zprofile   # or ~/.profile, ~/.bashrc
    export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file
-   gws auth login
+   gws auth login -s calendar
    ```
+
+   `-s calendar` asks Google for the Calendar scope alone, which is all this package uses; add the services your other tools need (`-s calendar,docs,drive`), not every scope the picker offers. The OAuth app behind the login must be published (Google Auth Platform › Audience › In production): a refresh token from an app left in Testing expires after seven days, and every add then answers "Google Calendar refused the request".
 
    `gws` creates `~/.config/gws/.encryption_key` itself (base64 of 32 random bytes, mode 600) and stores its credentials encrypted with it. When that file exists, every `gws` call from this package runs with `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file`, so headless runs (the gateway, a launchd job, plain `ssh`) never touch the macOS keychain. A key you made by hand (`head -c 32 /dev/urandom | base64 > ~/.config/gws/.encryption_key; chmod 600 ...`) is compatible but not needed.
 
