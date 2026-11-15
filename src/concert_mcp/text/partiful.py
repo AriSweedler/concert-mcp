@@ -25,6 +25,10 @@ PARTIFUL_PREFIX = "Partiful: "
 TEASER_PREFIX = "Teaser playlist: "
 DOORS_PREFIX = "Doors: "
 EXPECTED_PREFIX = "Expected: "
+# The description's last line. Partiful shows a description as plain text and turns an address in it into a link
+# (checked on a page, 2026-11-14: `[text](url)` stays as typed, `github.com/…` becomes a link), so the address is
+# the link text.
+CREATED_BY = "Created by github.com/AriSweedler/concert-mcp"
 EVENT_URL = "https://partiful.com/e/{id}"
 BUCKET = "getpartiful.appspot.com"
 STORAGE = f"https://firebasestorage.googleapis.com/v0/b/{BUCKET}/o"
@@ -114,7 +118,8 @@ def invite_title(artist: str, venue: str, start: datetime) -> str:
 
 
 def invite_description(lines: Sequence[str], start: datetime) -> str:
-    """'Doors 7:30, show 8:30' from the event's doors time and its start; 'Show 8:30' when no doors time is known.
+    """'Doors 7:30, show 8:30' from the event's doors time and its start ('Show 8:30' when no doors time is known),
+    then, after a blank line, the line that says what made the page.
 
     The doors time is the ticket's own (`Doors: 7:30 PM`, `Doors: 7 PM`), else the announced one the lineup step
     found (`Expected: doors 6:00 PM, …`).
@@ -123,7 +128,8 @@ def invite_description(lines: Sequence[str], start: datetime) -> str:
         line_value(lines, EXPECTED_PREFIX) or ""
     )
     show = short_clock(start)
-    return f"Doors {int(doors.group(1))}:{doors.group(2) or '00'}, show {show}" if doors else f"Show {show}"
+    times = f"Doors {int(doors.group(1))}:{doors.group(2) or '00'}, show {show}" if doors else f"Show {show}"
+    return f"{times}\n\n{CREATED_BY}"
 
 
 def link_fields(artist: str, tickets: str, playlist: str | None) -> list[dict[str, str]]:

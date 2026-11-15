@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from concert_mcp.text.partiful import (
+    CREATED_BY,
     InviteResult,
     event_payload,
     freeform_location,
@@ -40,6 +41,7 @@ SHOW = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
 TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
 PLAYLIST = "https://open.spotify.com/playlist/pl1"
 PAGE = "https://partiful.com/e/pf1"
+TAIL = "\n\nCreated by github.com/AriSweedler/concert-mcp"
 PLACE = {
     "id": "I1",
     "name": "The Quarry",
@@ -62,6 +64,7 @@ def test_the_ticket_link_is_found_by_rule() -> None:
 
 
 def test_lines_times_and_the_title() -> None:
+    assert TAIL == "\n\n" + CREATED_BY
     lines = ["Doors: 7:30 PM", "Teaser playlist: " + PLAYLIST, "Partiful: "]
     assert line_value(lines, "Teaser playlist: ") == PLAYLIST
     assert line_value(lines, "Partiful: ") is None
@@ -69,14 +72,14 @@ def test_lines_times_and_the_title() -> None:
     assert [short_clock(SHOW.replace(hour=h)) for h in (0, 12, 20)] == ["12:30", "12:30", "8:30"]
     assert invite_title("Zed Fox", "The Quarry", SHOW) == "Concert: Zed Fox at The Quarry 11/14"
     assert invite_title("Zed Fox", "", SHOW.replace(month=3, day=7)) == "Concert: Zed Fox 3/7"
-    assert invite_description(lines, SHOW) == "Doors 7:30, show 8:30"
-    assert invite_description(["Doors: 7 PM"], SHOW) == "Doors 7:00, show 8:30"
-    assert invite_description(["Purchased: 2 tickets"], SHOW) == "Show 8:30"
+    assert invite_description(lines, SHOW) == "Doors 7:30, show 8:30" + TAIL
+    assert invite_description(["Doors: 7 PM"], SHOW) == "Doors 7:00, show 8:30" + TAIL
+    assert invite_description(["Purchased: 2 tickets"], SHOW) == "Show 8:30" + TAIL
     # No doors time on the ticket: the announced one the lineup step wrote, when it has one.
     expected = ["Expected: doors 6:00 PM, Zed Fox 7:00 PM"]
-    assert invite_description(expected, SHOW.replace(hour=19, minute=0)) == "Doors 6:00, show 7:00"
-    assert invite_description(["Doors: 7:30 PM", *expected], SHOW) == "Doors 7:30, show 8:30"
-    assert invite_description(["Expected: Zork 8:00 PM, Zed Fox 9:00 PM"], SHOW) == "Show 8:30"
+    assert invite_description(expected, SHOW.replace(hour=19, minute=0)) == "Doors 6:00, show 7:00" + TAIL
+    assert invite_description(["Doors: 7:30 PM", *expected], SHOW) == "Doors 7:30, show 8:30" + TAIL
+    assert invite_description(["Expected: Zork 8:00 PM, Zed Fox 9:00 PM"], SHOW) == "Show 8:30" + TAIL
 
 
 def test_link_fields_and_the_event_payload() -> None:

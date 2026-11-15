@@ -112,7 +112,10 @@ def test_an_invite_carries_the_show_the_links_the_place_and_the_poster(svc: Serv
     assert (res.status, res.url, res.title, res.poster) == ("created", PAGE, TITLE, True)
     assert res.links == (("Tickets", TICKETS), ("Zed Fox songs I like", TEASER))
     [event] = partiful.events
-    assert event["title"] == TITLE and event["description"] == "Doors 7:30, show 8:30"
+    assert (
+        event["title"] == TITLE
+        and event["description"] == "Doors 7:30, show 8:30\n\nCreated by github.com/AriSweedler/concert-mcp"
+    )
     assert (event["visibility"], event["timezone"]) == ("public", "America/Los_Angeles")
     assert event["startDate"] == "2026-11-15T04:30:00.000Z"
     assert event["customFields"] == [
@@ -356,7 +359,7 @@ def test_concert_add_with_a_tickets_line_expresses_the_show_as_an_invite(
     assert out.data["partiful"]["status"] == "created" and out.data["description"][-1] == f"Partiful: {PAGE}"
     [event] = partiful.events
     assert event["title"] == "Concert: Zed Fox at The Quarry 11/14"
-    assert event["description"] == "Doors 7:30, show 8:30"
+    assert event["description"] == "Doors 7:30, show 8:30\n\nCreated by github.com/AriSweedler/concert-mcp"
     assert [f["value"] for f in event["customFields"]] == ["Tickets", "Zed Fox songs I like"]
 
     # The same ticket again in the topic updates the event; the show keeps its one page.
