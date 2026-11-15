@@ -289,11 +289,45 @@ def test_the_cached_calendar_keeps_a_record_in_step(state: MemoryState) -> None:
     assert state.names(DIR) == [] and inner.deleted == [("cal-concerts", made["id"])]
 
 
+def test_the_cached_calendar_writes_a_concerts_description_in_reading_order(state: MemoryState) -> None:
+    inner = FakeCalendar(calendars=[{"id": "cal-concerts", "summary": "Concerts"}])
+    calendar = CachedCalendar(inner, state, DIR, FakeClock(datetime(2026, 10, 25, 12, 0, tzinfo=LA)))
+    late_page = PlainDescription(
+        f"Purchased: 2 tickets\nTeaser playlist: {TEASER}\nExpected: doors 6:00 PM\nTickets: {TICKETS}\n"
+        f"Partiful: {PAGE}"
+    )
+    # A plain event or a movie (no record) is written as the caller gave it.
+    plain = inner.seed_event("cal-concerts", summary="Dinner", start=SHOW)
+    calendar.patch_event("cal-concerts", plain["id"], description=late_page)
+    assert inner.get_event("cal-concerts", plain["id"])["description"] == late_page
+
+    show = inner.seed_event("cal-concerts", summary="Zed Fox", start=SHOW, description="Doors: 7:30 PM")
+    save_record(record_of_event(show, "cal-concerts", now=NOW), state, DIR)
+    # Whichever flow patches a recorded concert (the lineup, tickets_add, the setlist), its lines land in order.
+    calendar.patch_event("cal-concerts", show["id"], description=late_page)
+    in_order = (
+        f"Partiful: {PAGE}",
+        "Expected: doors 6:00 PM",
+        f"Teaser playlist: {TEASER}",
+        f"Tickets: {TICKETS}",
+        "Purchased: 2 tickets",
+    )
+    assert inner.patched[-1][2] == {"description": "\n".join(in_order)}
+    assert record_for_event(show["id"], state, DIR)[1].lines == in_order  # the record holds what was written
+    # A patch that carries no description, or an empty one, is passed as it is.
+    calendar.patch_event("cal-concerts", show["id"], summary="Zed Fox Trio")
+    calendar.patch_event("cal-concerts", show["id"], description=PlainDescription(""))
+    assert inner.patched[-2][2] == {"summary": "Zed Fox Trio"} and inner.patched[-1][2] == {"description": ""}
+
+
 def test_the_cached_calendar_never_fails_for_the_cache() -> None:
     inner = FakeCalendar(calendars=[{"id": "cal-concerts", "summary": "Concerts"}])
     event = inner.seed_event("cal-concerts", summary="Zed Fox", start=SHOW)
     calendar = CachedCalendar(inner, BrokenState(), DIR, FakeClock(datetime(2026, 10, 25, 12, 0, tzinfo=LA)))
     assert calendar.get_event("cal-concerts", event["id"])["summary"] == "Zed Fox"
+    # A record that cannot be read leaves the description as given, and the patch still happens.
+    calendar.patch_event("cal-concerts", event["id"], description=PlainDescription(f"Purchased: 2\nPartiful: {PAGE}"))
+    assert inner.get_event("cal-concerts", event["id"])["description"] == f"Purchased: 2\nPartiful: {PAGE}"
     calendar.delete_event("cal-concerts", event["id"])
     assert inner.deleted == [("cal-concerts", event["id"])]
 

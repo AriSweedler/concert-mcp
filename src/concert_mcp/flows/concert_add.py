@@ -61,7 +61,7 @@ from concert_mcp.text.reply import (
 )
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.titles import split_openers, squash, strip_concert_prefix
-from concert_mcp.text.topics import carry_lines, changed_fields, topic_key
+from concert_mcp.text.topics import carry_lines, changed_fields, ordered_lines, topic_key
 from concert_mcp.text.venues import venue_line
 
 ALIASES = {
@@ -336,6 +336,9 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     tickets = ticket_link_in(p.raw_source) if req.concert else None
     tix_line = f"{TICKETS_PREFIX}{tickets}" if tickets else None
     lines = list(p.lines) + [ln for ln in (v_line, tix_line, t_line) if ln]
+    # A concert's event reads in a fixed order (Partiful, timing, links, the rest); the reply keeps `lines` as built.
+    # A plain event's lines are written as the user gave them.
+    written = ordered_lines(lines) if req.concert else lines
 
     # An end the ticket did not state is the default length: the calendar needs one, the reply does not guess.
     when = fmt_start(p.start) if p.end_assumed else fmt_range(p.start, p.end)
@@ -358,7 +361,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         "start": p.start.isoformat(),
         "end": p.end.isoformat(),
         "location": location,
-        "description": lines,
+        "description": written,
         "dropped": list(p.dropped),
         "teaser": teaser.to_json() if teaser else None,
         "topic": topic,
@@ -420,7 +423,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             if step.lineup.sources:
                 links["Expected"] = step.lineup.sources[0]  # the page the set times were read from
             common["lineup"] = step.lineup.to_json()
-            common["description"] = [*common["description"], *extra]
+            common["description"] = ordered_lines([*common["description"], *extra])
         if req.concert and event_id and any(ln.startswith(TICKETS_PREFIX) for ln in common["description"]):
             # A show with a ticket link is expressed as a Partiful invite (flows/partiful.py); one that already
             # has a page keeps it. Nothing here can fail the add. Imported here: flows/partiful.py finds a show's
@@ -435,7 +438,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             if invite.url:
                 page = f"{PARTIFUL_PREFIX}{invite.url}"
                 extra = (*extra, page)
-                common["description"] = [ln for ln in common["description"] if ln != page] + [page]
+                common["description"] = ordered_lines([ln for ln in common["description"] if ln != page] + [page])
         if updated:
             more_notes.append(changed_note(changed))
         if req.concert and event_id and key:
@@ -484,7 +487,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             topic_forget(key, svc)  # the event was deleted elsewhere; the topic is free again
         if prior and live is not None:
             changed = changed_fields(live, summary=p.title, start=p.start, location=location)
-            kept = carry_lines(description_of(live), lines)
+            kept = ordered_lines(carry_lines(description_of(live), lines))
             svc.calendar.patch_event(
                 prior.calendar_id,
                 prior.event_id,
@@ -520,7 +523,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         start=p.start,
         end=p.end,
         location=location,
-        description=from_lines(lines) if lines else None,
+        description=from_lines(written) if written else None,
         attendees=p.attendees,
     )
     return finish(r.get("id"), r.get("htmlLink") or "", False)

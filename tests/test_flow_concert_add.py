@@ -126,6 +126,22 @@ class TestHappyPath:
         out = concert(svc)
         assert out.reply == golden_added()
 
+    def test_the_event_reads_timing_then_links_then_the_rest_and_the_reply_keeps_its_order(self, svc, ticket_text):
+        out = concert(svc, source_text=ticket_text, notes="Seat: GA")
+        assert svc.calendar.inserted[0]["description"] == (
+            f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}\nPurchased: 2 tickets, $42.00 on Ticketweb\n"
+            "Headliner: Zed Fox\nOpener: Zork.\nSeat: GA"
+        )
+        assert out.data["description"] == svc.calendar.inserted[0]["description"].split("\n")
+        # The reply's bullets are in the order the facts were gathered, as before (the request was about the event).
+        assert "• **Opener:** Zork.\n• **Seat:** GA\n• [Teaser playlist]" in out.reply
+
+    def test_a_plain_events_lines_keep_the_order_they_were_given(self, svc):
+        notes = "Table: 4\nExpected: a long one"
+        out = add_plain(title="[Dinner] Team dinner", start=START, location="ZZZ Bistro", notes=notes, svc=svc)
+        assert out.kind is Kind.OK, out
+        assert svc.calendar.inserted[0]["description"] == notes
+
 
 class TestDuplicate:
     def test_existing_event_is_patched_not_reinserted(self, svc, ticket_text):
@@ -213,7 +229,7 @@ class TestNotes:
         assert out.kind is Kind.OK
         assert out.data["dropped"] == ["Opener: Zork.", "Doors: 7:30 PM"]
         # With no text nothing verifies: the title's opener and the clock-time note go; the claim-free note survives.
-        assert out.data["description"][:1] == ["Seat: GA"]
+        assert out.data["description"] == [f"Teaser playlist: {TEASER_URL}", "Seat: GA"]  # links before the rest
 
 
 class TestFromMapping:
@@ -256,7 +272,12 @@ class TestTopicRegistry:
         assert fields["start"] == {"dateTime": datetime(2026, 11, 14, 20, 30, tzinfo=LA).isoformat()}
         assert fields["end"] == {"dateTime": datetime(2026, 11, 14, 22, 30, tzinfo=LA).isoformat()}
         assert fields["location"] == VENUE
-        assert fields["description"].startswith("Doors: 7:30 PM\nPurchased: 2 tickets, $42.00 on Ticketweb\n")
+        # The update writes the concert's lines in reading order: the timing, the links, then the rest.
+        assert fields["description"] == (
+            f"Doors: 7:30 PM\nTeaser playlist: {TEASER_URL}\nPurchased: 2 tickets, $42.00 on Ticketweb\n"
+            "Headliner: Zed Fox\nOpener: Zork."
+        )
+        assert out.data["description"] == fields["description"].split("\n")
         assert out.reply.startswith("**Updated on Concerts**\n• **Artist:** Zed Fox\n")
         assert "\nChanged: title Wrong Name -> Zed Fox\n" in out.reply  # the live text already set the show time
         assert out.reply.endswith(f"[Open in Google Calendar]({event_url(first.data['id'])})")

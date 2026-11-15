@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from concert_mcp.text.topics import TopicEntry, carry_lines, changed_fields, topic_key
+from concert_mcp.text.topics import TopicEntry, carry_lines, changed_fields, ordered_lines, topic_key
 
 LA = ZoneInfo("America/Los_Angeles")
 START = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
@@ -19,6 +19,48 @@ def test_topics_text() -> None:
     e = TopicEntry("evt1", "cal", "Zed Fox", "2026-11-14", "2026-10-26T10:00:00-07:00")
     assert TopicEntry.from_json(e.to_json()) == e
     assert TopicEntry.from_json({}) == TopicEntry("", "", "", "", "")
+
+
+class TestOrderedLines:
+    def test_partiful_then_timing_then_links_then_the_rest(self):
+        # The order a real event had before 2026-11-14, with every kind of line in it.
+        lines = [
+            "Headliner: Zed Fox",
+            "Purchased: 2 tickets, $42.00 on Ticketweb",
+            "Teaser playlist: https://t",
+            "Expected: doors 6:00 PM, Zork 7:00 PM, Zed Fox 8:00 PM",
+            "Opener: Zork",
+            "Tickets: https://tix",
+            "Opener setlist (recent): https://o",
+            "Partiful: https://p",
+            "setlist.fm: https://s",
+            "Doors: 6:00 PM",
+            "Setlist: https://old",
+            "Opener setlist (recent): A https://a; B https://b",
+            "Setlist playlist: https://sp",
+            "Venue: https://v",
+        ]
+        assert ordered_lines(lines) == [
+            "Partiful: https://p",
+            "Doors: 6:00 PM",
+            "Expected: doors 6:00 PM, Zork 7:00 PM, Zed Fox 8:00 PM",
+            "Teaser playlist: https://t",
+            "Tickets: https://tix",
+            "Opener setlist (recent): https://o",
+            "setlist.fm: https://s",
+            "Setlist: https://old",
+            "Setlist playlist: https://sp",
+            "Venue: https://v",
+            "Headliner: Zed Fox",
+            "Purchased: 2 tickets, $42.00 on Ticketweb",
+            "Opener: Zork",
+            "Opener setlist (recent): A https://a; B https://b",
+        ]
+
+    def test_a_description_already_in_order_and_an_empty_one_are_unchanged(self):
+        assert ordered_lines([]) == []
+        lines = ["Doors: 7:30 PM", "Tickets: https://tix", "Purchased: 2 tickets"]
+        assert ordered_lines(lines) == lines and ordered_lines(ordered_lines(lines)) == lines
 
 
 class TestCarryLines:

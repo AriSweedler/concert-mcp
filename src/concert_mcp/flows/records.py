@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from concert_mcp.adapters.protocols import Calendar, Clock, StateStore
 from concert_mcp.log import log_warn
 from concert_mcp.result import Kind, Outcome
-from concert_mcp.text.description import PlainDescription
+from concert_mcp.text.description import PlainDescription, from_lines, lines_of
 from concert_mcp.text.records import (
     ConcertRecord,
     patched_record,
@@ -30,6 +30,7 @@ from concert_mcp.text.records import (
     same_show,
 )
 from concert_mcp.text.reply import render_concerts
+from concert_mcp.text.topics import ordered_lines
 
 if TYPE_CHECKING:
     from concert_mcp.flows.services import Services
@@ -131,7 +132,8 @@ class CachedCalendar:
     """A Calendar that keeps the concert records in step with the events they shadow.
 
     Every method is the wrapped calendar's. A patch, a delete or a read of an event that has a record updates,
-    drops or refreshes that record afterwards; an event without one is left alone.
+    drops or refreshes that record afterwards, and a patch of its description writes the lines in reading order; an
+    event without one is left alone.
     """
 
     def __init__(self, inner: Calendar, state: StateStore, directory: Path, clock: Clock) -> None:
@@ -148,6 +150,18 @@ class CachedCalendar:
                 save_record(update(known[1], self._clock.now().isoformat()), self._state, self._directory)
         except Exception as e:  # noqa: BLE001 - the calendar call already happened; the cache only lags
             log_warn(f"concert record not updated | error='{type(e).__name__}: {str(e)[:200]}'")
+
+    def _in_order(self, event_id: str, description: PlainDescription | None) -> PlainDescription | None:
+        """A recorded concert's description in reading order (`ordered_lines`), whichever flow wrote it; any other
+        event's passes as it is. Never raises: a record that cannot be read leaves the description unchanged."""
+        if not description:
+            return description
+        try:
+            known = record_for_event(event_id, self._state, self._directory)
+        except Exception as e:  # noqa: BLE001 - the calendar write must not fail for the cache
+            log_warn(f"concert record not read | error='{type(e).__name__}: {str(e)[:200]}'")
+            return description
+        return from_lines(ordered_lines(lines_of(description))) if known else description
 
     def list_calendars(self) -> list[dict[str, Any]]:
         return self._inner.list_calendars()
@@ -194,6 +208,7 @@ class CachedCalendar:
         location: str | None = None,
         description: PlainDescription | None = None,
     ) -> None:
+        description = self._in_order(event_id, description)
         self._inner.patch_event(
             calendar_id, event_id, summary=summary, start=start, end=end, location=location, description=description
         )

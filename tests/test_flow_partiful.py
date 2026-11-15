@@ -407,7 +407,8 @@ def test_concert_add_with_a_tickets_line_expresses_the_show_as_an_invite(
     assert "Partiful not made" not in out.reply
     stored = description(svc, out.data["id"]).splitlines()
     assert f"Tickets: {TICKETS}" in stored and stored[-1] == f"Partiful: {PAGE}"
-    assert out.data["partiful"]["status"] == "created" and out.data["description"][-1] == f"Partiful: {PAGE}"
+    # The page's line is patched in after the insert; the event's description reads Partiful first.
+    assert out.data["partiful"]["status"] == "created" and out.data["description"][0] == f"Partiful: {PAGE}"
     [event] = partiful.events
     assert event["title"] == "Concert: Zed Fox at The Quarry 11/14"
     assert event["description"] == "Doors 7:30, show 8:30\n\nCreated by github.com/AriSweedler/concert-mcp"
@@ -419,6 +420,13 @@ def test_concert_add_with_a_tickets_line_expresses_the_show_as_an_invite(
     assert f"• [Partiful]({PAGE})" in again.reply and len(partiful.events) == 1
     assert again.data["partiful"]["status"] == "exists"
     assert again.data["description"].count(f"Partiful: {PAGE}") == 1
+    # The update writes the description in reading order: the Partiful page, the timing, the links, the rest.
+    assert description(svc, out.data["id"]).splitlines()[:4] == [
+        f"Partiful: {PAGE}",
+        "Doors: 7:30 PM",
+        f"Tickets: {TICKETS}",
+        f"Teaser playlist: {TEASER}",
+    ]
 
 
 def test_concert_add_lands_whatever_partiful_does(

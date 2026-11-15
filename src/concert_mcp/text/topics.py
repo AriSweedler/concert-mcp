@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from concert_mcp.text.description import PlainDescription
+from concert_mcp.text.description import PlainDescription, is_link_line
+from concert_mcp.text.partiful import DOORS_PREFIX, EXPECTED_PREFIX, PARTIFUL_PREFIX
 
 # A description line the ticket text cannot supply: kept from the old description when the new lines lack it,
 # so a Spotify or setlist.fm hiccup during an update never erases a link the event already had.
@@ -26,6 +27,22 @@ KEPT_LINE_PREFIXES = (
     "Tickets: ",
     "Partiful: ",
 )
+
+
+def _reading_rank(line: str) -> int:
+    if line.startswith(PARTIFUL_PREFIX):
+        return 0
+    if line.startswith(DOORS_PREFIX):
+        return 1
+    if line.startswith(EXPECTED_PREFIX):
+        return 2
+    return 3 if is_link_line(line) else 4
+
+
+def ordered_lines(lines: Sequence[str]) -> list[str]:
+    """A concert's description lines in reading order (the owner's, 2026-11-14): the Partiful page, then the timing
+    (Doors, then Expected), then every other link line, then the rest; each group keeps the order it had."""
+    return sorted(lines, key=_reading_rank)
 
 
 def topic_key(chat: str, thread: str) -> str:

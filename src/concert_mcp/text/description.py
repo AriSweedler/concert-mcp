@@ -42,6 +42,11 @@ def description_of(event: Mapping[str, Any]) -> PlainDescription:
     return PlainDescription(str(event.get("description") or ""))
 
 
+def is_link_line(line: str) -> bool:
+    """Whether the line is `Label: <one URL>`: the line the calendar shows as a link."""
+    return _LINK_LINE_RE.match(line) is not None
+
+
 def _line_html(line: str) -> str:
     m = _LINK_LINE_RE.match(line)
     if m is None:

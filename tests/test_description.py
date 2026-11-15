@@ -9,6 +9,7 @@ from concert_mcp.text.description import (
     PlainDescription,
     description_of,
     from_lines,
+    is_link_line,
     lines_of,
     to_html,
     to_plain,
@@ -46,6 +47,8 @@ def test_a_link_line_is_an_anchor_with_the_label_as_its_text() -> None:
 def test_only_a_line_that_is_one_url_becomes_a_link() -> None:
     two = "Opener setlist (recent): A https://a.example/1; B https://b.example/2"
     assert to_html(from_lines([two, "Note: see https://x.example now"])) == f"{two}<br>Note: see https://x.example now"
+    assert is_link_line(f"Teaser playlist: {TEASER}") and is_link_line("Opener setlist (recent): https://a.example/1")
+    assert not is_link_line(two) and not is_link_line("Doors: 7:00 PM") and not is_link_line(TEASER)
 
 
 def test_text_and_urls_are_escaped() -> None:
