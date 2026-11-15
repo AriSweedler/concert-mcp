@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "The /tickets chat command: a show's ticket link goes straight to concert-mcp, with no model turn.",
+  "description": "The /tickets and /setlist chat commands: a show's links go straight to concert-mcp, with no model turn.",
   "scripts": {
     "test": "node --test"
   },

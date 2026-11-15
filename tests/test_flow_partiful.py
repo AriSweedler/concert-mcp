@@ -21,6 +21,7 @@ from concert_mcp.flows.partiful import (
     link_event,
     login_outcome,
     make_invite,
+    refresh_invite_links,
     request_code,
     tickets_outcome,
 )
@@ -146,8 +147,8 @@ def test_an_invite_is_made_once_only_with_a_ticket_link_and_never_on_a_dry_run(s
     # A show whose setlist.fm page is known links it as a third field; a show without one has two (above).
     page = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-7b9c1a2e.html"
     known = make_invite(request(lines=(f"Teaser playlist: {TEASER}", f"Setlist: {page}")), svc)
-    assert known.links[2] == ("Setlist", page)
-    assert partiful.events[0]["customFields"][2] == {"icon": "music-note", "value": "Setlist", "url": page}
+    assert known.links[2] == ("setlist.fm", page)
+    assert partiful.events[0]["customFields"][2] == {"icon": "link", "value": "setlist.fm", "url": page}
     partiful.calls.clear()
     exists = make_invite(request(lines=(f"Partiful: {PAGE}",)), svc)
     assert (exists.status, exists.url) == ("exists", PAGE)
@@ -223,6 +224,41 @@ def test_link_event_adds_a_line_once_and_reports_a_calendar_refusal(svc: Service
     svc.calendar.fail = "patch_event"
     note = link_event("cal-concerts", event["id"], [f"Partiful: {PAGE}"], svc)
     assert note == "Calendar event not updated: fake failure"
+
+
+def test_an_existing_invite_gains_the_links_its_show_gained(svc: Services) -> None:
+    page = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-7b9c1a2e.html"
+    played = "https://open.spotify.com/playlist/pl2"
+    before = (f"Tickets: {TICKETS}", f"Teaser playlist: {TEASER}", f"Partiful: {PAGE}")
+    after = (*before, f"setlist.fm: {page}", f"Setlist playlist: {played}")
+    partiful = FakePartiful()
+    make_invite(request(), with_partiful(svc, partiful))
+    by_hand = {"icon": "sparkles", "value": "Pregame at mine", "url": "https://example.com/pregame"}
+    partiful.events[0]["customFields"].append(by_hand)
+
+    assert refresh_invite_links("Zed Fox", before, svc) is None  # the page already has every link
+    assert refresh_invite_links("Zed Fox", after, svc) == "The Partiful has the links too."
+    assert [f["value"] for f in partiful.events[0]["customFields"]] == [
+        "Tickets",
+        "Zed Fox songs I like",
+        "Pregame at mine",
+        "setlist.fm",
+        "Setlist playlist",
+    ]
+    assert refresh_invite_links("Zed Fox", after[:2], svc) is None  # a show with no page
+    # What stops an update is said, and never raised: the playlist and the calendar event are done by then.
+    partiful.session = False
+    assert refresh_invite_links("Zed Fox", after, svc) == "Partiful not updated: Partiful is signed out."
+    for broken, why in (
+        ({"signed_out": "event_links"}, "Partiful is signed out"),
+        ({"fail": "set_links"}, "Partiful refused | call='set_links' status='500'"),
+        ({"crash": "event_links"}, "RuntimeError: event_links blew up"),
+    ):
+        partiful = FakePartiful(**broken)
+        make_invite(request(), with_partiful(svc, partiful))
+        assert refresh_invite_links("Zed Fox", after, svc) == f"Partiful not updated: {why}."
+    svc.partiful = None
+    assert refresh_invite_links("Zed Fox", after, svc) is None
 
 
 # ---------- tickets_add ----------

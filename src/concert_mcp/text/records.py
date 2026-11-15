@@ -21,18 +21,19 @@ from concert_mcp.text.partiful import (
     DOORS_PREFIX,
     EXPECTED_PREFIX,
     PARTIFUL_PREFIX,
+    SETLIST_PLAYLIST_PREFIX,
     SETLIST_PREFIX,
+    SETLISTFM_PREFIX,
     TEASER_PREFIX,
     TICKETS_PREFIX,
     invite_description,
     invite_title,
     line_value,
-    link_fields,
+    show_links,
     ticket_link,
 )
 from concert_mcp.text.venues import venue_name_of
 
-SETLIST_PLAYLIST_PREFIX = "Setlist playlist: "
 PURCHASED_PREFIX = "Purchased: "
 OPENER_PREFIX = "Opener: "
 VENUE_PREFIX = "Venue: "
@@ -45,7 +46,7 @@ FACT_LINES: Mapping[str, str] = {
     "venue_website": VENUE_PREFIX,
     "tickets": TICKETS_PREFIX,
     "teaser_playlist": TEASER_PREFIX,
-    "setlist": SETLIST_PREFIX,
+    "setlist": SETLISTFM_PREFIX,
     "setlist_playlist": SETLIST_PLAYLIST_PREFIX,
     "partiful": PARTIFUL_PREFIX,
 }
@@ -178,7 +179,9 @@ def facts(record: ConcertRecord) -> dict[str, Any]:
         out["venue"] = venue_name_of(record.location)
         out["location"] = record.location
     for name, prefix in FACT_LINES.items():
-        value = line_value(record.lines, prefix)
+        value = line_value(record.lines, prefix) or (
+            line_value(record.lines, SETLIST_PREFIX) if name == "setlist" else None
+        )
         if value:
             out[name] = value
     openers = [ln[len(OPENER_PREFIX) :].strip() for ln in record.lines if ln.startswith(OPENER_PREFIX)]
@@ -194,9 +197,7 @@ def invite_plan(record: ConcertRecord) -> dict[str, Any] | None:
     if not tickets:
         return None
     start = datetime.fromisoformat(record.start)
-    fields = link_fields(
-        record.artist, tickets, line_value(record.lines, TEASER_PREFIX), line_value(record.lines, SETLIST_PREFIX)
-    )
+    fields = show_links(record.artist, record.lines)
     return {
         "title": invite_title(record.artist, venue_name_of(record.location), start),
         "description": invite_description(record.lines, start),

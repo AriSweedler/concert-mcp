@@ -21,7 +21,7 @@ import string
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +39,9 @@ FIREBASE_KEY = "AIzaSyCky6PJ7cHRdBKk5X7gjuWERWaKWBHr4_k"
 SECURETOKEN = f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_KEY}"
 CUSTOM_TOKEN = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={FIREBASE_KEY}"
 HEADERS = {"origin": WEB, "referer": f"{WEB}/", "user-agent": "Mozilla/5.0"}
+# An event is edited the way the site's editor does it: a Firestore commit on events/<id>, as the host.
+DATABASE = "projects/getpartiful/databases/(default)"
+COMMIT = f"https://firestore.googleapis.com/v1/{DATABASE}/documents:commit"
 
 # An ID token this close to its end is renewed first.
 TOKEN_SLACK_S = 300
@@ -235,6 +238,31 @@ class PartifulClient:
     def set_location(self, event_id: str, location_info: Mapping[str, Any]) -> None:
         """Set an event's location (a `structured` Maps place or `freeform` text)."""
         self.call("setEventLocation", {"eventId": event_id, "locationInfo": dict(location_info)})
+
+    def event_links(self, event_id: str) -> list[dict[str, Any]]:
+        """The link fields an event's page shows now, in page order."""
+        data = self.call("getEventInfo", {"eventId": event_id}) or {}
+        fields = (data.get("event") or {}).get("customFields") or []
+        return [dict(f) for f in fields if isinstance(f, Mapping)]
+
+    def set_links(self, event_id: str, fields: Sequence[Mapping[str, Any]]) -> None:
+        """Replace an event's link fields. Nothing else on the page changes (checked live, 2026-11-14)."""
+        uid, token = self.id_token()
+        values = [{"mapValue": {"fields": {k: {"stringValue": str(v)} for k, v in f.items()}}} for f in fields]
+        write = {
+            "update": {
+                "name": f"{DATABASE}/documents/events/{event_id}",
+                "fields": {
+                    "customFields": {"arrayValue": {"values": values}},
+                    "updatedBy": {"referenceValue": f"{DATABASE}/documents/users/{uid}"},
+                },
+            },
+            "updateMask": {"fieldPaths": ["customFields", "updatedBy"]},
+            "currentDocument": {"exists": True},
+        }
+        status, answer = self._json(COMMIT, body={"writes": [write]}, token=token, what="firestore commit")
+        if status != 200:
+            raise self._fail("firestore commit", status, answer)
 
     def rsvp_going(self, event_id: str, name: str, timezone: str) -> None:
         """Mark the account as going to an event, alone, under `name`. Partiful refuses an RSVP without a name

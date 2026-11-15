@@ -491,6 +491,16 @@ class FakePartiful:
         self._record("set_location")
         self.locations.append((event_id, dict(location_info)))
 
+    def event_links(self, event_id: str) -> list[dict[str, Any]]:
+        self._record("event_links")
+        index = int(event_id.removeprefix("pf")) - 1
+        return [dict(f) for f in self.events[index].get("customFields") or []]
+
+    def set_links(self, event_id: str, fields: Sequence[Mapping[str, Any]]) -> None:
+        self._record("set_links")
+        index = int(event_id.removeprefix("pf")) - 1
+        self.events[index]["customFields"] = [dict(f) for f in fields]
+
     def rsvp_going(self, event_id: str, name: str, timezone: str) -> None:
         self._record("rsvp_going")
         self.going.append((event_id, name, timezone))

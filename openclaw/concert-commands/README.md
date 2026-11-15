@@ -1,8 +1,15 @@
 # concert-commands
 
-An OpenClaw plugin with one chat command, `/tickets <link>`. Typed in a show's Telegram topic (anywhere else it answers with how to use it), it records the show's ticket link through `concert-mcp tickets`, which writes the link to the calendar event and makes the Partiful invite. No model turn is involved, and the plugin reads no other message: it runs only when the command is typed.
+An OpenClaw plugin with two chat commands for a show's Telegram topic. No model turn is involved, and the plugin reads no other message: it runs only when a command is typed.
 
-Without it, the same thing happens through the model: a `tickets: <link>` message makes the model call `tickets_add`.
+| Command | What it does |
+|---|---|
+| `/tickets <link>` | records the show's ticket page through `concert-mcp tickets`: the link goes on the calendar event and the Partiful invite is made |
+| `/setlist <link>` | after the show, takes its setlist.fm page through `concert-mcp setlist-playlist`: the setlist playlist is made, and `setlist.fm` and `Setlist playlist` links go on the calendar event and on the Partiful invite |
+
+Typed anywhere but a show's topic, a command answers with how to use it.
+
+Without the plugin the same things happen through the model: a `tickets: <link>` message makes it call `tickets_add`, and a pasted setlist.fm link makes it call `setlist_playlist`.
 
 ## Install
 
@@ -22,4 +29,4 @@ openclaw plugins reload concert-commands
 node --test
 ```
 
-The rules (`rules.js`) are pure and tested here; `index.js` is the thin shell that registers the command.
+The rules (`rules.js`) are pure and tested here; `index.js` is the thin shell that registers the commands.

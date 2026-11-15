@@ -30,7 +30,7 @@ from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError,
 from concert_mcp.text.artists import NoArtistMatch, find_playlist_named, new_uris
 from concert_mcp.text.candidates import missing_link_lines, patched_description
 from concert_mcp.text.dates import concert_date
-from concert_mcp.text.description import description_of
+from concert_mcp.text.description import description_of, lines_of
 from concert_mcp.text.naming import (
     SETLIST_LINK,
     has_dated_setlist_description,
@@ -38,6 +38,7 @@ from concert_mcp.text.naming import (
     playlist_name,
     setlist_description,
 )
+from concert_mcp.text.partiful import SETLISTFM_PREFIX
 from concert_mcp.text.reply import provider_reply, render_setlist_playlist
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, SyncResult, page_artist_of, setlist_id_of, setlist_row, songs_of
@@ -57,8 +58,8 @@ NO_SONGS_FIX = "that setlist.fm page has no songs yet; paste a filled-out page o
 NO_SETLIST_REPLY = (
     "No setlist.fm page for {artist} on {date} yet. Paste one when it appears and I will build the playlist."
 )
-EVENT_PATCHED = "Calendar event updated with the link."
-EVENT_HAD_LINK = "Calendar event already had the link."
+EVENT_PATCHED = "Calendar event updated with the links."
+EVENT_HAD_LINK = "Calendar event already had the links."
 
 
 def find_setlist_playlist(playlists: Iterable[Mapping[str, Any]], name: str) -> Mapping[str, Any] | None:
@@ -207,9 +208,10 @@ def live_topic_entry(svc: Services) -> TopicEntry | None:
     return topic_event(topic_key(ft[0], ft[1]), svc) if ft else None
 
 
-def event_for_show(artist: str, date: str, svc: Services) -> tuple[str, dict[str, Any]] | None:
-    """(calendar id, event) of the show: the live topic's event when there is one, else by title and date."""
-    entry = live_topic_entry(svc)
+def event_for_show(artist: str, date: str, svc: Services, *, topic: str = "") -> tuple[str, dict[str, Any]] | None:
+    """(calendar id, event) of the show: the topic's event when there is one, else by title and date. The topic is
+    the one the caller names (`<chat>:<thread>`), else the live chat's."""
+    entry = topic_event(topic, svc) if topic else live_topic_entry(svc)
     if entry:
         e = live_event(entry, svc)
         if e:
@@ -222,19 +224,28 @@ def event_for_show(artist: str, date: str, svc: Services) -> tuple[str, dict[str
     return found[0].calendar_id, e
 
 
-def link_event(artist: str, date: str, url: str, svc: Services) -> str | None:
-    """Patch `Setlist playlist: <url>` into the show's event description once; None when no event was found."""
+def link_event(artist: str, date: str, page_url: str, url: str, svc: Services, *, topic: str = "") -> str | None:
+    """Write `setlist.fm: <page>` and `Setlist playlist: <url>` into the show's event once, then bring the show's
+    Partiful page, when it has one, up to the same links. None when no event was found; else the reply's note."""
     try:
-        hit = event_for_show(artist, date, svc)
+        hit = event_for_show(artist, date, svc, topic=topic)
         if hit is None:
             return None
         cal_id, e = hit
-        line = f"{SETLIST_LINK}{url}"
-        missing = missing_link_lines(description_of(e), [line])
-        if not missing:
-            return EVENT_HAD_LINK
-        svc.calendar.patch_event(cal_id, e["id"], description=patched_description(description_of(e), missing))
-        return EVENT_PATCHED
+        description = description_of(e)
+        # An event made before 2026-11-14 may carry the page under `Setlist:`; it is not linked a second time.
+        lines = [] if page_url in description else [f"{SETLISTFM_PREFIX}{page_url}"]
+        missing = missing_link_lines(description, [*lines, f"{SETLIST_LINK}{url}"])
+        note = EVENT_HAD_LINK
+        if missing:
+            description = patched_description(description, missing)
+            svc.calendar.patch_event(cal_id, e["id"], description=description)
+            note = EVENT_PATCHED
+        # Imported here: flows/partiful.py finds a show's event through this module.
+        from concert_mcp.flows.partiful import refresh_invite_links
+
+        page = refresh_invite_links(str(e.get("summary") or artist), lines_of(description), svc)
+        return f"{note} {page}" if page else note
     except ProviderError as e:
         log_warn(f"event not linked | error='{e.error[:200]}'")
         return f"Calendar event not updated: {str(e.error)[:REASON_LIMIT]}"
@@ -266,9 +277,11 @@ def _page_date(setlist_json: Mapping[str, Any]) -> str:
 
 
 def setlist_playlist_outcome(
-    url: str, artist: str, date: str, venue: str, svc: Services, *, dry_run: bool = False
+    url: str, artist: str, date: str, venue: str, svc: Services, *, dry_run: bool = False, topic: str = ""
 ) -> Outcome:
-    """The setlist_playlist tool's Outcome: fetch the songs, sync the playlist, link the event, render the reply."""
+    """The setlist_playlist tool's Outcome: fetch the songs, sync the playlist, link the event and its Partiful
+    page, render the reply. `topic` (`<chat>:<thread>`) names the Telegram topic that owns the show, for a caller
+    that knows it (the /setlist chat command); empty is the live chat's."""
     try:
         url, artist, date, venue = url.strip(), artist.strip(), date.strip(), venue.strip()
         if not url and not artist:
@@ -276,7 +289,8 @@ def setlist_playlist_outcome(
         if not url and not date:
             raise need("date")
         # In a topic the show's date is the event's: a pasted page may be another night of the same tour.
-        entry = live_topic_entry(svc)
+        topic = topic.strip()
+        entry = topic_event(topic, svc) if topic else live_topic_entry(svc)
         if not date and entry:
             date = entry.date
 
@@ -320,7 +334,7 @@ def setlist_playlist_outcome(
         if res.status == "unavailable":
             reply = provider_reply("spotify-unconfigured", svc.operator)
             return Outcome(Kind.ERROR, reply=reply, error="spotify not configured", data=res.to_json())
-        event = link_event(artist, concert_date(date), res.url, svc) if res.url else None
+        event = link_event(artist, concert_date(date), url, res.url, svc, topic=topic) if res.url else None
         if res.url and not dry_run and res.status in ("created", "updated"):
             remember_in_queue(
                 entry.event_id if entry else None, artist, concert_date(date), url, len(songs), res.url, svc

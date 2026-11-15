@@ -29,7 +29,6 @@ from concert_mcp.text.reply import (
     render_teaser_standalone,
     render_would_look,
     setlist_bullet,
-    setlist_line,
     teaser_bullet,
     teaser_line,
 )
@@ -225,7 +224,6 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
 
     # setlist_bullet_none_when_not_wanted:
     assert setlist_bullet(None) is None
-    assert setlist_line(None) is None
 
     # setlist_bullet_every_branch:
     base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": "The Quarry"}
@@ -252,14 +250,6 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
         f"• [Setlist]({SETLIST_URL})"
     )
 
-    # setlist_line_only_when_found:
-    base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": None}
-    assert (
-        setlist_line(SetlistResult(found=True, match="exact date", setlist=setlist(1), **base))
-        == f"Setlist: {SETLIST_URL}"
-    )
-    assert setlist_line(SetlistResult(found=False, match="none", **base)) is None
-
     # render_body_strips_link_lines_and_appends_extras:
     lines = [
         "Doors: 7:30 PM",
@@ -278,7 +268,7 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
         "• **Teaser:** t\n"
         "• **Setlist:** s"
     )
-    assert LINK_LINE_PREFIXES == ("Teaser playlist: ", "Setlist: ", "Setlist playlist: ")
+    assert LINK_LINE_PREFIXES == ("Teaser playlist: ", "Setlist: ", "setlist.fm: ", "Setlist playlist: ")
 
     # render_removed_without_teaser_line:
     assert render_removed(candidate(description="Doors: 7:30 PM"), dry=False) == (

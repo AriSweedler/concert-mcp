@@ -143,6 +143,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--artist", default="", help="artist, when there is no --url")
     p.add_argument("--date", default="", help="concert date, YYYY-MM-DD (names the playlist; the event's date)")
     p.add_argument("--venue", default="", help="venue name, used to break ties in the lookup")
+    p.add_argument(
+        "--topic", default="", help="the Telegram topic that owns the show, <chat>:<thread>; empty is the live one"
+    )
 
     p = add(
         "try-image",
@@ -417,7 +420,9 @@ def _cmd_setlist_find(args: argparse.Namespace, settings: Settings) -> int:
 def _cmd_setlist_playlist(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     outcome, delivery, text = run_tool(
-        lambda: setlist_playlist_outcome(args.url, args.artist, args.date, args.venue, svc, dry_run=args.dry_run),
+        lambda: setlist_playlist_outcome(
+            args.url, args.artist, args.date, args.venue, svc, dry_run=args.dry_run, topic=args.topic
+        ),
         svc,
         send=not args.no_send,
     )

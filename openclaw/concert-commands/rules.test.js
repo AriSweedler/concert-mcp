@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { replyOf, ticketsArgv, topicOf } from "./rules.js";
+import { replyOf, setlistArgv, ticketsArgv, topicOf, USAGE } from "./rules.js";
 
 const LINK = "https://www.ticketweb.com/event/zed-fox/123";
 
@@ -18,6 +18,15 @@ test("the CLI call returns the reply instead of sending it, and names the topic"
   assert.deepEqual(ticketsArgv(["uv", "run", "concert-mcp"], LINK, "-1001234567890:7"), [
     "uv", "run", "concert-mcp", "--no-send", "tickets", `--link=${LINK}`, "--topic=-1001234567890:7",
   ]);
+});
+
+test("the setlist call runs the setlist flow for the topic", () => {
+  const page = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-3bd6f4a.html";
+  assert.deepEqual(setlistArgv(["concert-mcp"], page, "-1001234567890:7"), [
+    "concert-mcp", "--no-send", "setlist-playlist", `--url=${page}`, "--topic=-1001234567890:7",
+  ]);
+  assert.match(USAGE.tickets, /^Send \/tickets /);
+  assert.match(USAGE.setlist, /^Send \/setlist /);
 });
 
 test("the reply is the output without its status line; a FIX or nothing is no reply", () => {

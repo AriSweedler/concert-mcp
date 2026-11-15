@@ -33,10 +33,9 @@ from concert_mcp.text.description import description_of, lines_of
 from concert_mcp.text.partiful import (
     EVENT_URL,
     PARTIFUL_PREFIX,
-    SETLIST_PREFIX,
-    TEASER_PREFIX,
     TICKETS_PREFIX,
     InviteResult,
+    event_id_of,
     event_payload,
     freeform_location,
     image_record,
@@ -44,11 +43,12 @@ from concert_mcp.text.partiful import (
     invite_title,
     latest_album_cover,
     line_value,
-    link_fields,
     location_parts,
+    merged_links,
     phone_tail,
     place_query,
     same_venue,
+    show_links,
     structured_location,
     ticket_link,
 )
@@ -56,6 +56,8 @@ from concert_mcp.text.reply import (
     PARTIFUL_EVENT_LINKED,
     PARTIFUL_NO_EVENT_REPLY,
     PARTIFUL_NO_PHONE,
+    PARTIFUL_NOT_UPDATED,
+    PARTIFUL_UPDATED,
     render_partiful,
     render_partiful_code_sent,
     render_partiful_signed_in,
@@ -161,9 +163,9 @@ def make_invite(req: InviteRequest, svc: Services, *, dry_run: bool = False) -> 
     if not req.tickets:
         return InviteResult("need_tickets")
     title = invite_title(req.artist, venue_name_of(req.location), req.start)
-    fields = link_fields(
-        req.artist, req.tickets, line_value(req.lines, TEASER_PREFIX), line_value(req.lines, SETLIST_PREFIX)
-    )
+    # The ticket link first, as it just arrived; then whatever else the show's lines link to.
+    others = [f for f in show_links(req.artist, req.lines) if f["value"] != "Tickets"]
+    fields = [{"icon": "link", "value": "Tickets", "url": req.tickets}, *others]
     links = tuple((f["value"], f["url"]) for f in fields)
     if dry_run:
         return InviteResult("dry_run", title=title, links=links)
@@ -199,6 +201,34 @@ def make_invite(req: InviteRequest, svc: Services, *, dry_run: bool = False) -> 
         log_warn(f"partiful location not set | url='{url}' error='{type(e).__name__}: {str(e)[:200]}'")
     going = mark_going(event_id, api, svc)
     return InviteResult("created", url=url, title=title, links=links, poster=image is not None, going=going)
+
+
+def refresh_invite_links(artist: str, lines: Sequence[str], svc: Services) -> str | None:
+    """Bring a show's existing Partiful page up to its fact lines: a link the show gained since the page was made
+    (the setlist.fm page, the setlist playlist) is added, and a link someone put on the page by hand is kept.
+
+    None when the show has no page or the page already has every link; else what happened, for the reply.
+    Never raises.
+    """
+    event_id = event_id_of(line_value(lines, PARTIFUL_PREFIX) or "")
+    api = svc.partiful
+    if not event_id or api is None:
+        return None
+    try:
+        if not api.signed_in():
+            return PARTIFUL_NOT_UPDATED.format(why="Partiful is signed out")
+        current = api.event_links(event_id)
+        merged = merged_links(current, show_links(artist, lines))
+        if merged == current:
+            return None
+        api.set_links(event_id, merged)
+    except ProviderError as e:
+        signed_out = e.provider == "partiful-signed-out"
+        return PARTIFUL_NOT_UPDATED.format(why="Partiful is signed out" if signed_out else str(e.error)[:REASON_LIMIT])
+    except Exception as e:  # noqa: BLE001 - the playlist and the calendar event are done; the page only lags
+        return PARTIFUL_NOT_UPDATED.format(why=f"{type(e).__name__}: {e}"[:REASON_LIMIT])
+    log_info("partiful invite links updated | " + kv(event=event_id, links=len(merged)))
+    return PARTIFUL_UPDATED
 
 
 def link_event(calendar_id: str, event_id: str, lines: Sequence[str], svc: Services) -> str:

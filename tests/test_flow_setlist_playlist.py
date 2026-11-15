@@ -23,7 +23,7 @@ from concert_mcp.text.naming import is_setlist_playlist, setlist_description, te
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, page_artist_of, setlist_id_of, songs_of
 from concert_mcp.text.topics import topic_key
-from fakes import FakeSetlistFm
+from fakes import FakePartiful, FakeSetlistFm
 
 ARTIST = "Zed Fox"
 DATE = "2026-11-14"
@@ -263,12 +263,14 @@ def test_outcome_from_a_pasted_link_in_a_topic_takes_the_topic_event_date(svc: S
         "**Setlist playlist** [2026-11-14 | Zed Fox](https://open.spotify.com/playlist/pl1): 3 songs, "
         "1 not on Spotify.\n"
         "Not on Spotify: Unreleased Jam\n"
-        "Calendar event updated with the link."
+        "Calendar event updated with the links."
     )
     assert svc.setlistfm.fetched == [PAGE_ID]
     desc = svc.calendar.events["cal-concerts"][0]["description"]
     assert desc == (
-        "Teaser playlist: https://open.spotify.com/playlist/t\nSetlist playlist: https://open.spotify.com/playlist/pl1"
+        "Teaser playlist: https://open.spotify.com/playlist/t\n"
+        f"setlist.fm: {PAGE_URL}\n"
+        "Setlist playlist: https://open.spotify.com/playlist/pl1"
     )
     assert out.data["setlistfm_url"] == PAGE_URL and out.data["event"] == EVENT_PATCHED
     # The queue row now holds the page the user chose and the playlist, so a later poll does not announce it again.
@@ -286,10 +288,52 @@ def test_outcome_from_a_pasted_link_in_a_topic_takes_the_topic_event_date(svc: S
         "**Setlist playlist** [2026-11-14 | Zed Fox](https://open.spotify.com/playlist/pl1): 3 songs, "
         "1 not on Spotify (already existed, 0 added).\n"
         "Not on Spotify: Unreleased Jam\n"
-        "Calendar event already had the link."
+        "Calendar event already had the links."
     )
     assert svc.calendar.events["cal-concerts"][0]["description"].count("Setlist playlist:") == 1
     assert out.data["event"] == EVENT_HAD_LINK
+
+
+def test_a_named_topic_gets_both_links_on_its_event_and_on_its_partiful(svc_cli: Services) -> None:
+    # /setlist, typed after the show in its topic: there is no live chat to ask, the command names the topic.
+    wire(svc_cli)
+    topic = "-1001234567890:7"
+    start = datetime(2026, 11, 14, 20, 30, tzinfo=TZ)
+    tickets = "https://www.ticketweb.com/event/zed-fox/123"
+    e = svc_cli.calendar.seed_event(
+        "cal-concerts",
+        summary=ARTIST,
+        start=start,
+        description=f"Tickets: {tickets}\nPartiful: https://partiful.com/e/pf1",
+    )
+    topic_remember(
+        topic,
+        make_topic_entry(event_id=e["id"], calendar_id="cal-concerts", summary=ARTIST, start=start, now=start),
+        svc_cli,
+    )
+    partiful = FakePartiful()
+    partiful.events.append({"customFields": [{"icon": "link", "value": "Tickets", "url": tickets}]})
+    svc_cli.partiful = partiful
+
+    out = setlist_playlist_outcome(PAGE_URL, "", "", "", svc_cli, topic=f" {topic} ")
+    assert out.kind is Kind.OK
+    assert out.reply.endswith("\nCalendar event updated with the links. The Partiful has the links too.")
+    played = "https://open.spotify.com/playlist/pl1"
+    assert svc_cli.calendar.events["cal-concerts"][0]["description"] == (
+        f"Tickets: {tickets}\nPartiful: https://partiful.com/e/pf1\nsetlist.fm: {PAGE_URL}\nSetlist playlist: {played}"
+    )
+    assert partiful.events[0]["customFields"] == [
+        {"icon": "link", "value": "Tickets", "url": tickets},
+        {"icon": "link", "value": "setlist.fm", "url": PAGE_URL},
+        {"icon": "music-note", "value": "Setlist playlist", "url": played},
+    ]
+    # An event from before 2026-11-14 carries the page as `Setlist:`; it is not linked a second time.
+    svc_cli.calendar.events["cal-concerts"][0]["description"] = f"Setlist: {PAGE_URL}"
+    again = setlist_playlist_outcome(PAGE_URL, "", "", "", svc_cli, topic=topic)
+    assert again.kind is Kind.OK
+    assert (
+        svc_cli.calendar.events["cal-concerts"][0]["description"] == f"Setlist: {PAGE_URL}\nSetlist playlist: {played}"
+    )
 
 
 def test_outcome_without_a_topic_finds_the_event_by_title_and_date(svc_cli: Services) -> None:
@@ -302,9 +346,11 @@ def test_outcome_without_a_topic_finds_the_event_by_title_and_date(svc_cli: Serv
         "**Setlist playlist** [2026-11-14 | Zed Fox](https://open.spotify.com/playlist/pl2): 3 songs, "
         "1 not on Spotify.\n"
         "Not on Spotify: Unreleased Jam\n"
-        "Calendar event updated with the link."
+        "Calendar event updated with the links."
     )
-    assert svc_cli.calendar.patched[0][2] == {"description": "Setlist playlist: https://open.spotify.com/playlist/pl2"}
+    assert svc_cli.calendar.patched[0][2] == {
+        "description": f"setlist.fm: {PAGE_URL}\nSetlist playlist: https://open.spotify.com/playlist/pl2"
+    }
 
 
 def test_outcome_by_artist_and_date_goes_through_find_setlist(svc_cli: Services) -> None:

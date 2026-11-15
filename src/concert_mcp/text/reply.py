@@ -52,12 +52,11 @@ __all__ = [
     "render_teaser_standalone",
     "render_would_look",
     "setlist_bullet",
-    "setlist_line",
     "teaser_bullet",
     "teaser_line",
 ]
 
-LINK_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "Setlist playlist: ")
+LINK_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "setlist.fm: ", "Setlist playlist: ")
 SETLIST_PLAYLIST_LINE_PREFIX = "Setlist playlist: "
 NO_CANDIDATES_REPLY = (
     "I do not have a list to pick from any more. Tell me the event name and date and I will look again."
@@ -68,6 +67,8 @@ PARTIFUL_NO_PHONE = (
     "Partiful has no phone number to text a code to. {operator}: set CONCERT_MCP_PARTIFUL_PHONE (README.md#partiful)."
 )
 PARTIFUL_EVENT_LINKED = "The calendar event has the links."
+PARTIFUL_UPDATED = "The Partiful has the links too."
+PARTIFUL_NOT_UPDATED = "Partiful not updated: {why}."
 WHICH_EVENT_REPLY = "Which event? Tell me the artist or title (and the date if you know it) and I will remove it."
 
 EVENT_URL = "https://www.google.com/calendar/event?eid={eid}"  # the API htmlLink's form, without its ctz
@@ -199,13 +200,6 @@ def setlist_bullet(res: SetlistResult | None) -> str | None:
         return None
     n = res.song_count
     return link_bullet("Setlist", res.url, f", {n} songs so far" if n else "")
-
-
-def setlist_line(res: SetlistResult | None) -> str | None:
-    """'Setlist: <url>' when found."""
-    if res is not None and res.found and res.url:
-        return f"Setlist: {res.url}"
-    return None
 
 
 def partiful_problem(res: InviteResult, operator: str) -> str:

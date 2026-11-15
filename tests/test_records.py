@@ -170,8 +170,11 @@ def test_facts_and_expressions_come_from_the_record_alone() -> None:
     # An invite the record did not see made (no snapshot) is simply made; one made from these facts is made too.
     assert expressions(replace(ticketed, lines=lines))["partiful"] == "made"
     assert expressions(replace(ticketed, lines=lines))["setlist playlist"] == "made"
-    made = replace(ticketed, lines=lines, invite={"url": PAGE, **plan})
+    made = replace(ticketed, lines=lines)
+    made = replace(made, invite={"url": PAGE, **invite_plan(made)})
     assert expressions(made)["partiful"] == "made"
+    # The page was made before the show had its setlist playlist: the links it was made with are now short one.
+    assert expressions(replace(made, invite={"url": PAGE, **plan}))["partiful"] == "out of date"
     # A fact that changes what the invite would say (a doors time corrected) makes the invite out of date.
     later = replace(made, lines=("Doors: 7:00 PM", *lines[1:]))
     assert expressions(later)["partiful"] == "out of date"

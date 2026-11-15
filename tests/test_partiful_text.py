@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from concert_mcp.text.partiful import (
     CREATED_BY,
     InviteResult,
+    event_id_of,
     event_payload,
     freeform_location,
     image_record,
@@ -17,10 +18,12 @@ from concert_mcp.text.partiful import (
     line_value,
     link_fields,
     location_parts,
+    merged_links,
     phone_tail,
     place_query,
     same_venue,
     short_clock,
+    show_links,
     storage_url,
     structured_location,
     ticket_link,
@@ -83,18 +86,43 @@ def test_lines_times_and_the_title() -> None:
 
 
 def test_link_fields_and_the_event_payload() -> None:
-    both = link_fields("Zed Fox", TICKETS, PLAYLIST)
+    both = link_fields("Zed Fox", tickets=TICKETS, playlist=PLAYLIST)
     assert both == [
         {"icon": "link", "value": "Tickets", "url": TICKETS},
         {"icon": "music-note", "value": "Zed Fox songs I like", "url": PLAYLIST},
     ]
-    assert link_fields("Zed Fox", TICKETS, None) == both[:1]
-    setlist = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-7b9c1a2e.html"
-    assert link_fields("Zed Fox", TICKETS, PLAYLIST, setlist) == [
+    assert link_fields("Zed Fox", tickets=TICKETS) == both[:1] and link_fields("Zed Fox") == []
+    page = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-7b9c1a2e.html"
+    played = "https://open.spotify.com/playlist/pl2"
+    after_the_show = [
         *both,
-        {"icon": "music-note", "value": "Setlist", "url": setlist},
+        {"icon": "link", "value": "setlist.fm", "url": page},
+        {"icon": "music-note", "value": "Setlist playlist", "url": played},
     ]
-    assert link_fields("Zed Fox", TICKETS, None, setlist)[1]["value"] == "Setlist"
+    assert link_fields("Zed Fox", tickets=TICKETS, playlist=PLAYLIST, setlist=page, setlist_playlist=played) == (
+        after_the_show
+    )
+    lines = [
+        f"Tickets: {TICKETS}",
+        f"Teaser playlist: {PLAYLIST}",
+        f"setlist.fm: {page}",
+        f"Setlist playlist: {played}",
+    ]
+    assert show_links("Zed Fox", lines) == after_the_show
+    # An event made before 2026-11-14 names the page `Setlist:`; it is still the setlist.fm link.
+    assert show_links("Zed Fox", [f"Setlist: {page}"]) == [{"icon": "link", "value": "setlist.fm", "url": page}]
+
+    # A page's fields with the wanted ones in: a label already there takes the new address, a hand-made field stays.
+    by_hand = {"icon": "sparkles", "value": "Pregame at mine", "url": "https://example.com/pregame"}
+    current = [{"icon": "link", "value": "Tickets", "url": "https://old.example/t"}, by_hand]
+    assert merged_links(current, after_the_show) == [
+        {"icon": "link", "value": "Tickets", "url": TICKETS},
+        by_hand,
+        *after_the_show[1:],
+    ]
+    assert merged_links(after_the_show, after_the_show) == after_the_show
+    assert event_id_of("https://partiful.com/e/pf1 ") == "pf1" and event_id_of("https://go.partiful.com/abc") is None
+
     event = event_payload(title="T", start=SHOW, tz="America/Los_Angeles", description="D", fields=both, image=None)
     assert event["startDate"] == "2026-11-15T04:30:00.000Z"
     assert (event["status"], event["visibility"], event["timezone"]) == ("UNSAVED", "public", "America/Los_Angeles")

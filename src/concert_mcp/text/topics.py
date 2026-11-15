@@ -18,6 +18,7 @@ from concert_mcp.text.description import PlainDescription
 KEPT_LINE_PREFIXES = (
     "Teaser playlist: ",
     "Setlist: ",
+    "setlist.fm: ",
     "Setlist playlist: ",
     "Venue: ",
     "Expected: ",

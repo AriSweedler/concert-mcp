@@ -146,7 +146,7 @@ class TestDuplicate:
         assert out.reply.endswith(f"[Open in Google Calendar]({event_url(e['id'])})")
         assert out.data["id"] == e["id"]
         assert out.to_json()["duplicate"] is True
-        assert [q.event_id for q in queue_list(svc)] == [e["id"]]
+        assert queue_list(svc) == []  # no show is queued for a setlist check any more
 
 
 class TestShowTime:
@@ -261,9 +261,7 @@ class TestTopicRegistry:
         assert "\nChanged: title Wrong Name -> Zed Fox\n" in out.reply  # the live text already set the show time
         assert out.reply.endswith(f"[Open in Google Calendar]({event_url(first.data['id'])})")
         assert out.data["changed"] == ["title Wrong Name -> Zed Fox"]
-        # The queue row and the topic name follow the new facts.
-        [q] = queue_list(svc)
-        assert (q.event_id, q.artist, q.date) == (first.data["id"], "Zed Fox", "2026-11-14")
+        # The topic name follows the new facts.
         assert svc.chat.renamed[-1][2] == "2026-11-14 | Zed Fox | The Quarry"
 
     def test_a_cancelled_event_frees_the_topic(self, svc, ticket_text):

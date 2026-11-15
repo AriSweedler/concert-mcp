@@ -16,10 +16,8 @@ from typing import Any
 
 from concert_mcp.config import Settings
 from concert_mcp.flows.lineup import add_lineup_to_event
-from concert_mcp.flows.queue import make_entry, queue_add, queue_forget
 from concert_mcp.flows.records import remember_concert
 from concert_mcp.flows.services import Services
-from concert_mcp.flows.setlist import find_setlist
 from concert_mcp.flows.teaser import make_teaser
 from concert_mcp.flows.topics import live_event, make_topic_entry, topic_event, topic_forget, topic_remember
 from concert_mcp.flows.venues import resolve_venue
@@ -58,8 +56,6 @@ from concert_mcp.text.reply import (
     render_added,
     render_body,
     render_dry_add,
-    setlist_bullet,
-    setlist_line,
     teaser_bullet,
     teaser_line,
 )
@@ -333,12 +329,13 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
 
     # The teaser runs before the insert so one insert carries its link; neither it nor the lookup is ever fatal.
     teaser = make_teaser(p.title, date, svc, dry_run=req.dry_run) if (req.concert and req.teaser) else None
-    setlist = find_setlist(p.title, date, where, svc) if req.concert else None
-    t_line, s_line, v_line = teaser_line(teaser), setlist_line(setlist), venue_line(venue)
+    # No setlist lookup here (2026-11-14): a setlist exists only after the show, and the user gives it then
+    # (/setlist, the setlist_playlist tool).
+    t_line, v_line = teaser_line(teaser), venue_line(venue)
     # `tickets: <URL>` in the text is the ticket link, by rule; it is the fact that turns the show into an invite.
     tickets = ticket_link_in(p.raw_source) if req.concert else None
     tix_line = f"{TICKETS_PREFIX}{tickets}" if tickets else None
-    lines = list(p.lines) + [ln for ln in (v_line, tix_line, t_line, s_line) if ln]
+    lines = list(p.lines) + [ln for ln in (v_line, tix_line, t_line) if ln]
 
     # An end the ticket did not state is the default length: the calendar needs one, the reply does not guess.
     when = fmt_start(p.start) if p.end_assumed else fmt_range(p.start, p.end)
@@ -349,7 +346,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
             when,
             where,
             [*lines, *extra],
-            [teaser_bullet(teaser, timeout_s=s.teaser_timeout_s, dry=req.dry_run), setlist_bullet(setlist)],
+            [teaser_bullet(teaser, timeout_s=s.teaser_timeout_s, dry=req.dry_run)],
             links,
         )
 
@@ -364,7 +361,6 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         "description": lines,
         "dropped": list(p.dropped),
         "teaser": teaser.to_json() if teaser else None,
-        "setlist": setlist.to_json() if setlist else None,
         "topic": topic,
         "venue": venue.to_json() if venue else None,
     }
@@ -442,26 +438,6 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 common["description"] = [ln for ln in common["description"] if ln != page] + [page]
         if updated:
             more_notes.append(changed_note(changed))
-        if req.concert and event_id:
-            # Every concert is queued (2026-10-25): the page fills in over weeks, so the poller keeps checking.
-            entry = make_entry(
-                event_id=event_id,
-                calendar_id=event_cal_id,
-                artist=p.title,
-                start=p.start,
-                venue=where,
-                setlist=setlist,
-                now=now,
-                days=s.setlist_queue_days,
-            )
-            # The event exists by now; a queue write that fails is a note on the reply, never a crash without the link.
-            try:
-                if updated:
-                    queue_forget(event_id, svc)  # the row carries the artist and the date; an update rewrites it
-                queue_add(entry, svc)
-            except Exception as e:  # noqa: BLE001 - the reply with the calendar link matters more than the queue
-                log_warn(f"setlist queue not written | error='{type(e).__name__}: {e}'")
-                more_notes.append(f"Not queued for the setlist check: {type(e).__name__}")
         if req.concert and event_id and key:
             # The topic now owns this event (also after a title-guard duplicate: the next add here updates it).
             try:
@@ -533,7 +509,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     e = duplicate_of(existing, p.title)
     if e is not None:
         # The event predates the playlist or the setlist page: add the missing link lines to its description.
-        missing = missing_link_lines(description_of(e), [t_line, s_line])
+        missing = missing_link_lines(description_of(e), [t_line])
         if missing:
             svc.calendar.patch_event(cal_id, e["id"], description=patched_description(description_of(e), missing))
         return finish(e.get("id"), e.get("htmlLink"), True)

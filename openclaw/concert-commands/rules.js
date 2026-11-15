@@ -1,6 +1,9 @@
 // The command's rules, pure, so `node --test` covers them without OpenClaw.
 
-export const USAGE = "Send /tickets <link to the ticket page> in the show's topic.";
+export const USAGE = {
+  tickets: "Send /tickets <link to the ticket page> in the show's topic.",
+  setlist: "Send /setlist <link to the show's setlist.fm page> in the show's topic.",
+};
 
 /**
  * '<chat>:<thread>' of the Telegram forum topic a command was typed in, as concert-mcp keys a topic; null anywhere
@@ -19,6 +22,11 @@ export function topicOf(ctx) {
  */
 export function ticketsArgv(command, link, topic) {
   return [...command, "--no-send", "tickets", `--link=${link}`, `--topic=${topic}`];
+}
+
+/** The CLI call for a show's setlist.fm page: the setlist playlist, and both links on the event and the invite. */
+export function setlistArgv(command, link, topic) {
+  return [...command, "--no-send", "setlist-playlist", `--url=${link}`, `--topic=${topic}`];
 }
 
 /**

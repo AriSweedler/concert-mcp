@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from concert_mcp.adapters.partiful_http import API, CUSTOM_TOKEN, SECURETOKEN, PartifulClient, new_object_id
+from concert_mcp.adapters.partiful_http import API, COMMIT, CUSTOM_TOKEN, SECURETOKEN, PartifulClient, new_object_id
 from concert_mcp.config import Settings
 from concert_mcp.result import ProviderError
 from concert_mcp.text.partiful import STORAGE
@@ -245,3 +245,42 @@ def test_upload_and_download(client: PartifulClient, fake: FakeUrlopen) -> None:
     with pytest.raises(ProviderError) as e:
         client.download("https://i.example/cover")
     assert "call='download' status='404'" in e.value.error
+
+
+def test_link_fields_are_read_and_replaced_as_the_sites_editor_does(client: PartifulClient, fake: FakeUrlopen) -> None:
+    sign_in(client)
+    fields = [{"icon": "link", "value": "Tickets", "url": "https://t.example"}]
+    fake.add("POST", f"{API}/getEventInfo", result({"event": {"customFields": [*fields, "junk"]}}))
+    assert client.event_links("ev1") == fields
+    fake.add("POST", f"{API}/getEventInfo", result(None))
+    assert client.event_links("ev1") == []
+
+    fake.add("POST", COMMIT, {"writeResults": [{}]})
+    client.set_links("ev1", fields)
+    [write] = body_of(fake.requests[-1])["writes"]
+    assert write["update"]["name"].endswith("/documents/events/ev1")
+    assert write["update"]["fields"]["customFields"] == {
+        "arrayValue": {
+            "values": [
+                {
+                    "mapValue": {
+                        "fields": {
+                            "icon": {"stringValue": "link"},
+                            "value": {"stringValue": "Tickets"},
+                            "url": {"stringValue": "https://t.example"},
+                        }
+                    }
+                }
+            ]
+        }
+    }
+    assert write["update"]["fields"]["updatedBy"]["referenceValue"].endswith("/documents/users/u1")
+    assert write["updateMask"] == {"fieldPaths": ["customFields", "updatedBy"]}
+    assert write["currentDocument"] == {"exists": True}
+    refused = json.dumps({"error": {"message": "Missing or insufficient permissions."}})
+    fake.add("POST", COMMIT, http_error(403, refused))
+    with pytest.raises(ProviderError) as e:
+        client.set_links("ev1", fields)
+    assert e.value.error == (
+        "Partiful refused | call='firestore commit' status='403' message='Missing or insufficient permissions.'"
+    )

@@ -135,16 +135,14 @@ def test_venue_registry_survives_a_failed_write_and_refreshes_in_place(svc_cli: 
     assert venue_website("", svc_cli) is None and venue_website("Nowhere Hall", svc_cli) is None
 
 
-def test_concert_add_still_replies_when_the_queue_or_the_topic_cannot_be_written(
-    svc: Services, ticket_text: str
-) -> None:
+def test_concert_add_still_replies_when_the_topic_cannot_be_written(svc: Services, ticket_text: str) -> None:
     s = svc.settings
-    svc.state = BrokenState(write_fails=(s.setlist_queue, s.topics_file))
+    svc.state = BrokenState(write_fails=(s.topics_file,))
     out = concert_add_mod.add_concert(
         svc=svc, artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text
     )
     assert out.kind is Kind.OK
-    assert "Not queued for the setlist check: OSError" in out.reply and "Topic not remembered: OSError" in out.reply
+    assert "Topic not remembered: OSError" in out.reply
 
 
 # ---------- flows: a provider failing mid-way, a body that crashes ----------
@@ -231,7 +229,7 @@ def test_setlist_playlist_failures(svc_cli: Services, monkeypatch: pytest.Monkey
         "cal-concerts", summary="Zed Fox", start=datetime(2026, 11, 14, 20, 30, tzinfo=svc_cli.tz), location="Q"
     )
     cal.fail = "patch_event"
-    note = link_event("Zed Fox", "2026-11-14", "https://open.spotify.com/playlist/p", svc_cli)
+    note = link_event("Zed Fox", "2026-11-14", "https://s", "https://open.spotify.com/playlist/p", svc_cli)
     assert note is not None and note.startswith("Calendar event not updated:")
     cal.fail = None
     svc_cli.setlistfm = FakeSetlistFm({}, fail=True)

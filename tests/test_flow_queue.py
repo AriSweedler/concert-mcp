@@ -43,3 +43,5 @@ class TestQueueReplace:
     def test_appends_when_the_row_is_absent(self, svc):
         queue_replace(entry("evt1"), svc)
         assert queue_list(svc) == [entry("evt1")]
+        # A show already in the queue is not added twice.
+        assert queue_add(entry("evt1"), svc) is False and queue_add(entry("evt2"), svc) is True

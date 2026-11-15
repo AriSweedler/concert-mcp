@@ -2,9 +2,9 @@
 
 Pure: no I/O. An invite is a public Partiful event for one concert: the title `Concert: <artist> at <venue> <m/d>`,
 the doors and show times as its description, the venue as a Maps place, the cover of the artist's latest album as its
-poster, and link fields under the venue: `Tickets`, `<Artist> songs I like` and, when the show's setlist.fm page is
-known, `Setlist` (Partiful's `customFields`, each `{icon, value, url}`). The shapes here were read from invites made
-on partiful.com and checked against the live API on 2026-11-14.
+poster, and link fields under the venue: `Tickets`, `<Artist> songs I like` and, once the show's setlist is given,
+`setlist.fm` and `Setlist playlist` (Partiful's `customFields`, each `{icon, value, url}`). The shapes here were
+read from invites made on partiful.com and checked against the live API on 2026-11-14.
 
 The ticket link is what turns a concert into an invite, and it is found here, by rule, not by a model: a line
 `tickets: <URL>` in the text.
@@ -23,7 +23,9 @@ from concert_mcp.text.venues import venue_key
 TICKETS_PREFIX = "Tickets: "
 PARTIFUL_PREFIX = "Partiful: "
 TEASER_PREFIX = "Teaser playlist: "
-SETLIST_PREFIX = "Setlist: "
+SETLIST_PREFIX = "Setlist: "  # the label events carried until 2026-11-14; still read
+SETLISTFM_PREFIX = "setlist.fm: "
+SETLIST_PLAYLIST_PREFIX = "Setlist playlist: "
 DOORS_PREFIX = "Doors: "
 EXPECTED_PREFIX = "Expected: "
 # The description's last line. Partiful shows a description as plain text and turns an address in it into a link
@@ -135,15 +137,53 @@ def invite_description(lines: Sequence[str], start: datetime) -> str:
     return f"{times}\n\n{CREATED_BY}"
 
 
-def link_fields(artist: str, tickets: str, playlist: str | None, setlist: str | None = None) -> list[dict[str, str]]:
-    """The link fields under the venue: Tickets, then '<Artist> songs I like' when there is a teaser playlist,
-    then Setlist when the show's setlist.fm page is known."""
-    fields = [{"icon": "link", "value": "Tickets", "url": tickets}]
-    if playlist:
-        fields.append({"icon": "music-note", "value": f"{artist} songs I like", "url": playlist})
-    if setlist:
-        fields.append({"icon": "music-note", "value": "Setlist", "url": setlist})
-    return fields
+def link_fields(
+    artist: str,
+    *,
+    tickets: str | None = None,
+    playlist: str | None = None,
+    setlist: str | None = None,
+    setlist_playlist: str | None = None,
+) -> list[dict[str, str]]:
+    """The link fields under the venue, each only when its link is known: Tickets, '<Artist> songs I like' (the
+    teaser playlist), setlist.fm (the show's page there) and Setlist playlist."""
+    known = (
+        ("link", "Tickets", tickets),
+        ("music-note", f"{artist} songs I like", playlist),
+        ("link", "setlist.fm", setlist),
+        ("music-note", "Setlist playlist", setlist_playlist),
+    )
+    return [{"icon": icon, "value": label, "url": url} for icon, label, url in known if url]
+
+
+def show_links(artist: str, lines: Sequence[str]) -> list[dict[str, str]]:
+    """The link fields a show's fact lines give: what its invite should link to."""
+    return link_fields(
+        artist,
+        tickets=ticket_link(line_value(lines, TICKETS_PREFIX) or ""),
+        playlist=line_value(lines, TEASER_PREFIX),
+        setlist=line_value(lines, SETLISTFM_PREFIX) or line_value(lines, SETLIST_PREFIX),
+        setlist_playlist=line_value(lines, SETLIST_PLAYLIST_PREFIX),
+    )
+
+
+def merged_links(current: Sequence[Mapping[str, Any]], wanted: Sequence[Mapping[str, str]]) -> list[dict[str, Any]]:
+    """A page's link fields with the wanted ones in: a field of the same label takes the wanted address, a new
+    one goes last, and a field someone added by hand stays where it is."""
+    out = [dict(f) for f in current]
+    for want in wanted:
+        same = next((f for f in out if f.get("value") == want["value"]), None)
+        if same is None:
+            out.append(dict(want))
+        else:
+            same["url"] = want["url"]
+    return out
+
+
+def event_id_of(url: str) -> str | None:
+    """The Partiful event id in a page address (`https://partiful.com/e/<id>`); None when it is not one."""
+    found = re.match(r"^https://partiful\.com/e/([A-Za-z0-9]+)", url.strip())
+    return found.group(1) if found else None
 
 
 def utc_stamp(when: datetime) -> str:
