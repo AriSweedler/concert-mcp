@@ -15,8 +15,9 @@ from typing import Any
 
 from concert_mcp.config import Settings
 from concert_mcp.flows.lineup import add_lineup_to_event
-from concert_mcp.flows.records import remember_concert
+from concert_mcp.flows.records import remember_concert, remember_setlist_guess
 from concert_mcp.flows.services import Services
+from concert_mcp.flows.setlist_guess import guess_setlist_page
 from concert_mcp.flows.teaser import make_teaser
 from concert_mcp.flows.topics import live_event, make_topic_entry, topic_event, topic_forget, topic_remember
 from concert_mcp.flows.venues import resolve_venue
@@ -47,7 +48,7 @@ from concert_mcp.text.derive import (
 )
 from concert_mcp.text.description import description_of, from_lines
 from concert_mcp.text.naming import topic_name
-from concert_mcp.text.partiful import PARTIFUL_PREFIX, TICKETS_PREFIX, ticket_link_in
+from concert_mcp.text.partiful import PARTIFUL_PREFIX, TICKETS_PREFIX, setlist_page, ticket_link_in
 from concert_mcp.text.reply import (
     changed_note,
     dropped_note,
@@ -55,6 +56,7 @@ from concert_mcp.text.reply import (
     render_added,
     render_body,
     render_dry_add,
+    setlist_guess_note,
     teaser_bullet,
     teaser_line,
 )
@@ -438,6 +440,14 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 page = f"{PARTIFUL_PREFIX}{invite.url}"
                 extra = (*extra, page)
                 common["description"] = ordered_lines([ln for ln in common["description"] if ln != page] + [page])
+        if req.concert and event_id and setlist_page(common["description"]) is None:
+            # Until the user gives the show's own setlist.fm page, a guess at where it will be: said and recorded,
+            # never acted on (flows/setlist_guess.py).
+            guess = guess_setlist_page(p.title, svc)
+            common["setlist_guess"] = guess
+            if guess:
+                remember_setlist_guess(event_id, guess, svc)
+                more_notes.append(setlist_guess_note(guess))
         if updated:
             more_notes.append(changed_note(changed))
         if req.concert and event_id and key:

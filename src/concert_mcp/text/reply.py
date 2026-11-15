@@ -45,6 +45,7 @@ __all__ = [
     "render_removed",
     "render_teaser_standalone",
     "render_would_look",
+    "setlist_guess_note",
     "teaser_bullet",
     "teaser_line",
 ]
@@ -150,6 +151,12 @@ def changed_note(changed: Sequence[str]) -> str:
 def dropped_note(dropped: Sequence[str]) -> str:
     """'Left out (not in the text I was given): a; b'."""
     return f"Left out (not in the text I was given): {'; '.join(dropped)}"
+
+
+def setlist_guess_note(url: str) -> str:
+    """'possible setlist.fm link', the last three words linked: a guess at where the show's setlist will be (the
+    artist's most recent page), in the owner's own wording (2026-11-15). 'possible' is the whole claim."""
+    return f"possible [setlist.fm link]({url})"
 
 
 def teaser_bullet(res: TeaserResult | None, *, timeout_s: int, dry: bool) -> str | None:

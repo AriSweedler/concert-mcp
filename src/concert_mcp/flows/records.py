@@ -95,14 +95,24 @@ def remember_concert(event: Mapping[str, Any], calendar_id: str, svc: Services, 
         log_warn(f"concert record not written | error='{type(e).__name__}: {str(e)[:200]}'")
 
 
-def remember_invite(event_id: str, invite: Mapping[str, Any], svc: Services) -> None:
-    """Keep what the show's Partiful invite was made from, so a later fact can tell it is out of date. Never raises."""
+def _amend(event_id: str, svc: Services, **fields: Any) -> None:
+    """Set fields the calendar does not hold on the show's record, when it has one. Never raises."""
     try:
         known = record_for_event(event_id, svc.state, svc.settings.concerts_dir)
         if known:
-            save_record(replace(known[1], invite=dict(invite)), svc.state, svc.settings.concerts_dir)
+            save_record(replace(known[1], **fields), svc.state, svc.settings.concerts_dir)
     except Exception as e:  # noqa: BLE001
         log_warn(f"concert record not updated | error='{type(e).__name__}: {str(e)[:200]}'")
+
+
+def remember_invite(event_id: str, invite: Mapping[str, Any], svc: Services) -> None:
+    """Keep what the show's Partiful invite was made from, so a later fact can tell it is out of date. Never raises."""
+    _amend(event_id, svc, invite=dict(invite))
+
+
+def remember_setlist_guess(event_id: str, url: str, svc: Services) -> None:
+    """Keep the guess at where the show's setlist will be (`flows/setlist_guess.py`). Never raises."""
+    _amend(event_id, svc, setlist_guess=url)
 
 
 def find_record(svc: Services, *, topic: str | None = None, artist: str = "", date: str = "") -> ConcertRecord | None:

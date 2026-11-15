@@ -64,6 +64,9 @@ class ConcertRecord:
     html_link: str | None = None
     topic: str | None = None  # "<chat>:<thread>" of the Telegram topic that owns the show
     invite: Mapping[str, Any] | None = None  # what the Partiful invite was made from: {url, title, description, links}
+    # A guess at where the setlist will be (the artist's latest setlist.fm page when the concert was added). It is
+    # not the show's page: that is the `setlist.fm:` line among `lines`, which the user gives.
+    setlist_guess: str | None = None
     updated: str = ""
 
     @property
@@ -80,6 +83,7 @@ class ConcertRecord:
             "calendar": {"calendar_id": self.calendar_id, "event_id": self.event_id, "html_link": self.html_link},
             "topic": self.topic,
             "invite": dict(self.invite) if self.invite else None,
+            "setlist_guess": self.setlist_guess,
             "updated": self.updated,
         }
 
@@ -98,6 +102,7 @@ class ConcertRecord:
             html_link=str(calendar["html_link"]) if calendar.get("html_link") else None,
             topic=str(d["topic"]) if d.get("topic") else None,
             invite=dict(invite) if isinstance(invite, Mapping) else None,
+            setlist_guess=str(d["setlist_guess"]) if d.get("setlist_guess") else None,
             updated=str(d.get("updated") or ""),
         )
 
@@ -121,7 +126,7 @@ def record_of_event(
     event: Mapping[str, Any], calendar_id: str, *, now: str, known: ConcertRecord | None = None
 ) -> ConcertRecord:
     """The record of a calendar event as the calendar returned it. What the calendar does not hold (the topic, what
-    the invite was made from) is kept from the record already known for the event."""
+    the invite was made from, the setlist guess) is kept from the record already known for the event."""
     return ConcertRecord(
         artist=str(event.get("summary") or ""),
         start=_when(event.get("start")),
@@ -133,6 +138,7 @@ def record_of_event(
         html_link=str(event["htmlLink"]) if event.get("htmlLink") else (known.html_link if known else None),
         topic=known.topic if known else None,
         invite=known.invite if known else None,
+        setlist_guess=known.setlist_guess if known else None,
         updated=now,
     )
 
@@ -187,6 +193,9 @@ def facts(record: ConcertRecord) -> dict[str, Any]:
     openers = [ln[len(OPENER_PREFIX) :].strip() for ln in record.lines if ln.startswith(OPENER_PREFIX)]
     if openers:
         out["openers"] = openers
+    if record.setlist_guess and "setlist" not in out:
+        # Only until the user gives the show's own page: a guess beside the real thing says nothing.
+        out["setlist_guess"] = record.setlist_guess
     return out
 
 
