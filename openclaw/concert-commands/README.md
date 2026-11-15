@@ -7,6 +7,8 @@ An OpenClaw plugin with two chat commands for a show's Telegram topic. No model 
 | `/tickets <link>` | records the show's ticket page through `concert-mcp tickets`: the link goes on the calendar event and the Partiful invite is made |
 | `/setlist <link>` | after the show, takes its setlist.fm page through `concert-mcp setlist-playlist`: the setlist playlist is made, and `setlist.fm` and `Setlist playlist` links go on the calendar event and on the Partiful invite |
 
+A command with no link uses the one the show already has: `/setlist` reads the page again and tops the playlist up, `/tickets` tries the invite again (after a Partiful login, say). A show with no link yet answers that none has been given.
+
 Typed anywhere but a show's topic, a command answers with how to use it.
 
 Without the plugin the same things happen through the model: a `tickets: <link>` message makes it call `tickets_add`, and a pasted setlist.fm link makes it call `setlist_playlist`.

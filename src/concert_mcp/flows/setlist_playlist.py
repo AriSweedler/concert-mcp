@@ -38,7 +38,7 @@ from concert_mcp.text.naming import (
     playlist_name,
     setlist_description,
 )
-from concert_mcp.text.partiful import SETLISTFM_PREFIX
+from concert_mcp.text.partiful import SETLISTFM_PREFIX, setlist_page
 from concert_mcp.text.reply import provider_reply, render_setlist_playlist
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, SyncResult, page_artist_of, setlist_id_of, setlist_row, songs_of
@@ -58,6 +58,8 @@ NO_SONGS_FIX = "that setlist.fm page has no songs yet; paste a filled-out page o
 NO_SETLIST_REPLY = (
     "No setlist.fm page for {artist} on {date} yet. Paste one when it appears and I will build the playlist."
 )
+NO_SETLIST_GIVEN_REPLY = "You haven't given this show's setlist yet. Send /setlist <link to its setlist.fm page>."
+NO_TOPIC_SHOW_REPLY = "This topic has no concert yet. Add the concert first, then send its setlist."
 EVENT_PATCHED = "Calendar event updated with the links."
 EVENT_HAD_LINK = "Calendar event already had the links."
 
@@ -284,13 +286,22 @@ def setlist_playlist_outcome(
     that knows it (the /setlist chat command); empty is the live chat's."""
     try:
         url, artist, date, venue = url.strip(), artist.strip(), date.strip(), venue.strip()
+        topic = topic.strip()
+        entry = topic_event(topic, svc) if topic else live_topic_entry(svc)
+        if not url:
+            # No link this time: the page the show's event already carries is read again, which tops the
+            # playlist up as the page fills in.
+            show = live_event(entry, svc) if entry else None
+            url = (setlist_page(lines_of(description_of(show))) or "") if show else ""
+            if not url and topic:
+                # A chat command names its topic and nothing else: there is no artist to search by, and no search.
+                reply = NO_SETLIST_GIVEN_REPLY if show else NO_TOPIC_SHOW_REPLY
+                return Outcome(Kind.NEED_USER, reply=reply, error="no setlist.fm page given")
         if not url and not artist:
             raise need("artist")
         if not url and not date:
             raise need("date")
         # In a topic the show's date is the event's: a pasted page may be another night of the same tour.
-        topic = topic.strip()
-        entry = topic_event(topic, svc) if topic else live_topic_entry(svc)
         if not date and entry:
             date = entry.date
 

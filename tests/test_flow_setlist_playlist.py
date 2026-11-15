@@ -10,8 +10,10 @@ from concert_mcp.flows.setlist_playlist import (
     EVENT_HAD_LINK,
     EVENT_PATCHED,
     NO_PAGE_FIX,
+    NO_SETLIST_GIVEN_REPLY,
     NO_SETLIST_REPLY,
     NO_SONGS_FIX,
+    NO_TOPIC_SHOW_REPLY,
     NOT_SETLISTFM_FIX,
     setlist_playlist_outcome,
     sync_setlist_playlist,
@@ -334,6 +336,37 @@ def test_a_named_topic_gets_both_links_on_its_event_and_on_its_partiful(svc_cli:
     assert (
         svc_cli.calendar.events["cal-concerts"][0]["description"] == f"Setlist: {PAGE_URL}\nSetlist playlist: {played}"
     )
+
+
+def test_setlist_with_no_link_refreshes_the_page_already_given_or_says_none_was(svc_cli: Services) -> None:
+    wire(svc_cli)
+    topic = "-1001234567890:7"
+    start = datetime(2026, 11, 14, 20, 30, tzinfo=TZ)
+    # A topic with no show, then a show with no setlist yet: nothing to refresh, and nothing is searched for.
+    none = setlist_playlist_outcome("", "", "", "", svc_cli, topic=topic)
+    assert none.kind is Kind.NEED_USER and none.reply == NO_TOPIC_SHOW_REPLY
+    e = svc_cli.calendar.seed_event("cal-concerts", summary=ARTIST, start=start, description="Doors: 7:30 PM")
+    topic_remember(
+        topic,
+        make_topic_entry(event_id=e["id"], calendar_id="cal-concerts", summary=ARTIST, start=start, now=start),
+        svc_cli,
+    )
+    asked = setlist_playlist_outcome("", "", "", "", svc_cli, topic=topic)
+    assert asked.kind is Kind.NEED_USER and asked.error == "no setlist.fm page given"
+    assert asked.reply == "You haven't given this show's setlist yet. Send /setlist <link to its setlist.fm page>."
+    assert asked.reply == NO_SETLIST_GIVEN_REPLY and svc_cli.setlistfm.fetched == [] and svc_cli.spotify.created == []
+
+    # Given once, the page is on the event; /setlist alone reads it again and tops the playlist up.
+    first = setlist_playlist_outcome(PAGE_URL, "", "", "", svc_cli, topic=topic)
+    assert first.kind is Kind.OK and len(svc_cli.spotify.created) == 1
+    again = setlist_playlist_outcome("", "", "", "", svc_cli, topic=topic)
+    assert again.kind is Kind.OK and "(already existed, 0 added)" in again.reply
+    assert again.reply.endswith("\nCalendar event already had the links.")
+    assert svc_cli.setlistfm.fetched == [PAGE_ID, PAGE_ID] and len(svc_cli.spotify.created) == 1
+    # The event deleted since: the topic owns nothing to refresh.
+    svc_cli.calendar.events["cal-concerts"] = []
+    gone = setlist_playlist_outcome("", "", "", "", svc_cli, topic=topic)
+    assert gone.kind is Kind.NEED_USER and gone.reply == NO_TOPIC_SHOW_REPLY
 
 
 def test_outcome_without_a_topic_finds_the_event_by_title_and_date(svc_cli: Services) -> None:

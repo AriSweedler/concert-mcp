@@ -156,13 +156,19 @@ def link_fields(
     return [{"icon": icon, "value": label, "url": url} for icon, label, url in known if url]
 
 
+def setlist_page(lines: Sequence[str]) -> str | None:
+    """The show's setlist.fm page among its fact lines: the `setlist.fm:` line, else the `Setlist:` line an event
+    made before 2026-11-14 carries."""
+    return line_value(lines, SETLISTFM_PREFIX) or line_value(lines, SETLIST_PREFIX)
+
+
 def show_links(artist: str, lines: Sequence[str]) -> list[dict[str, str]]:
     """The link fields a show's fact lines give: what its invite should link to."""
     return link_fields(
         artist,
         tickets=ticket_link(line_value(lines, TICKETS_PREFIX) or ""),
         playlist=line_value(lines, TEASER_PREFIX),
-        setlist=line_value(lines, SETLISTFM_PREFIX) or line_value(lines, SETLIST_PREFIX),
+        setlist=setlist_page(lines),
         setlist_playlist=line_value(lines, SETLIST_PLAYLIST_PREFIX),
     )
 

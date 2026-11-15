@@ -3,6 +3,7 @@
 //   /tickets <link>   the show's ticket page: recorded on the calendar event, and the Partiful invite is made
 //   /setlist <link>   the show's setlist.fm page, after the show: the setlist playlist is made, and both links
 //                     go on the calendar event and on the Partiful invite
+//   /setlist          the page already given is read again and the playlist topped up
 //
 // The plugin registers the two commands and does nothing else: it runs only when one is typed, and it reads no
 // other message. Each runs the concert-mcp CLI for the topic it was typed in and hands the CLI's reply back.
@@ -25,7 +26,11 @@ function run(argv, timeoutMs) {
   });
 }
 
-/** One command: `/name <link>` in a show's topic runs the CLI built by `argv` and replies with what it says. */
+/**
+ * One command: `/name <link>` in a show's topic runs the CLI built by `argv` and replies with what it says.
+ * `/name` alone runs it with no link: concert-mcp then uses the link the show already has (the setlist playlist is
+ * topped up, the invite is tried again) or answers that none has been given yet.
+ */
 function linkCommand(api, name, description, argv) {
   return {
     name,
@@ -34,8 +39,8 @@ function linkCommand(api, name, description, argv) {
     handler: async (ctx) => {
       const link = (ctx.args ?? "").trim();
       const topic = topicOf(ctx);
-      // A show lives in its topic: anywhere else there is no telling which show the link is for.
-      if (!link || !topic) return { text: USAGE[name] };
+      // A show lives in its topic: anywhere else there is no telling which show is meant.
+      if (!topic) return { text: USAGE[name] };
       const config = api.pluginConfig ?? {};
       const command = Array.isArray(config.command) && config.command.length ? config.command : DEFAULT_COMMAND;
       try {
