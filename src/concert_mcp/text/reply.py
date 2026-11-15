@@ -237,7 +237,8 @@ def render_partiful(res: InviteResult, operator: str, *, event_note: str = PARTI
         cover = "the cover of the artist's latest album" if res.poster else "none, Partiful's default"
         poster = bullet("Poster", cover)
         head = f"**Partiful made:** [{res.title}]({res.url})"
-        return f"{head}{rows}\n{poster}\nNobody is invited yet. {event_note}"
+        guests = "You are marked as going; nobody is invited yet." if res.going else "Nobody is invited yet."
+        return f"{head}{rows}\n{poster}\n{guests} {event_note}"
     if res.status == "exists":
         return f"This show already has a Partiful: [Partiful]({res.url})"
     if res.status == "dry_run":

@@ -449,6 +449,7 @@ class FakePartiful:
         self.locations: list[tuple[str, dict[str, Any]]] = []
         self.uploads: list[tuple[bytes, str]] = []
         self.downloads: list[str] = []
+        self.going: list[tuple[str, str, str]] = []
 
     def _record(self, method: str) -> None:
         self.calls.append(method)
@@ -489,6 +490,10 @@ class FakePartiful:
     def set_location(self, event_id: str, location_info: Mapping[str, Any]) -> None:
         self._record("set_location")
         self.locations.append((event_id, dict(location_info)))
+
+    def rsvp_going(self, event_id: str, name: str, timezone: str) -> None:
+        self._record("rsvp_going")
+        self.going.append((event_id, name, timezone))
 
     def upload_image(self, data: bytes, content_type: str) -> str:
         self._record("upload_image")

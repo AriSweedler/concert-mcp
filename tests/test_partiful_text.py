@@ -178,13 +178,14 @@ def test_the_newest_album_cover() -> None:
 
 def test_phone_tail_and_the_result_record() -> None:
     assert phone_tail("+1 (555) 555-0100") == "0100"
-    res = InviteResult("created", url=PAGE, title="T", links=(("Tickets", TICKETS),), poster=True)
+    res = InviteResult("created", url=PAGE, title="T", links=(("Tickets", TICKETS),), poster=True, going=True)
     assert res.to_json() == {
         "status": "created",
         "url": PAGE,
         "title": "T",
         "links": [["Tickets", TICKETS]],
         "poster": True,
+        "going": True,
         "reason": None,
     }
 
@@ -192,13 +193,13 @@ def test_phone_tail_and_the_result_record() -> None:
 def test_every_partiful_reply() -> None:
     links = (("Tickets", TICKETS), ("Zed Fox songs I like", PLAYLIST))
     title = "Concert: Zed Fox at The Quarry 11/14"
-    created = InviteResult("created", url=PAGE, title=title, links=links, poster=True)
+    created = InviteResult("created", url=PAGE, title=title, links=links, poster=True, going=True)
     assert render_partiful(created, "Admin") == (
         f"**Partiful made:** [{title}]({PAGE})\n"
         f"• [Tickets]({TICKETS})\n"
         f"• [Zed Fox songs I like]({PLAYLIST})\n"
         "• **Poster:** the cover of the artist's latest album\n"
-        "Nobody is invited yet. The calendar event has the links."
+        "You are marked as going; nobody is invited yet. The calendar event has the links."
     )
     plain = InviteResult("created", url=PAGE, title=title, links=links[:1])
     assert render_partiful(plain, "Admin", event_note="Calendar event not updated: x") == (

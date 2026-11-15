@@ -109,7 +109,8 @@ def description(svc: Services, event_id: str) -> str:
 def test_an_invite_carries_the_show_the_links_the_place_and_the_poster(svc: Services) -> None:
     partiful = FakePartiful(place=PLACE)
     res = make_invite(request(), with_partiful(svc, partiful), dry_run=False)
-    assert (res.status, res.url, res.title, res.poster) == ("created", PAGE, TITLE, True)
+    assert (res.status, res.url, res.title, res.poster, res.going) == ("created", PAGE, TITLE, True, True)
+    assert partiful.going == [("pf1", "Pat Example", "America/Los_Angeles")]
     assert res.links == (("Tickets", TICKETS), ("Zed Fox songs I like", TEASER))
     [event] = partiful.events
     assert (
@@ -128,7 +129,15 @@ def test_an_invite_carries_the_show_the_links_the_place_and_the_poster(svc: Serv
     [(event_id, info)] = partiful.locations
     assert event_id == "pf1" and info["type"] == "structured" and info["displayName"] == "The Quarry"
     # The place lookup is the first signed call: a dead session shows before anything is uploaded.
-    assert partiful.calls == ["find_place", "download", "upload_image", "create_event", "set_location"]
+    assert partiful.calls == [
+        "find_place",
+        "download",
+        "upload_image",
+        "create_event",
+        "set_location",
+        "me",
+        "rsvp_going",
+    ]
 
 
 def test_an_invite_is_made_once_only_with_a_ticket_link_and_never_on_a_dry_run(svc: Services) -> None:
@@ -164,11 +173,14 @@ def test_what_an_invite_does_without_a_place_a_poster_or_a_session(svc: Services
     assert partiful.events[0]["title"] == "Concert: Zed Fox 11/14"
 
     # A failing place lookup, a failing download and a failing location write each cost only their part.
-    for broken in ("find_place", "download", "set_location"):
+    for broken in ("find_place", "download", "set_location", "rsvp_going"):
         partiful = FakePartiful(place=PLACE, fail=broken)
         res = make_invite(request(), with_partiful(svc, partiful))
         assert res.status == "created", broken
-        assert res.poster is (broken != "download")
+        assert res.poster is (broken != "download") and res.going is (broken != "rsvp_going")
+    # An account Partiful has no name for cannot RSVP: the page is made, and nobody is marked.
+    nameless = FakePartiful(name=None)
+    assert make_invite(request(), with_partiful(svc, nameless)).going is False and nameless.going == []
     svc.spotify = None
     assert make_invite(request(), with_partiful(svc, FakePartiful())).poster is False
 
@@ -222,7 +234,7 @@ def test_a_ticket_link_in_the_shows_topic_makes_the_invite_and_links_both(svc: S
         f"• [Tickets]({TICKETS})\n"
         f"• [Zed Fox songs I like]({TEASER})\n"
         "• **Poster:** the cover of the artist's latest album\n"
-        "Nobody is invited yet. The calendar event has the links."
+        "You are marked as going; nobody is invited yet. The calendar event has the links."
     )
     assert description(svc, event["id"]) == (
         f"Doors: 7:30 PM\nTeaser playlist: {TEASER}\nTickets: {TICKETS}\nPartiful: {PAGE}"

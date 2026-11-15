@@ -176,6 +176,19 @@ def test_callables(client: PartifulClient, fake: FakeUrlopen, state: MemoryState
         "locationInfo": {"type": "freeform", "value": "The Quarry"},
     }
 
+    fake.add("POST", f"{API}/addGuest", result({"id": "g1", "status": "GOING"}))
+    client.rsvp_going("ev1", "Pat Example", "America/Los_Angeles")
+    assert body_of(fake.requests[-1])["data"]["params"] == {
+        "eventId": "ev1",
+        "rsvp": {
+            "status": "GOING",
+            "count": 1,
+            "plusOneCount": 0,
+            "name": "Pat Example",
+            "timezone": "America/Los_Angeles",
+        },
+    }
+
     fake.add("POST", f"{API}/setEventLocation", http_error(500, json.dumps({"error": {"message": "boom"}})))
     with pytest.raises(ProviderError) as e:
         client.set_location("ev1", {})

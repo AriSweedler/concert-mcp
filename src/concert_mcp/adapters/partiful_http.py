@@ -236,6 +236,12 @@ class PartifulClient:
         """Set an event's location (a `structured` Maps place or `freeform` text)."""
         self.call("setEventLocation", {"eventId": event_id, "locationInfo": dict(location_info)})
 
+    def rsvp_going(self, event_id: str, name: str, timezone: str) -> None:
+        """Mark the account as going to an event, alone, under `name`. Partiful refuses an RSVP without a name
+        (400 "Bad request"; checked live, 2026-11-14)."""
+        rsvp = {"status": "GOING", "count": 1, "plusOneCount": 0, "name": name, "timezone": timezone}
+        self.call("addGuest", {"eventId": event_id, "rsvp": rsvp})
+
     def upload_image(self, data: bytes, content_type: str) -> str:
         """Store an image in the account's folder of Partiful's bucket; its object path. It cannot be deleted
         afterwards (the bucket refuses the account's DELETE), so an upload is only made for an invite about to be

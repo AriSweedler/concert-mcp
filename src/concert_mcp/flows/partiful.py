@@ -135,6 +135,20 @@ def poster_image(artist: str, api: PartifulApi, svc: Services) -> dict[str, Any]
     )
 
 
+def mark_going(event_id: str, api: PartifulApi, svc: Services) -> bool:
+    """Put the account on its own invite's guest list as going, under the name Partiful has for it; whether it
+    did. Never raises: the page exists either way."""
+    try:
+        name = str(api.me().get("name") or "")
+        if not name:
+            return False
+        api.rsvp_going(event_id, name, svc.settings.tz)
+    except Exception as e:  # noqa: BLE001
+        log_warn(f"partiful rsvp not made | error='{type(e).__name__}: {str(e)[:200]}'")
+        return False
+    return True
+
+
 def make_invite(req: InviteRequest, svc: Services, *, dry_run: bool = False) -> InviteResult:
     """Create the Partiful page for one concert. Never raises: every way it can end is an InviteResult."""
     existing = line_value(req.lines, PARTIFUL_PREFIX)
@@ -177,7 +191,8 @@ def make_invite(req: InviteRequest, svc: Services, *, dry_run: bool = False) -> 
         api.set_location(event_id, location)
     except Exception as e:  # noqa: BLE001 - the page exists; it only lacks its venue
         log_warn(f"partiful location not set | url='{url}' error='{type(e).__name__}: {str(e)[:200]}'")
-    return InviteResult("created", url=url, title=title, links=links, poster=image is not None)
+    going = mark_going(event_id, api, svc)
+    return InviteResult("created", url=url, title=title, links=links, poster=image is not None, going=going)
 
 
 def link_event(calendar_id: str, event_id: str, lines: Sequence[str], svc: Services) -> str:

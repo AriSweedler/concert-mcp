@@ -67,6 +67,7 @@ class InviteResult:
     title: str | None = None
     links: tuple[tuple[str, str], ...] = ()  # (label, url) of each link field, in page order
     poster: bool = False
+    going: bool = False  # the account itself is on the guest list as going
     reason: str | None = None
     phone_tail: str | None = None
 
@@ -77,6 +78,7 @@ class InviteResult:
             "title": self.title,
             "links": [list(pair) for pair in self.links],
             "poster": self.poster,
+            "going": self.going,
             "reason": self.reason,
         }
 
