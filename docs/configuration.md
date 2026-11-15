@@ -5,12 +5,11 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | Variable | Default | Meaning |
 |---|---|---|
 | `CONCERT_MCP_CONFIG_DIR` | `~/.config/concert-mcp` | credentials files and config.toml |
-| `CONCERT_MCP_STATE_DIR` | `~/.local/state/concert-mcp` | setlist-queue.json, setlist-poll.stamp, delete-candidates.json, last-sent.json, fix-log.json, topics.json |
+| `CONCERT_MCP_STATE_DIR` | `~/.local/state/concert-mcp` | delete-candidates.json, last-sent.json, fix-log.json, topics.json |
 | `CONCERT_MCP_CACHE_DIR` | `~/.cache/concert-mcp` | liked.json |
 | `CONCERT_MCP_SPOTIFY_CREDENTIALS` | `<config_dir>/spotify.json` | legacy fallback ~/.config/ari-spotify/credentials.json |
 | `CONCERT_MCP_SETLISTFM_CREDENTIALS` | `<config_dir>/setlistfm.json` | legacy fallback ~/.config/ari-spotify/setlistfm.json |
 | `CONCERT_MCP_LIKED_CACHE` | `<cache_dir>/liked.json` | legacy fallback ~/.cache/ari-spotify/liked.json |
-| `CONCERT_MCP_SETLIST_QUEUE` | `<state_dir>/setlist-queue.json` | legacy fallback ~/.local/state/ari-spotify/setlist-queue.json; the weekly poller reads this file |
 | `CONCERT_MCP_CANDIDATES_FILE` | `<state_dir>/delete-candidates.json` | no legacy fallback; a list older than `CONCERT_MCP_CONTEXT_WINDOW_S` is discarded |
 | `CONCERT_MCP_SENT_LOG` | `<state_dir>/last-sent.json` | reply dedupe memory |
 | `CONCERT_MCP_FIX_LOG` | `<state_dir>/fix-log.json` | the retry-loop breaker's memory |
@@ -26,7 +25,6 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_OCR_LAST` | `<openclaw_home>/media/ocr-last.txt` | the last OCR output |
 | `CONCERT_MCP_TZ` | `America/Los_Angeles` | IANA zone for every start/end |
 | `CONCERT_MCP_CONCERTS_CALENDAR` | `Concerts` | calendar name, resolved through gws calendar calendarList list |
-| `CONCERT_MCP_CONCERTS_CHAT` | (empty) | Telegram chat id the weekly setlist poll announces a new playlist to when the show's topic is not in `topics.json` |
 | `CONCERT_MCP_DEFAULT_CALENDAR` | `primary` | id used for plain events and the second delete search |
 | `CONCERT_MCP_DEFAULT_CALENDAR_NAME` | `Personal` | how replies name it |
 | `CONCERT_MCP_CONTEXT_WINDOW_S` | `900` | live chat / OCR / transcript recency |
@@ -34,7 +32,6 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_TEASER_TIMEOUT_S` | `150` | cap on the Spotify teaser step |
 | `CONCERT_MCP_HTTP_TIMEOUT_S` | `30` | per HTTP request |
 | `CONCERT_MCP_LIKED_CACHE_TTL_S` | `21600` | Liked Songs cache lifetime |
-| `CONCERT_MCP_SETLIST_QUEUE_DAYS` | `61` | how long after the show the weekly setlist check keeps looking |
 | `CONCERT_MCP_DEFAULT_DURATION_H` | `2` | end = start + this when no end is given |
 | `CONCERT_MCP_PAST_GRACE_H` | `12` | a start this far in the past is still accepted |
 | `CONCERT_MCP_MAX_FUTURE_DAYS` | `730` | a start further out is refused |
@@ -108,7 +105,6 @@ FAIL  openclaw-binary  openclaw not found
 SKIP  openclaw-config  absent
 SKIP  openclaw-silent-reply absent
 SKIP  openclaw-session-db absent or unreadable: replies are not delivered
-PASS  setlist-queue    0 shows queued
   ->  gws-keyfile      create the file keyring key: GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file gws auth login (README.md#google-calendar)
   ->  spotify-credentials concert-mcp spotify auth (README.md#spotify)
   ->  setlistfm-key    concert-mcp spotify setlist-auth (README.md#setlistfm)

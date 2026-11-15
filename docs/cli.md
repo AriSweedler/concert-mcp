@@ -13,7 +13,6 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `add` (plain) | `concert-mcp add --title '[Dinner] Team dinner' --start '2026-11-03 19:30' --location 'ZZZ Bistro, San Francisco'` |
 | `del` (alias `delete`) | `concert-mcp del --title 'Zed Fox' --date 2026-11-14`, then `concert-mcp del --pick 2` after a numbered list (the list is good for 15 minutes, `CONCERT_MCP_CONTEXT_WINDOW_S`) |
 | `teaser` | `concert-mcp teaser --artist 'Zed Fox' --date 2026-11-14 [--description TEXT]` |
-| `setlist-find` | `concert-mcp setlist-find --artist 'Zed Fox' --date 2026-11-14 --venue 'The Quarry' --songs` (`--songs` adds the song list to the `--json` record) |
 | `setlist-playlist` | `concert-mcp setlist-playlist --url https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-3bd6f4a.html` (the show's setlist as a Spotify playlist; the calendar event gains `setlist.fm` and `Setlist playlist` links, and so does the show's Partiful invite when it has one; `--artist` and `--date` find the page when there is no `--url`; `--topic <chat>:<thread>` names the Telegram topic that owns the show, as the `/setlist` chat command does) |
 | `try-image` | `concert-mcp try-image ticket.jpg --caption 'This is a movie'` (the screenshot through OpenClaw's OCR command, its model and the tool the model picks, in dry-run; prints the OCR, the call and the event it would add, for a person to approve or deny; `--text FILE` skips OCR, `--model-url`/`--model`/`--ocr-cmd`/`--tools` override OpenClaw's config) |
 | `failures collect` | `concert-mcp failures collect [--explain]` (save each screenshot turn the bot failed into `<state_dir>/failures/<epoch>/`, keep the newest 100; `--explain` asks the bot's model why, one per run) |
@@ -22,8 +21,6 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `tickets` | `concert-mcp tickets --link https://www.ticketweb.com/event/zed-fox/123 --artist 'Zed Fox' --date 2026-11-14` (record the show's ticket link: the calendar event gains `Tickets`, the show becomes a Partiful invite and the event gains `Partiful`; without `--link` the event's own `Tickets` line is the link; `--topic <chat>:<thread>` names the Telegram topic that owns the show, for a caller that knows it, such as the `/tickets` chat command) |
 | `concerts` | `concert-mcp concerts` (every recorded concert, soonest first, and where each of its expressions stands: `calendar made; teaser playlist made; setlist playlist not made; partiful needs the ticket link`); `--json` prints the records |
 | `partiful-login` | `concert-mcp partiful-login`, then `concert-mcp partiful-login --code 123456` (the first texts a code to `CONCERT_MCP_PARTIFUL_PHONE`, the second stores the session) |
-| `queue` | `concert-mcp queue` (the shows waiting for the weekly setlist check, and `Last poll: <time>`) |
-| `poll` | `concert-mcp poll [--force]` (the weekly setlist check; see [poll](#poll)) |
 | `venues` | `concert-mcp venues` (every venue seen: visits, address, website) |
 | `venues lookup` | `concert-mcp venues lookup --name 'Cafe Du Nord'` (look it up again and store it) |
 | `venues auth` | `concert-mcp venues auth [--force] [--manual]` (optional Google Places key) |
@@ -42,22 +39,12 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `spotify search-artist` | `concert-mcp spotify search-artist --name 'Zed Fox'` |
 | `spotify setlist-auth` | `concert-mcp spotify setlist-auth [--force] [--manual]` |
 
-`add` and `del` also take one JSON object as the positional argument or on stdin, with the legacy aliases folded (`artist` and `summary` for `title`, `venue` for `location`, `notes` for `description`, `datetime` for `start`, `text` for `source`; `del` also takes `event`, `name`, `when`, `day`, `cal`, `eventId`, `number`, `choice`); an unknown key or flag is a `FIX:` line, never a traceback. `add` takes `--concert` (the Concerts calendar, teaser, setlist lookup, queue, rename), `--no-teaser` and `--another` (a second event in the live topic instead of an update of the topic's event; the JSON key is `another`). The `spotify` subcommands print one JSON record in the legacy shape.
-
-## poll
-
-The weekly setlist check. A launchd job on the host runs it once a day:
-
-```sh
-uv run --project /path/to/concert-mcp concert-mcp poll
-```
-
-A run less than seven days after the last one (recorded in `<state_dir>/setlist-poll.stamp`) prints `**Setlist poll** skipped: ...` and does nothing; `--force` runs it anyway, `--dry-run` reports what a run would do, `--no-send` makes the playlists and patches the events but sends no message. One run walks every queued show, oldest first, and prints one line per show: `• 2026-11-14 Zed Fox — 5 songs; playlist created; announced`, `— 12 songs; 7 added to the playlist`, `— page found, no songs yet`, `— not on setlist.fm yet`, `— expired; dropped from the queue`. The playlist is made on the first run that finds songs on the page (then the calendar event gets a `Setlist playlist: <url>` line and the show's Telegram topic, else `CONCERT_MCP_CONCERTS_CHAT`, gets one message with the link); later runs top it up as the page fills in, silently, until two months after the show. `--json` prints the report as a record (`ran`, `now`, `last_poll`, `rows`).
+`add` and `del` also take one JSON object as the positional argument or on stdin, with the legacy aliases folded (`artist` and `summary` for `title`, `venue` for `location`, `notes` for `description`, `datetime` for `start`, `text` for `source`; `del` also takes `event`, `name`, `when`, `day`, `cal`, `eventId`, `number`, `choice`); an unknown key or flag is a `FIX:` line, never a traceback. `add` takes `--concert` (the Concerts calendar, teaser, lineup, topic rename), `--no-teaser` and `--another` (a second event in the live topic instead of an update of the topic's event; the JSON key is `another`). The `spotify` subcommands print one JSON record in the legacy shape.
 
 Flags:
 
 - `--json`: print the legacy record (`ok`, `duplicate`, `dryRun`, `retry` + `fix`, `error`, `reply`, the event fields and `sent`) instead of the reply text.
-- `--dry-run`: parse, derive, resolve and render, but insert nothing, create no playlist, queue nothing and send nothing. The reply starts `**Would add to ...**`, and the status is `NOT SENT: dry run`.
+- `--dry-run`: parse, derive, resolve and render, but insert nothing, create no playlist and send nothing. The reply starts `**Would add to ...**`, and the status is `NOT SENT: dry run`.
 - `--no-send`: do everything except deliver the reply and rename the topic; prints the reply plus `NOT SENT: delivery disabled`.
 - `--config-dir PATH`, `--log-level LEVEL`: the two settings most often changed per run (`debug` logs every subprocess argv with any secret argument shown as `<redacted>`, never a token).
 
@@ -68,5 +55,5 @@ The dotfiles skills that used to carry `cal-add.py`, `cal-del.py` and `spotify.z
 ```sh
 exec concert-mcp add --concert "$@"    # cal-add.py
 exec concert-mcp del "$@"              # cal-del.py
-exec concert-mcp spotify "$@"          # spotify.zsh (teaser and setlist-find are top-level: concert-mcp teaser, concert-mcp setlist-find)
+exec concert-mcp spotify "$@"          # spotify.zsh (teaser is top-level: concert-mcp teaser)
 ```
