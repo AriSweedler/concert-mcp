@@ -9,18 +9,16 @@ the album over the single, the earliest release). The playlist named "YYYY-MM-DD
 the ones it lacks, setlist order kept; a row an earlier run filled with another version is swapped in place. The teaser
 playlist of the same show has the same name: a setlist playlist's description starts with `Setlist:`, a teaser's with
 `Teaser for`, and that first word is what tells them apart. The two descriptions link each other, and the calendar
-event's description gains `Setlist playlist: <url>` once. `sync_setlist_playlist` is the piece the poll reuses.
+event's description gains `Setlist playlist: <url>` once.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import replace
 from typing import Any
 
 from concert_mcp.adapters.protocols import SpotifyApi
 from concert_mcp.flows.event_delete import DeleteRequest, find_candidates
-from concert_mcp.flows.queue import queue_list, queue_replace
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
 from concert_mcp.flows.teaser import resolve_artist
@@ -261,27 +259,6 @@ def link_event(artist: str, date: str, page_url: str, url: str, svc: Services, *
         return f"Calendar event not updated: {str(e.error)[:REASON_LIMIT]}"
 
 
-def remember_in_queue(
-    event_id: str | None, artist: str, date: str, url: str, song_count: int, playlist_url: str, svc: Services
-) -> bool:
-    """Record on the show's queue row the page the user chose and the playlist made from it; whether a row was found.
-
-    Without it the row still reads "no page, no playlist", so the first poll to find any page for the show would
-    make the playlist a second time and announce it again. The row is the topic's event when there is one, else
-    the show by artist and date. Never raises: the playlist exists either way.
-    """
-    try:
-        for row in queue_list(svc):
-            same_event = bool(event_id) and row.event_id == event_id
-            same_show = not event_id and row.artist.casefold() == artist.casefold() and row.date == date
-            if same_event or same_show:
-                queue_replace(replace(row, setlistfm_url=url, song_count=song_count, playlist_url=playlist_url), svc)
-                return True
-    except Exception as e:  # noqa: BLE001
-        log_warn(f"setlist queue not updated | error='{type(e).__name__}: {str(e)[:200]}'")
-    return False
-
-
 def _page_date(setlist_json: Mapping[str, Any]) -> str:
     return setlist_row(setlist_json).date
 
@@ -354,10 +331,6 @@ def setlist_playlist_outcome(
             reply = provider_reply("spotify-unconfigured", svc.operator)
             return Outcome(Kind.ERROR, reply=reply, error="spotify not configured", data=res.to_json())
         event = link_event(artist, concert_date(date), url, res.url, svc, topic=topic) if res.url else None
-        if res.url and not dry_run and res.status in ("created", "updated"):
-            remember_in_queue(
-                entry.event_id if entry else None, artist, concert_date(date), url, len(songs), res.url, svc
-            )
         reply = render_setlist_playlist(res, setlistfm_url=url, event=event, dry=dry_run)
         if res.status == "failed":
             return Outcome(Kind.ERROR, reply=reply, error=res.reason, data=res.to_json())

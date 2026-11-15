@@ -15,7 +15,7 @@ from collections.abc import Callable
 from concert_mcp.flows.services import Services
 from concert_mcp.log import log_debug, log_warn
 from concert_mcp.result import NO_REPLY_TEXT, Delivery, Kind, Outcome, crash_outcome
-from concert_mcp.text.routes import ChatTarget, chat_target
+from concert_mcp.text.routes import chat_target
 
 FIX_GUARD_ADD = (
     "I could not get the details right from that after a few tries. "
@@ -52,20 +52,16 @@ FIX_GUARD_REPLIES = {
 FIX_GUARD_LIMIT = 3
 
 
-def deliver(outcome: Outcome, svc: Services, *, send: bool, target: ChatTarget | None = None) -> Delivery:
-    """Decide whether and where the reply goes, dedupe, send it, log it. Never raises.
-
-    `target` names the chat when no one spoke: the setlist poll runs from a terminal and announces a playlist
-    in the show's own topic, so it hands the target in instead of asking for the live route.
-    """
+def deliver(outcome: Outcome, svc: Services, *, send: bool) -> Delivery:
+    """Decide whether the reply goes to the live chat, dedupe, send it, log it. Never raises."""
     try:
-        return _deliver(outcome, svc, send=send, target=target)
+        return _deliver(outcome, svc, send=send)
     except Exception as e:  # noqa: BLE001 - delivery must never take the flow's result down with it
         log_warn(f"delivery failed | error='{type(e).__name__}: {e}'")
         return Delivery(False, f"NOT SENT: {type(e).__name__}")
 
 
-def _deliver(outcome: Outcome, svc: Services, *, send: bool, target: ChatTarget | None) -> Delivery:
+def _deliver(outcome: Outcome, svc: Services, *, send: bool) -> Delivery:
     reply = outcome.reply
     if not reply:
         return Delivery(False, "NOT SENT: no reply")
@@ -77,13 +73,12 @@ def _deliver(outcome: Outcome, svc: Services, *, send: bool, target: ChatTarget 
         return Delivery(False, "NOT SENT: delivery disabled")
     settings = svc.settings
     now_s = svc.clock.time()
+    _sid, route = svc.context.live_route(now_s)
+    if route is None:
+        return Delivery(False, "NOT SENT: no live chat (CLI run)")
+    target = chat_target(route)
     if target is None:
-        _sid, route = svc.context.live_route(now_s)
-        if route is None:
-            return Delivery(False, "NOT SENT: no live chat (CLI run)")
-        target = chat_target(route)
-        if target is None:
-            return Delivery(False, "NOT SENT: no chat target in the route")
+        return Delivery(False, "NOT SENT: no chat target in the route")
     last = svc.state.read_json(settings.sent_log, {})
     if isinstance(last, dict) and last.get("text") == reply:
         at = last.get("at", 0)

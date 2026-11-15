@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from concert_mcp.flows.services import Services
-from concert_mcp.flows.setlist import find_setlist, setlist_outcome
-from concert_mcp.result import Kind
+from concert_mcp.flows.setlist import find_setlist
 from fakes import FakeSetlistFm
 
 ARTIST = "Zed Fox"
@@ -50,32 +49,13 @@ def test_unexpected_exception_is_failed_with_its_type(svc: Services) -> None:
     assert (res.match, res.reason) == ("failed", "RuntimeError: wires crossed")
 
 
-# ---------- setlist_outcome ----------
-
-
-def test_outcome_needs_an_artist(svc: Services) -> None:
-    out = setlist_outcome("", DATE, "", svc)
-    assert out.kind is Kind.NEED_USER
-    assert out.reply == "I could not read the artist from that. Reply with it and I will add the event."
-
-
-def test_outcome_needs_a_date(svc: Services) -> None:
-    out = setlist_outcome(ARTIST, "", "", svc)
-    assert out.kind is Kind.NEED_USER
-    assert out.reply == "I could not read the date from that. Reply with it and I will add the event."
-
-
-def test_outcome_unconfigured(svc: Services) -> None:
+def test_unconfigured_is_unavailable(svc: Services) -> None:
     with_setlistfm(svc, None)
-    out = setlist_outcome(ARTIST, DATE, "", svc)
-    assert out.kind is Kind.ERROR
-    assert out.reply == "setlist.fm is not set up on this machine. Admin: run `concert-mcp spotify setlist-auth`."
-    assert out.error == "setlistfm not configured"
+    res = find_setlist(ARTIST, DATE, None, svc)
+    assert (res.found, res.match, res.reason) == (False, "unavailable", "setlist.fm is not set up")
 
 
-def test_outcome_failed_is_an_error(svc: Services) -> None:
+def test_provider_failure_is_failed_with_its_error(svc: Services) -> None:
     with_setlistfm(svc, FakeSetlistFm(fail=True))
-    out = setlist_outcome(ARTIST, DATE, "", svc)
-    assert out.kind is Kind.ERROR
-    assert out.reply == "Setlist lookup failed: setlist.fm refused | path='/search/setlists' status='500'"
-    assert out.error == "setlist.fm refused | path='/search/setlists' status='500'"
+    res = find_setlist(ARTIST, DATE, None, svc)
+    assert (res.match, res.reason) == ("failed", "setlist.fm refused | path='/search/setlists' status='500'")

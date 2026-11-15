@@ -18,7 +18,6 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from concert_mcp.config import Settings
 from concert_mcp.flows.services import Services
@@ -47,7 +46,6 @@ CHECK_NAMES = (
     "openclaw-config",
     "openclaw-silent-reply",
     "openclaw-session-db",
-    "setlist-queue",
 )
 
 SKIP_PROBE = "pass --probe"
@@ -91,14 +89,6 @@ class _Ctx:
             return path.stat().st_mtime
         except OSError:
             return None
-
-    def read_json(self, path: Path, default: Any) -> Any:
-        if self.svc is not None:
-            return self.svc.state.read_json(path, default)
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return default
 
 
 def _mode(path: Path) -> int:
@@ -414,12 +404,6 @@ def _check_openclaw_session_db(ctx: _Ctx) -> Check:
     return Check("openclaw-session-db", "PASS", f"{n} sessions")
 
 
-def _check_setlist_queue(ctx: _Ctx) -> Check:
-    rows = ctx.read_json(ctx.settings.setlist_queue, [])
-    n = len(rows) if isinstance(rows, list) else 0
-    return Check("setlist-queue", "PASS", f"{n} shows queued")
-
-
 # name -> (check, the README anchor its wrapped failure points at)
 CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "python": (_check_python, "getting-started"),
@@ -443,7 +427,6 @@ CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "openclaw-config": (_check_openclaw_config, "openclaw"),
     "openclaw-silent-reply": (_check_openclaw_silent_reply, "openclaw"),
     "openclaw-session-db": (_check_openclaw_session_db, "openclaw"),
-    "setlist-queue": (_check_setlist_queue, "configuration"),
 }
 assert tuple(CHECKS) == CHECK_NAMES
 

@@ -13,7 +13,6 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from concert_mcp.flows.concert_add import resolve_calendar
-from concert_mcp.flows.queue import queue_forget
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.topics import topic_forget_event
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, outcome_from
@@ -122,16 +121,11 @@ def find_candidates(req: DeleteRequest, svc: Services) -> list[Candidate]:
 
 
 def remove(c: Candidate, svc: Services, *, dry_run: bool) -> None:
-    """Delete the event and forget it in the setlist queue and the topic registry.
-
-    The poller must forget the show, and the topic that owned the event must be free to own the next one.
-    """
+    """Delete the event and forget it in the topic registry, so the topic that owned it can own the next one."""
     if dry_run:
         return
     svc.calendar.delete_event(c.calendar_id, c.id)
     # The event is gone; a state-file hiccup must not turn that into a failure.
-    with contextlib.suppress(Exception):
-        queue_forget(c.id, svc)
     with contextlib.suppress(Exception):
         topic_forget_event(c.id, svc)
 

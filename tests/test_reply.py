@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from concert_mcp.flows.queue import QueueEntry, QueueStatus
 from concert_mcp.result import NO_REPLY_TEXT
 from concert_mcp.text import reply
 from concert_mcp.text.artists import Artist, TeaserResult
@@ -23,16 +22,12 @@ from concert_mcp.text.reply import (
     render_candidates,
     render_dry_add,
     render_none_found,
-    render_queue,
     render_removed,
-    render_setlist_standalone,
     render_teaser_standalone,
     render_would_look,
-    setlist_bullet,
     teaser_bullet,
     teaser_line,
 )
-from concert_mcp.text.setlists import Setlist, SetlistResult
 
 ZED = Artist(name="Zed Fox", id="artist-zedfox", url="https://open.spotify.com/artist/artist-zedfox")
 TEASER_URL = "https://open.spotify.com/playlist/pl1"
@@ -52,21 +47,6 @@ def teaser(status: str, **kw: object) -> TeaserResult:
     return TeaserResult(**base)  # type: ignore[arg-type]
 
 
-def setlist(song_count: int) -> Setlist:
-    songs = tuple(f"Song {i}" for i in range(song_count))
-    return Setlist(
-        id="sl1",
-        url=SETLIST_URL,
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue="The Quarry",
-        city="San Francisco",
-        tour=None,
-        song_count=song_count,
-        songs=songs,
-    )
-
-
 def candidate(location: str = "The Quarry, San Francisco", description: str = "") -> Candidate:
     return Candidate(
         id="ev1",
@@ -78,20 +58,6 @@ def candidate(location: str = "The Quarry, San Francisco", description: str = ""
         location=location,
         html_link="https://www.google.com/calendar/event?eid=abc123",
         description=description,
-    )
-
-
-def entry(date: str, artist: str, venue: str, song_count: int, until: str) -> QueueEntry:
-    return QueueEntry(
-        event_id=f"ev-{date}",
-        calendar_id="cal-concerts",
-        artist=artist,
-        date=date,
-        venue=venue,
-        setlistfm_url=None,
-        song_count=song_count,
-        until=until,
-        added="2026-10-25T19:00:00+00:00",
     )
 
 
@@ -222,34 +188,6 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
     assert teaser_line(teaser("none", liked_count=0)) is None
     assert teaser_line(teaser("failed", reason="x")) is None
 
-    # setlist_bullet_none_when_not_wanted:
-    assert setlist_bullet(None) is None
-
-    # setlist_bullet_every_branch:
-    base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": "The Quarry"}
-    assert setlist_bullet(SetlistResult(found=False, match="unavailable", **base)) == (
-        "• **Setlist:** lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)"
-    )
-    assert setlist_bullet(
-        SetlistResult(found=False, match="failed", reason="setlist.fm refused | status='500'", **base)
-    ) == ("• **Setlist:** lookup failed (setlist.fm refused | status='500')")
-    assert setlist_bullet(SetlistResult(found=False, match="failed", reason=None, **base)) == (
-        "• **Setlist:** lookup failed (unknown error)"
-    )
-    # Nothing on setlist.fm yet is nothing to link: no bullet.
-    assert (
-        setlist_bullet(
-            SetlistResult(found=False, match="none", search_url="https://www.setlist.fm/search?query=Zed+Fox", **base)
-        )
-        is None
-    )
-    assert setlist_bullet(SetlistResult(found=True, match="exact date", setlist=setlist(12), **base)) == (
-        f"• [Setlist]({SETLIST_URL}), 12 songs so far"
-    )
-    assert setlist_bullet(SetlistResult(found=True, match="within a day", setlist=setlist(0), **base)) == (
-        f"• [Setlist]({SETLIST_URL})"
-    )
-
     # render_body_strips_link_lines_and_appends_extras:
     lines = [
         "Doors: 7:30 PM",
@@ -333,21 +271,6 @@ def test_reply_bullet_is_bold_key_plain_value() -> None:
     # render_teaser_standalone:
     assert render_teaser_standalone(teaser("created", url=TEASER_URL), timeout_s=150, dry=False) == (
         f"**Teaser playlist**\n• [Teaser playlist]({TEASER_URL}), 3 liked songs"
-    )
-
-    # render_setlist_standalone:
-    base = {"artist": "Zed Fox", "date": "2026-11-14", "venue": "The Quarry"}
-    found = SetlistResult(found=True, match="exact date", setlist=setlist(12), **base)
-    assert render_setlist_standalone(found) == (f"**Setlist**\n• [Setlist]({SETLIST_URL}), 12 songs so far")
-    miss = SetlistResult(found=False, match="none", search_url="https://www.setlist.fm/search?query=Zed+Fox", **base)
-    assert render_setlist_standalone(miss) == (
-        "**Setlist**\nNot on setlist.fm yet. Search: https://www.setlist.fm/search?query=Zed+Fox"
-    )
-    unavailable = SetlistResult(
-        found=False, match="unavailable", search_url="https://www.setlist.fm/search?query=x", **base
-    )
-    assert render_setlist_standalone(unavailable) == (
-        "**Setlist**\n• **Setlist:** lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)"
     )
 
     # provider_reply:
@@ -442,34 +365,6 @@ BODY = "• **Artist:** Zed Fox\n• **When:** when\n• **Where:** where"
 
 
 # ---------- standalone tools ----------
-
-
-# ---------- queue ----------
-
-
-def test_reply_render_queue_empty(tmp_path: Path) -> None:
-    # render_queue_empty:
-    status = QueueStatus(entries=(), active=(), expired=(), path=tmp_path / "q.json")
-    assert render_queue(status) == "The setlist queue is empty.\nLast poll: never"
-
-    # render_queue_shows_the_last_poll:
-    status = QueueStatus(
-        entries=(), active=(), expired=(), path=tmp_path / "q.json", last_poll="2026-10-25T19:00:00+00:00"
-    )
-    assert render_queue(status) == "The setlist queue is empty.\nLast poll: 2026-10-25T19:00:00+00:00"
-
-    # render_queue_active_then_expired_by_date:
-    late = entry("2026-12-01", "Bonobo", "The Other Hall", 0, "2027-01-31")
-    early = entry("2026-11-14", "Zed Fox", "The Quarry", 12, "2027-01-14")
-    old = entry("2026-08-01", "Zork.", "Side Room", 9, "2026-10-01")
-    status = QueueStatus(entries=(late, old, early), active=(late, early), expired=(old,), path=tmp_path / "q.json")
-    assert render_queue(status) == (
-        "**Setlist queue** (3 shows)\n"
-        "• 2026-11-14 Zed Fox @ The Quarry — 12 songs, checking until 2027-01-14\n"
-        "• 2026-12-01 Bonobo @ The Other Hall — 0 songs, checking until 2027-01-31\n"
-        "• 2026-08-01 Zork. @ Side Room — 9 songs, checking until 2026-10-01 (expired)\n"
-        "Last poll: never"
-    )
 
 
 # ---------- provider replies ----------

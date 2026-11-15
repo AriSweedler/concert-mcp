@@ -1,5 +1,5 @@
 """The CLI subcommands test_cli.py does not reach: try-image, failures, gemini, venues, the spotify records, and the
-teaser and setlist-find variants with --description and --songs. Fakes everywhere; the model is a stub."""
+teaser variant with --description. Fakes everywhere; the model is a stub."""
 
 from __future__ import annotations
 
@@ -13,10 +13,9 @@ from concert_mcp.adapters import chat_model_http, openclaw
 from concert_mcp.flows import auth, playlists
 from concert_mcp.flows.services import Services
 from concert_mcp.result import ProviderError
-from conftest import one_json_line, run
-from fakes import FakeSetlistFm, FakeSpotify, FakeVenueLookup
+from conftest import run
+from fakes import FakeSpotify, FakeVenueLookup
 from test_failures import OCR, T0, assistant, shot
-from test_flow_setlist import api_row
 from test_flow_venues import HIT
 
 pytest.importorskip("mcp")
@@ -51,7 +50,7 @@ def openclaw_json(cli_env: Services, tmp_path: Path) -> Path:
                 "agents": {"defaults": {"model": {"primary": "llama/qwen"}}},
                 "models": {"providers": {"llama": {"baseUrl": "http://model/v1"}}},
                 "tools": {"media": {"models": [{"command": str(ocr)}]}},
-                "mcp": {"servers": {"concert": {"toolFilter": {"include": ["healthcheck", "queue_status"]}}}},
+                "mcp": {"servers": {"concert": {"toolFilter": {"include": ["healthcheck", "lineup"]}}}},
             }
         )
     )
@@ -218,7 +217,7 @@ def test_every_spotify_record_command(cli_env: Services, monkeypatch, capsys) ->
     ]
 
 
-# ---------- teaser --description, setlist-find --songs ----------
+# ---------- teaser --description ----------
 
 
 def test_teaser_with_description_needs_both_names_and_reports_spotify(cli_env: Services, monkeypatch, capsys) -> None:
@@ -242,23 +241,3 @@ def test_teaser_with_description_needs_both_names_and_reports_spotify(cli_env: S
         ["teaser", "--artist", "Zed Fox", "--date", "2026-11-14", "--description", "d", "--dry-run"],
     )
     assert code == 0 and "**Teaser" in out
-
-
-def test_setlist_find_with_songs_needs_both_names_and_reports_setlistfm(cli_env: Services, monkeypatch, capsys) -> None:
-    code, out, _ = run(monkeypatch, capsys, ["setlist-find", "--artist", " ", "--date", "2026-11-14", "--songs"])
-    assert code == 1 and "artist" in out
-    code, out, _ = run(monkeypatch, capsys, ["setlist-find", "--artist", "Zed Fox", "--date", " ", "--songs"])
-    assert code == 1 and "date" in out
-    code, out, _ = run(monkeypatch, capsys, ["setlist-find", "--artist", "Zed Fox", "--date", "soon", "--songs"])
-    assert code == 1 and out.startswith("FIX:")
-    cli_env.setlistfm = None
-    code, out, _ = run(monkeypatch, capsys, ["setlist-find", "--artist", "Zed Fox", "--date", "2026-11-14", "--songs"])
-    assert code == 1 and "setlist.fm is not set up" in out
-    cli_env.setlistfm = FakeSetlistFm(
-        {("Zed Fox", "14-11-2026", None): {"setlist": [api_row("1a2b3c4d", "14-11-2026")]}}
-    )
-    code, out, _ = run(
-        monkeypatch, capsys, ["setlist-find", "--artist", "Zed Fox", "--date", "2026-11-14", "--songs", "--json"]
-    )
-    rec = one_json_line(out)
-    assert code == 0 and rec["found"] is True and rec["songs"]

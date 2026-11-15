@@ -28,18 +28,15 @@ from concert_mcp.flows.event_delete import DELETE_ALIASES, DELETE_KNOWN, DeleteR
 from concert_mcp.flows.healthcheck import run_healthcheck
 from concert_mcp.flows.lineup import lineup_outcome
 from concert_mcp.flows.partiful import login_outcome, tickets_outcome
-from concert_mcp.flows.poll import poll_outcome
-from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.records import concerts_outcome
 from concert_mcp.flows.services import Services
-from concert_mcp.flows.setlist import find_setlist, setlist_outcome
 from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import make_teaser, teaser_outcome
 from concert_mcp.flows.venues import refresh_venue, venues_outcome
 from concert_mcp.log import log_err, set_level
 from concert_mcp.result import Delivery, FixInput, Kind, Outcome, ProviderError, need, outcome_from
 from concert_mcp.text.health import render_health
-from concert_mcp.text.reply import provider_reply, render_setlist_standalone, render_teaser_standalone
+from concert_mcp.text.reply import provider_reply, render_teaser_standalone
 
 ADD_JSON_HINT = "send exactly one JSON object, keys and strings in double quotes"
 DEL_JSON_HINT = 'send exactly one JSON object, e.g. {"title": "Zed Fox", "date": "2026-10-24"}'
@@ -132,12 +129,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--date", required=True, help="concert date, YYYY-MM-DD")
     p.add_argument("--description", default="", help="override the playlist description")
 
-    p = add("setlist-find", "look up one show on setlist.fm")
-    p.add_argument("--artist", required=True)
-    p.add_argument("--date", required=True, help="concert date, YYYY-MM-DD")
-    p.add_argument("--venue", default="", help="venue name, used to break ties")
-    p.add_argument("--songs", action="store_true", help="include the song list in the --json record")
-
     p = add("setlist-playlist", "build or top up the Spotify playlist of one show's setlist, in setlist.fm order")
     p.add_argument("--url", default="", help="the setlist.fm page (this show, or an equivalent one of the tour)")
     p.add_argument("--artist", default="", help="artist, when there is no --url")
@@ -199,10 +190,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_globals(q, suppress=True)
     q.add_argument("--force", action="store_true", help="replace a stored key")
     q.add_argument("--manual", action="store_true", help="type the key instead of reading 1Password")
-
-    add("queue", "the concerts whose setlist.fm page the poll re-reads when asked, and when it last ran")
-
-    add("poll", "re-read every queued show's setlist.fm page: playlist made or topped up, event and group told once")
 
     p = add("venues", "the venue registry: every venue seen, its visits, address and website")
     vsub = p.add_subparsers(dest="venues_command", metavar="<command>")
@@ -345,24 +332,6 @@ def _teaser_outcome(artist: str, date: str, description: str, svc: Services, *, 
     return Outcome(kind, reply=text, data=res.to_json())
 
 
-def _setlist_outcome(artist: str, date: str, venue: str, svc: Services, *, songs: bool) -> Outcome:
-    """setlist_outcome, or the same shape with the song list in the record when --songs is given."""
-    if not songs:
-        return setlist_outcome(artist, date, venue, svc)
-    if not artist.strip():
-        return outcome_from(need("artist"))
-    if not date.strip():
-        return outcome_from(need("date"))
-    try:
-        res = find_setlist(artist, date, venue or None, svc)
-    except FixInput as e:
-        return outcome_from(e)
-    if res.match == "unavailable":
-        reply = provider_reply("setlistfm-unconfigured", svc.operator)
-        return Outcome(Kind.ERROR, reply=reply, error=res.reason or "setlist.fm is not configured")
-    return Outcome(Kind.OK, reply=render_setlist_standalone(res), data=res.to_json(songs=True))
-
-
 def _cmd_add(args: argparse.Namespace, extras: list[str], settings: Settings, stdin: TextIO) -> int:
     svc = services.build_services(settings)
     try:
@@ -401,16 +370,6 @@ def _cmd_teaser(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     outcome, delivery, text = run_tool(
         lambda: _teaser_outcome(args.artist, args.date, args.description, svc, dry_run=args.dry_run),
-        svc,
-        send=not args.no_send,
-    )
-    return emit(outcome, delivery, text, json_mode=args.json_mode)
-
-
-def _cmd_setlist_find(args: argparse.Namespace, settings: Settings) -> int:
-    svc = services.build_services(settings)
-    outcome, delivery, text = run_tool(
-        lambda: _setlist_outcome(args.artist, args.date, args.venue, svc, songs=args.songs),
         svc,
         send=not args.no_send,
     )
@@ -557,20 +516,6 @@ def _cmd_gemini(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
-def _cmd_queue(args: argparse.Namespace, settings: Settings) -> int:
-    svc = services.build_services(settings)
-    outcome, delivery, text = run_tool(lambda: queue_outcome(svc), svc, send=not args.no_send)
-    return emit(outcome, delivery, text, json_mode=args.json_mode)
-
-
-def _cmd_poll(args: argparse.Namespace, settings: Settings) -> int:
-    """The poll delivers its own messages per show; the report stays on the terminal."""
-    svc = services.build_services(settings)
-    outcome = poll_outcome(svc, dry_run=args.dry_run, send=not args.no_send)
-    delivery = Delivery(False, "NOT SENT: the poll report stays on the terminal")
-    return emit(outcome, delivery, outcome.reply or "", json_mode=args.json_mode)
-
-
 def _cmd_venues(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     sub = getattr(args, "venues_command", None)
@@ -707,8 +652,6 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_del(args, extras, settings, stdin)
     if command == "teaser":
         return _cmd_teaser(args, settings)
-    if command == "setlist-find":
-        return _cmd_setlist_find(args, settings)
     if command == "setlist-playlist":
         return _cmd_setlist_playlist(args, settings)
     if command == "lineup":
@@ -725,10 +668,6 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_failures(args, settings)
     if command == "gemini":
         return _cmd_gemini(args, settings)
-    if command == "queue":
-        return _cmd_queue(args, settings)
-    if command == "poll":
-        return _cmd_poll(args, settings)
     if command == "venues":
         return _cmd_venues(args, settings)
     if command == "healthcheck":

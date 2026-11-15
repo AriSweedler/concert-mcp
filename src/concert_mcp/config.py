@@ -14,8 +14,8 @@ ENV_PREFIX = "CONCERT_MCP_"
 # Field names computed from other fields, never read from the environment.
 DERIVED_FIELDS = frozenset({"legacy_in_use"})
 
-# The four paths that fall back to the ari-spotify locations when the new file is absent.
-LEGACY_FIELDS = ("spotify_credentials", "setlistfm_credentials", "liked_cache", "setlist_queue")
+# The three paths that fall back to the ari-spotify locations when the new file is absent.
+LEGACY_FIELDS = ("spotify_credentials", "setlistfm_credentials", "liked_cache")
 CREDENTIAL_FIELDS = frozenset({"spotify_credentials", "setlistfm_credentials"})
 
 # Where Homebrew, a package manager and `uv tool install` put binaries; searched when PATH has none, because a
@@ -31,7 +31,6 @@ class Settings:
     spotify_credentials: Path
     setlistfm_credentials: Path
     liked_cache: Path
-    setlist_queue: Path
     candidates_file: Path
     sent_log: Path
     fix_log: Path
@@ -47,7 +46,6 @@ class Settings:
     ocr_last: Path
     tz: str
     concerts_calendar: str
-    concerts_chat: str
     default_calendar: str
     default_calendar_name: str
     context_window_s: int
@@ -55,7 +53,6 @@ class Settings:
     teaser_timeout_s: int
     http_timeout_s: int
     liked_cache_ttl_s: int
-    setlist_queue_days: int
     default_duration_h: int
     past_grace_h: int
     max_future_days: int
@@ -88,17 +85,12 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "state_dir",
         "~/.local/state/concert-mcp",
-        "setlist-queue.json, setlist-poll.stamp, delete-candidates.json, last-sent.json, fix-log.json, topics.json",
+        "delete-candidates.json, last-sent.json, fix-log.json, topics.json",
     ),
     ("cache_dir", "~/.cache/concert-mcp", "liked.json"),
     ("spotify_credentials", "<config_dir>/spotify.json", "legacy fallback ~/.config/ari-spotify/credentials.json"),
     ("setlistfm_credentials", "<config_dir>/setlistfm.json", "legacy fallback ~/.config/ari-spotify/setlistfm.json"),
     ("liked_cache", "<cache_dir>/liked.json", "legacy fallback ~/.cache/ari-spotify/liked.json"),
-    (
-        "setlist_queue",
-        "<state_dir>/setlist-queue.json",
-        "legacy fallback ~/.local/state/ari-spotify/setlist-queue.json; `concert-mcp poll` reads this file",
-    ),
     ("candidates_file", "<state_dir>/delete-candidates.json", "no legacy fallback (lists are short-lived)"),
     ("sent_log", "<state_dir>/last-sent.json", "reply dedupe memory"),
     ("fix_log", "<state_dir>/fix-log.json", "the retry-loop breaker's memory"),
@@ -130,11 +122,6 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("ocr_last", "<openclaw_home>/media/ocr-last.txt", "the last OCR output"),
     ("tz", "America/Los_Angeles", "IANA zone for every start/end"),
     ("concerts_calendar", "Concerts", "calendar name, resolved through gws calendar calendarList list"),
-    (
-        "concerts_chat",
-        "",
-        "Telegram chat id the setlist poll announces a new playlist to when the show's topic is unknown",
-    ),
     ("default_calendar", "primary", "id used for plain events and the second delete search"),
     ("default_calendar_name", "Personal", "how replies name it"),
     ("context_window_s", "900", "live chat / OCR / transcript recency"),
@@ -142,7 +129,6 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("teaser_timeout_s", "150", "cap on the Spotify teaser step"),
     ("http_timeout_s", "30", "per HTTP request"),
     ("liked_cache_ttl_s", "21600", "Liked Songs cache lifetime"),
-    ("setlist_queue_days", "61", "how long after the show a setlist check keeps looking at its page"),
     ("default_duration_h", "2", "end = start + this when no end is given"),
     ("past_grace_h", "12", "a start this far in the past is still accepted"),
     ("max_future_days", "730", "a start further out is refused"),
@@ -229,15 +215,13 @@ def read_config_file(path: Path) -> dict[str, str]:
 
 
 def legacy_paths(home: Path, env: Mapping[str, str]) -> dict[str, Path]:
-    """Where the ari-spotify scripts kept the four files this package reads."""
+    """Where the ari-spotify scripts kept the three files this package still reads."""
     config = _xdg(env, "XDG_CONFIG_HOME", home, ".config") / "ari-spotify"
     cache = _xdg(env, "XDG_CACHE_HOME", home, ".cache") / "ari-spotify"
-    state = _xdg(env, "XDG_STATE_HOME", home, ".local/state") / "ari-spotify"
     return {
         "spotify_credentials": config / "credentials.json",
         "setlistfm_credentials": config / "setlistfm.json",
         "liked_cache": cache / "liked.json",
-        "setlist_queue": state / "setlist-queue.json",
     }
 
 
@@ -250,12 +234,11 @@ def with_legacy_fallback(new: Path, legacy: Path) -> tuple[Path, bool]:
     return new, False
 
 
-def _default_paths(config_dir: Path, state_dir: Path, cache_dir: Path) -> dict[str, Path]:
+def _default_paths(config_dir: Path, cache_dir: Path) -> dict[str, Path]:
     return {
         "spotify_credentials": config_dir / "spotify.json",
         "setlistfm_credentials": config_dir / "setlistfm.json",
         "liked_cache": cache_dir / "liked.json",
-        "setlist_queue": state_dir / "setlist-queue.json",
     }
 
 
@@ -334,7 +317,7 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
     cache_dir = path_of("cache_dir", _xdg(env, "XDG_CACHE_HOME", home, ".cache") / "concert-mcp")
     openclaw_home = path_of("openclaw_home", home / ".openclaw")
 
-    defaults = _default_paths(config_dir, state_dir, cache_dir)
+    defaults = _default_paths(config_dir, cache_dir)
     legacy = legacy_paths(home, env)
     effective: dict[str, Path] = {}
     legacy_in_use: set[str] = set()
@@ -354,7 +337,6 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         spotify_credentials=effective["spotify_credentials"],
         setlistfm_credentials=effective["setlistfm_credentials"],
         liked_cache=effective["liked_cache"],
-        setlist_queue=effective["setlist_queue"],
         candidates_file=path_of("candidates_file", state_dir / "delete-candidates.json"),
         sent_log=path_of("sent_log", state_dir / "last-sent.json"),
         fix_log=path_of("fix_log", state_dir / "fix-log.json"),
@@ -370,7 +352,6 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         ocr_last=path_of("ocr_last", openclaw_home / "media/ocr-last.txt"),
         tz=str_of("tz", "America/Los_Angeles"),
         concerts_calendar=str_of("concerts_calendar", "Concerts"),
-        concerts_chat=str_of("concerts_chat", ""),
         default_calendar=str_of("default_calendar", "primary"),
         default_calendar_name=str_of("default_calendar_name", "Personal"),
         context_window_s=int_of("context_window_s", 900),
@@ -378,7 +359,6 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         teaser_timeout_s=int_of("teaser_timeout_s", 150),
         http_timeout_s=int_of("http_timeout_s", 30),
         liked_cache_ttl_s=int_of("liked_cache_ttl_s", 21600),
-        setlist_queue_days=int_of("setlist_queue_days", 61),
         default_duration_h=int_of("default_duration_h", 2),
         past_grace_h=int_of("past_grace_h", 12),
         max_future_days=int_of("max_future_days", 730),
@@ -437,7 +417,7 @@ def migrate(
     if env is None:
         env = dict(os.environ)
     legacy = legacy_paths(Path(home), env)
-    defaults = _default_paths(settings.config_dir, settings.state_dir, settings.cache_dir)
+    defaults = _default_paths(settings.config_dir, settings.cache_dir)
     out: list[tuple[Path, Path, str]] = []
     for name in LEGACY_FIELDS:
         src = legacy[name]

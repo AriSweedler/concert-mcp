@@ -1,7 +1,7 @@
 """JSON state files with atomic writes (unit adapter-openclaw).
 
-The queue, the delete candidates, the sent log and the fix log are shared between the MCP server and CLI runs, so
-every write goes to a sibling .tmp file and lands with os.replace; a reader never sees a half-written file.
+The topic registry, the delete candidates, the sent log and the fix log are shared between the MCP server and CLI
+runs, so every write goes to a sibling .tmp file and lands with os.replace; a reader never sees a half-written file.
 """
 
 from __future__ import annotations

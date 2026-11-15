@@ -13,14 +13,12 @@ from urllib.parse import parse_qs, urlparse
 from concert_mcp.result import NO_REPLY_TEXT
 
 if TYPE_CHECKING:
-    from concert_mcp.flows.poll import PollReport
-    from concert_mcp.flows.queue import QueueEntry, QueueStatus
     from concert_mcp.text.artists import TeaserResult
     from concert_mcp.text.candidates import Candidate
     from concert_mcp.text.lineup import Lineup
     from concert_mcp.text.partiful import InviteResult
     from concert_mcp.text.records import ConcertRecord
-    from concert_mcp.text.setlists import SetlistResult, SyncResult
+    from concert_mcp.text.setlists import SyncResult
 
 __all__ = [
     "LINK_LINE_PREFIXES",
@@ -44,20 +42,14 @@ __all__ = [
     "render_partiful",
     "render_partiful_code_sent",
     "render_partiful_signed_in",
-    "render_poll",
-    "render_queue",
     "render_removed",
-    "render_setlist_playlist_announce",
-    "render_setlist_standalone",
     "render_teaser_standalone",
     "render_would_look",
-    "setlist_bullet",
     "teaser_bullet",
     "teaser_line",
 ]
 
 LINK_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "setlist.fm: ", "Setlist playlist: ")
-SETLIST_PLAYLIST_LINE_PREFIX = "Setlist playlist: "
 NO_CANDIDATES_REPLY = (
     "I do not have a list to pick from any more. Tell me the event name and date and I will look again."
 )
@@ -182,24 +174,6 @@ def teaser_line(res: TeaserResult | None) -> str | None:
     if res is not None and res.status in ("created", "updated") and res.url:
         return f"Teaser playlist: {res.url}"
     return None
-
-
-def setlist_bullet(res: SetlistResult | None) -> str | None:
-    """The Setlist bullet; None when no lookup was wanted or the show is not on setlist.fm yet (nothing to link).
-
-    No promise of a later check: the poll runs only when Ari asks for it (2026-11-10), so the bullet says what the
-    page holds today and nothing more.
-    """
-    if res is None:
-        return None
-    if res.match == "unavailable":
-        return bullet("Setlist", "lookup skipped (setlist.fm is not set up: run `concert-mcp spotify setlist-auth`)")
-    if res.match == "failed":
-        return bullet("Setlist", f"lookup failed ({(res.reason or 'unknown error')[:REASON_LEN]})")
-    if not res.found or not res.url:
-        return None
-    n = res.song_count
-    return link_bullet("Setlist", res.url, f", {n} songs so far" if n else "")
 
 
 def partiful_problem(res: InviteResult, operator: str) -> str:
@@ -371,59 +345,6 @@ def render_lineup(artist: str, date: str, venue: str, lineup: Lineup, *, patched
         rows.append(bullet("Sources", " ".join(f"[{i}]({u})" for i, u in enumerate(lineup.sources[:3], 1))))
     tail = "\nAdded to the calendar event." if patched else ""
     return head + "\n" + "\n".join(rows) + tail
-
-
-def render_setlist_standalone(res: SetlistResult) -> str:
-    """The setlist_find tool's reply: the page as it is (nothing is queued); a miss points at the search page."""
-    search = f" Search: {res.search_url}" if not res.found and res.search_url and res.match == "none" else ""
-    return "**Setlist**\n" + (setlist_bullet(res) or "Not on setlist.fm yet.") + search
-
-
-def _queue_row(e: QueueEntry, expired: bool) -> str:
-    row = f"• {e.date} {e.artist} @ {e.venue} — {e.song_count} songs, checking until {e.until}"
-    return row + (" (expired)" if expired else "")
-
-
-def render_queue(status: QueueStatus) -> str:
-    """The setlist queue: active shows first, then expired ones, each by date; last the poll's last run."""
-    last = f"Last poll: {status.last_poll or 'never'}"
-    if not status.entries:
-        return f"The setlist queue is empty.\n{last}"
-    rows = [_queue_row(e, False) for e in sorted(status.active, key=lambda e: e.date)]
-    rows += [_queue_row(e, True) for e in sorted(status.expired, key=lambda e: e.date)]
-    return f"**Setlist queue** ({len(status.entries)} shows)\n" + "\n".join(rows) + f"\n{last}"
-
-
-def render_poll(report: PollReport) -> str:
-    """The poll's report: one line per queued show."""
-    last = report.last_poll or "never"
-    head = "**Setlist poll (dry run)**" if report.dry_run else "**Setlist poll**"
-    head += f" {report.now} (last: {last})"
-    if not report.rows:
-        return f"{head}\nThe setlist queue is empty."
-    return head + "".join(f"\n• {r.date} {r.artist} — {r.action}" for r in report.rows)
-
-
-def render_setlist_playlist_announce(
-    artist: str,
-    date: str,
-    venue: str,
-    *,
-    setlist_url: str,
-    song_count: int,
-    playlist_name: str,
-    playlist_url: str,
-    html_link: str | None,
-) -> str:
-    """The one Telegram message the poll sends when a show's setlist playlist first exists."""
-    rows = [
-        bullet("Setlist", f"[setlist.fm]({setlist_url}) {song_count} songs"),
-        bullet("Playlist", f"[{playlist_name}]({playlist_url})"),
-    ]
-    if html_link:
-        rows.append(bullet("Calendar", f"[Open in Google Calendar]({event_link(html_link)})"))
-    where = f" @ {venue}" if venue else ""
-    return f"**Setlist playlist:** {artist}{where}, {date}\n" + "\n".join(rows)
 
 
 def provider_reply(provider: str, operator: str, *, what: str = "request") -> str:

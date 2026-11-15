@@ -96,9 +96,11 @@ def env_table_fields() -> list[tuple[str, str, str]]:
 
 def test_migrate_copies_with_mode_600_and_skips_existing(tmp_path: Path) -> None:
     legacy_creds = _write(tmp_path / ".config/ari-spotify/credentials.json", '{"refresh_token": "x"}')
-    legacy_queue = _write(tmp_path / ".local/state/ari-spotify/setlist-queue.json", "[]")
+    legacy_liked = _write(tmp_path / ".cache/ari-spotify/liked.json", "[]")
+    # The setlist queue left the legacy fallback with the poll (beads-h874): its old file is neither read nor copied.
+    old_queue = _write(tmp_path / ".local/state/ari-spotify/setlist-queue.json", "[]")
     s = load_settings({}, home=tmp_path)
-    assert {"spotify_credentials", "setlist_queue"} <= s.legacy_in_use
+    assert s.legacy_in_use == {"spotify_credentials", "liked_cache"}
 
     result = migrate(s, tmp_path, env={})
     by_src = {src: (dst, status) for src, dst, status in result}
@@ -107,12 +109,13 @@ def test_migrate_copies_with_mode_600_and_skips_existing(tmp_path: Path) -> None
     assert dst_creds == tmp_path / ".config/concert-mcp/spotify.json"
     assert dst_creds.read_text() == '{"refresh_token": "x"}'
     assert stat.S_IMODE(dst_creds.stat().st_mode) == 0o600
-    dst_queue, status = by_src[legacy_queue]
+    dst_liked, status = by_src[legacy_liked]
     assert status == "copied"
-    assert dst_queue == tmp_path / ".local/state/concert-mcp/setlist-queue.json"
-    assert legacy_creds.exists() and legacy_queue.exists()  # never deletes
+    assert dst_liked == tmp_path / ".cache/concert-mcp/liked.json"
+    assert legacy_creds.exists() and legacy_liked.exists()  # never deletes
+    assert old_queue not in by_src and len(result) == 3
     statuses = {status for _s, _d, status in result}
-    assert "skipped: no legacy" in statuses  # setlistfm and liked cache had no legacy file
+    assert "skipped: no legacy" in statuses  # setlistfm had no legacy file
 
     again = migrate(s, tmp_path, env={})
     assert {status for _s, _d, status in again} == {"skipped: exists", "skipped: no legacy"}

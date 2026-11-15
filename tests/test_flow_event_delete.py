@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from concert_mcp.flows.event_delete import DELETE_KNOWN, DeleteRequest, delete_event
-from concert_mcp.flows.queue import QueueEntry, queue_add, queue_list
 from concert_mcp.flows.topics import topic_event, topic_remember
 from concert_mcp.result import FixInput, Kind
 from concert_mcp.text.reply import NO_CANDIDATES_REPLY
@@ -54,20 +53,6 @@ def seed_second(svc) -> dict[str, Any]:
     )
 
 
-def queue_row(event_id: str) -> QueueEntry:
-    return QueueEntry(
-        event_id=event_id,
-        calendar_id="cal-concerts",
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue=QUARRY,
-        setlistfm_url=None,
-        song_count=0,
-        until="2027-01-14",
-        added="2026-10-25T19:00:00+00:00",
-    )
-
-
 def candidates_file(svc):
     return svc.state.read_json(svc.settings.candidates_file, None)
 
@@ -75,14 +60,11 @@ def candidates_file(svc):
 class TestOneMatch:
     def test_deletes_forgets_and_replies_the_golden(self, svc):
         e = seed_zed_fox(svc)
-        queue_add(queue_row(e["id"]), svc)
-        queue_add(queue_row("other"), svc)
 
         out = delete_event(DeleteRequest(title="Zed Fox"), svc)
 
         assert out.kind is Kind.OK
         assert svc.calendar.deleted == [("cal-concerts", e["id"])]
-        assert [q.event_id for q in queue_list(svc)] == ["other"]
         assert out.reply == REMOVED_GOLDEN
         assert out.data["deleted"] is True
         assert out.data["id"] == e["id"]
@@ -155,14 +137,12 @@ class TestPick:
 class TestById:
     def test_gets_the_event_then_deletes_it(self, svc):
         e = seed_zed_fox(svc)
-        queue_add(queue_row(e["id"]), svc)
         out = delete_event(DeleteRequest(id=e["id"]), svc)
         assert out.kind is Kind.OK
         names = [name for name, _ in svc.calendar.calls]
         assert names == ["list_calendars", "get_event", "delete_event"]
         assert svc.calendar.deleted == [("cal-concerts", e["id"])]
         assert out.reply == REMOVED_GOLDEN
-        assert queue_list(svc) == []
 
     def test_unknown_id_is_an_error_outcome(self, svc):
         out = delete_event(DeleteRequest(id="nope"), svc)

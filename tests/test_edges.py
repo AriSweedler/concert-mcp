@@ -26,31 +26,27 @@ from concert_mcp.config import Settings, load_settings, migrate, read_config_fil
 from concert_mcp.flows import concert_add as concert_add_mod
 from concert_mcp.flows import healthcheck as hc
 from concert_mcp.flows import lineup as lineup_mod
-from concert_mcp.flows import poll as poll_mod
-from concert_mcp.flows import setlist as setlist_mod
 from concert_mcp.flows import setlist_playlist as sp_mod
 from concert_mcp.flows import teaser as teaser_mod
 from concert_mcp.flows.deliver import _read_fix_log
 from concert_mcp.flows.event_delete import _stored_candidates
 from concert_mcp.flows.lineup import find_lineup, lineup_outcome, venue_website
 from concert_mcp.flows.movie_add import add_movie
-from concert_mcp.flows.poll import _patch_event, _songs_for, poll_outcome, poll_setlists, sync_playlist
-from concert_mcp.flows.queue import QueueEntry, queue_add, queue_list, read_poll_stamp
 from concert_mcp.flows.services import Services, build_services
-from concert_mcp.flows.setlist import setlist_outcome
 from concert_mcp.flows.setlist_playlist import link_event, setlist_playlist_outcome, sync_setlist_playlist
 from concert_mcp.flows.teaser import teaser_outcome
-from concert_mcp.flows.topics import make_topic_entry, topic_for_event, topic_forget, topic_remember
+from concert_mcp.flows.topics import make_topic_entry, topic_forget, topic_remember
 from concert_mcp.flows.venues import load_registry, refresh_venue, resolve_venue
 from concert_mcp.result import Kind, ProviderError, outcome_from
 from concert_mcp.text.failures import Failure, find_failures
 from concert_mcp.text.lineup import Lineup, Opener, _json_object, clock_time, lineup_lines
-from concert_mcp.text.setlists import Setlist, SetlistResult, Song
+from concert_mcp.text.setlists import Song
 from concert_mcp.text.venues import Venue, VenueHit
 from conftest import make_services, run, settings_env
 from fakes import FakeCalendar, FakeClock, FakeGemini, FakeSetlistFm, FakeUrlopen, FakeVenueLookup, MemoryState
 from test_failures import T0, assistant, shot
-from test_flow_poll import RUN1, FakeSync, page, seed
+
+RUN1 = datetime(2026, 11, 15, 9, 0, tzinfo=UTC)  # the fixed clock the adapter edges below run on
 
 
 class BrokenState(MemoryState):
@@ -95,20 +91,15 @@ def test_unreadable_or_malformed_state_files_read_as_empty(svc_cli: Services) ->
     assert _stored_candidates(svc_cli) == []
     svc_cli.state.write_json(s.candidates_file, [{"id": 1}, "not a row"])
     assert _stored_candidates(svc_cli) == []
-    svc_cli.state.write_json(s.state_dir / "setlist-poll.stamp", {"last_run": "not a time"})
-    assert read_poll_stamp(svc_cli) is None
-    svc_cli.state.write_json(s.setlist_queue, [{"event_id": "e1", "until": 5, "song_count": "x"}, 3])
-    assert [(e.event_id, e.until, e.song_count) for e in queue_list(svc_cli)] == [("e1", "5", 0)]
     svc_cli.state.write_json(s.venues_file, ["not", "a dict"])
     assert load_registry(svc_cli) == {}
     svc_cli.state.write_json(s.venues_file, {"k": "not a venue"})
     assert load_registry(svc_cli) == {}
 
 
-def test_topic_registry_forget_and_lookup(svc_cli: Services, now: datetime) -> None:
+def test_topic_registry_forget(svc_cli: Services, now: datetime) -> None:
     assert topic_forget("chat:1", svc_cli) is False
     topic_remember("chat:1", make_topic_entry(event_id="e1", calendar_id="c", summary="S", start=now, now=now), svc_cli)
-    assert topic_for_event("e1", svc_cli) == "chat:1" and topic_for_event("e2", svc_cli) is None
     assert topic_forget("chat:1", svc_cli) is True
 
 
@@ -153,17 +144,13 @@ def test_tool_outcomes_turn_a_crash_into_the_crash_reply(svc_cli: Services, monk
         raise RuntimeError("boom")
 
     monkeypatch.setattr(teaser_mod, "make_teaser", boom)
-    monkeypatch.setattr(setlist_mod, "find_setlist", boom)
     monkeypatch.setattr(sp_mod, "setlist_id_of", boom)
     monkeypatch.setattr(lineup_mod, "find_lineup", boom)
-    monkeypatch.setattr(poll_mod, "queue_list", boom)
     svc_cli.gemini = FakeGemini("{}")
     for out in (
         teaser_outcome("Zed Fox", "2026-11-14", svc_cli),
-        setlist_outcome("Zed Fox", "2026-11-14", "", svc_cli),
         setlist_playlist_outcome("https://www.setlist.fm/setlist/x/2026/y-1a2b3c4d.html", "", "", "", svc_cli),
         lineup_outcome("Zed Fox", "2026-11-14", "The Quarry", svc_cli),
-        poll_outcome(svc_cli),
     ):
         assert out.kind is Kind.ERROR and "RuntimeError" in (out.error or ""), out
 
@@ -251,88 +238,6 @@ def test_setlist_playlist_needs_a_name_and_a_date_the_page_lacks(svc_cli: Servic
     assert out.kind is Kind.NEED_USER and "artist is required" in (out.error or "")
     out = setlist_playlist_outcome(bare["url"], "Zed Fox", "", "", svc_cli)
     assert out.kind is Kind.NEED_USER and "date is required" in (out.error or "")
-
-
-# ---------- the poll's rarer rows ----------
-
-
-def test_poll_rows_for_a_dropped_lookup_a_gone_event_and_an_unreadable_page(tmp_path: Path, ticket_text: str) -> None:
-    settings = load_settings(settings_env(tmp_path), home=tmp_path)
-    svc = make_services(settings, RUN1, route=None, text=ticket_text)
-    event = seed(svc, settings)
-    fm: FakeSetlistFm = svc.setlistfm  # type: ignore[assignment]
-    fm.fail = True
-    assert [r.action for r in poll_setlists(svc, RUN1, sync=FakeSync()).rows] == [
-        "lookup failed: setlist.fm refused | path='/search/setlists' status='500'"
-    ]
-    fm.fail = False
-    svc.setlistfm = None
-    assert [r.action for r in poll_setlists(svc, RUN1, sync=FakeSync()).rows] == [
-        "lookup skipped (setlist.fm is not set up)"
-    ]
-    svc.setlistfm = fm
-    entry = queue_list(svc)[0]
-    bad = QueueEntry(**{**entry.__dict__, "event_id": "e-bad", "date": "not-a-date"})
-    queue_add(bad, svc)
-    actions = [r.action for r in poll_setlists(svc, RUN1, sync=FakeSync()).rows]
-    assert any(a.startswith("skipped:") for a in actions)
-    # the event is gone when the playlist is made, and the patch is refused
-    cal: FakeCalendar = svc.calendar  # type: ignore[assignment]
-    assert _patch_event(QueueEntry(**{**entry.__dict__, "event_id": "nope"}), "https://p", svc) == (
-        "event not patched (gws calendar events exited 1: no such event nope)",
-        None,
-    )
-    event["status"] = "cancelled"  # the seeded dict is the one the fake serves
-    assert _patch_event(entry, "https://p", svc) == ("event gone from the calendar", None)
-    event["status"] = "confirmed"
-    cal.fail = "patch_event"
-    note, link = _patch_event(entry, "https://p", svc)
-    assert note is not None and note.startswith("event not patched") and link
-    # an expired row is dropped, or only reported on a dry run
-    far = RUN1.replace(year=2028)
-    assert [r.action for r in poll_setlists(svc, far, dry_run=True, sync=FakeSync()).rows][0] == "would drop (expired)"
-    assert [r.action for r in poll_setlists(svc, far, sync=FakeSync()).rows][0] == "expired; dropped from the queue"
-
-
-def test_songs_for_prefers_the_fetched_page_and_falls_back_to_the_row(tmp_path: Path, ticket_text: str) -> None:
-    settings = load_settings(settings_env(tmp_path), home=tmp_path)
-    svc = make_services(settings, RUN1, route=None, text=ticket_text)
-    row = Setlist(
-        id="abc",
-        url="https://s",
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue="Q",
-        city="SF",
-        tour=None,
-        song_count=2,
-        songs=("A", "B"),
-    )
-    res = SetlistResult(found=True, match="exact date", artist="Zed Fox", date="2026-11-14", venue="Q", setlist=row)
-    assert (
-        _songs_for(SetlistResult(found=False, match="none", artist="Zed Fox", date="2026-11-14", venue=None), svc) == []
-    )
-    fm: FakeSetlistFm = svc.setlistfm  # type: ignore[assignment]
-    fm.setlists["abc"] = page(2)["setlist"][0]
-    assert [s.name for s in _songs_for(res, svc)] == ["Song 0", "Song 1"]
-    fm.fail = True
-    assert [s.name for s in _songs_for(res, svc)] == ["A", "B"]
-    fm.fail = False
-    fm.setlists["abc"] = {"sets": {"set": []}}
-    assert [s.name for s in _songs_for(res, svc)] == ["A", "B"]
-    entry = QueueEntry(
-        event_id="e",
-        calendar_id="c",
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue="Q",
-        setlistfm_url=None,
-        song_count=0,
-        until="2027-01-01",
-        added="",
-    )
-    svc.spotify.fail = "create_playlist"  # type: ignore[union-attr]
-    assert sync_playlist(entry, res, svc).status == "failed"
 
 
 # ---------- adapters: bodies that cannot be read, answers that are not JSON ----------
@@ -443,8 +348,8 @@ def test_config_edges(tmp_path: Path) -> None:
         read_config_file(bad)
     settings = load_settings(settings_env(tmp_path), home=tmp_path)
     rows = migrate(settings, tmp_path, dry=True)  # env None: the process environment
-    assert len(rows) == 4 and all(status.startswith(("skipped", "would copy")) for _, _, status in rows)
-    legacy = tmp_path / ".local" / "state" / "ari-spotify" / "setlist-queue.json"
+    assert len(rows) == 3 and all(status.startswith(("skipped", "would copy")) for _, _, status in rows)
+    legacy = tmp_path / ".cache" / "ari-spotify" / "liked.json"
     legacy.parent.mkdir(parents=True)
     legacy.write_text("[]")
     rows = migrate(settings, tmp_path, dry=True, env=settings_env(tmp_path))
@@ -551,7 +456,7 @@ def test_cli_without_an_openclaw_config_and_migrate_json(
     monkeypatch.setattr(openclaw.OpenClawContext, "transcript_since", lambda self, since: [])
     assert run(monkeypatch, capsys, ["failures", "collect"]) == (0, "", "")
     code, out, _ = run(monkeypatch, capsys, ["migrate", "--dry-run", "--json"])
-    assert code == 0 and len(json.loads(out)) == 4
+    assert code == 0 and len(json.loads(out)) == 3
 
 
 def test_migrate_never_copies_a_legacy_file_onto_itself(tmp_path: Path) -> None:
@@ -634,36 +539,11 @@ def test_movie_lookup_edges(svc_cli: Services, monkeypatch: pytest.MonkeyPatch) 
     assert add_movie(title="[Movie]", start="", location="", svc=svc_cli).kind is Kind.NEED_USER
 
 
-def test_poll_sync_and_patch_edges(tmp_path: Path, ticket_text: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = load_settings(settings_env(tmp_path), home=tmp_path)
-    svc = make_services(settings, RUN1, route=None, text=ticket_text)
-    event = seed(svc, settings)
-    entry = queue_list(svc)[0]
-    row = Setlist(
-        id="abc",
-        url="https://s",
-        artist="Zed Fox",
-        date="2026-11-14",
-        venue="Q",
-        city="SF",
-        tour=None,
-        song_count=1,
-        songs=("A",),
-    )
-    res = SetlistResult(found=True, match="exact date", artist="Zed Fox", date="2026-11-14", venue="Q", setlist=row)
-    svc.setlistfm = None
-    assert [s.name for s in _songs_for(res, svc)] == ["A"]
-    monkeypatch.setattr(poll_mod, "sync_setlist_playlist", lambda **kw: (_ for _ in ()).throw(RuntimeError("odd")))
-    assert sync_playlist(entry, res, svc).reason == "RuntimeError: odd"
-    event["description"] = "Setlist playlist: https://p"
-    assert _patch_event(entry, "https://p", svc) == (None, event["htmlLink"])
-
-
 def test_text_module_corners() -> None:
     from concert_mcp.flows.setlist_playlist import SyncResult
     from concert_mcp.text.lineup import Lineup, Opener, lineup_lines
     from concert_mcp.text.movie import letterboxd_matches
-    from concert_mcp.text.reply import render_setlist_playlist, render_setlist_playlist_announce
+    from concert_mcp.text.reply import render_setlist_playlist
     from concert_mcp.text.topics import changed_fields
     from concert_mcp.text.venues import Venue, address_from_text
 
@@ -676,9 +556,6 @@ def test_text_module_corners() -> None:
     assert letterboxd_matches("<html>no title</html>", "Godzilla", None) is False
     assert render_setlist_playlist(SyncResult("unavailable", "n", 0), setlistfm_url="https://s", event=None).endswith(
         "run `concert-mcp spotify auth`)"
-    )
-    assert "Calendar" not in render_setlist_playlist_announce(
-        "Z", "2026-11-14", "", setlist_url="s", song_count=1, playlist_name="p", playlist_url="u", html_link=None
     )
     assert changed_fields(
         {"summary": "Z", "start": "garbage", "location": "Q"},

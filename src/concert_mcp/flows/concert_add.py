@@ -1,10 +1,9 @@
 """The concert and plain-event add flows (unit flows-calendar).
 
 `prepare_event` is the pure half (validation and derivation in the legacy `cal-add.py` order); `add_event` is the
-orchestration: teaser, setlist lookup, topic registry (a Telegram forum topic owns one event, so a repeat add there
-updates it), duplicate guard, insert, lineup, the Partiful invite of a show whose ticket link is known, queue,
-topic rename. Flows return an Outcome and never raise, print or exit;
-`flows/deliver.py` turns the Outcome into text.
+orchestration: teaser, topic registry (a Telegram forum topic owns one event, so a repeat add there updates it),
+duplicate guard, insert, lineup, the Partiful invite of a show whose ticket link is known, topic rename. Flows
+return an Outcome and never raise, print or exit; `flows/deliver.py` turns the Outcome into text.
 """
 
 from __future__ import annotations
@@ -298,7 +297,7 @@ def resolve_calendar(name: str | None, svc: Services, *, dry_run: bool) -> tuple
 
 
 def add_event(req: AddRequest, svc: Services) -> Outcome:
-    """The whole add flow: prepare, teaser, setlist, duplicate guard, insert, queue, topic rename. Never raises."""
+    """The whole add flow: prepare, teaser, duplicate guard, insert, lineup, topic rename. Never raises."""
     try:
         return _add_event(req, svc)
     except (FixInput, NeedUser, ProviderError) as e:
@@ -383,7 +382,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         updated: bool = False,
         changed: Sequence[str] = (),
     ) -> Outcome:
-        """The lineup step, then queue the show for the setlist poller, register the topic's event, rename the
+        """The show's record, the lineup step and the Partiful invite, then register the topic's event, rename the
         topic, build the reply."""
         more_notes = list(notes)
         extra: tuple[str, ...] = ()
@@ -451,7 +450,7 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                     ),
                     svc,
                 )
-            except Exception as e:  # noqa: BLE001 - same rule as the queue
+            except Exception as e:  # noqa: BLE001 - a state-file hiccup must not fail an add that landed
                 log_warn(f"topic registry not written | error='{type(e).__name__}: {e}'")
                 more_notes.append(f"Topic not remembered: {type(e).__name__}")
         if req.concert and route and s.send and s.rename_topics:

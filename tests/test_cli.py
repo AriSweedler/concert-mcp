@@ -129,7 +129,7 @@ def test_del_invalid_json_has_its_own_hint(cli_env: Services, monkeypatch, capsy
     assert out == f"FIX: {cli.DEL_JSON_HINT}\n"
 
 
-# --- teaser / setlist-find / queue -----------------------------------------------------------------------------------
+# --- teaser / setlist-playlist ----------------------------------------------------------------------------------------
 
 
 def test_teaser_prints_the_standalone_block_and_not_sent(cli_env: Services, monkeypatch, capsys) -> None:
@@ -141,16 +141,6 @@ def test_teaser_prints_the_standalone_block_and_not_sent(cli_env: Services, monk
     assert_clean_stdout(out, err)
 
 
-def test_setlist_find_json(cli_env: Services, monkeypatch, capsys) -> None:
-    argv = ["setlist-find", "--artist", "Zed Fox", "--date", "2026-11-14", "--venue", "The Quarry", "--json"]
-    code, out, _ = run(monkeypatch, capsys, argv)
-    rec = one_json_line(out)
-    assert code == 0
-    assert rec["found"] is False and rec["match"] == "none"
-    assert rec["search_url"].startswith("https://www.setlist.fm/search?query=")
-    assert "sent" in rec
-
-
 def test_setlist_playlist_dry_run_needs_no_provider(cli_env: Services, monkeypatch, capsys) -> None:
     cli_env.setlistfm = None
     cli_env.spotify = None
@@ -160,19 +150,11 @@ def test_setlist_playlist_dry_run_needs_no_provider(cli_env: Services, monkeypat
     assert out == f"**Setlist playlist** would make 2026-11-14 | Zed Fox from the songs at {url}\nNOT SENT: dry run\n"
 
 
-def test_poll_text_and_json(cli_env: Services, monkeypatch, capsys) -> None:
-    code, out, err = run(monkeypatch, capsys, ["poll"])
-    assert code == 0
-    assert out.endswith("\nThe setlist queue is empty.\n") and out.startswith("**Setlist poll** ")
-    assert_clean_stdout(out, err)
-    code, out, _ = run(monkeypatch, capsys, ["poll"])
-    assert code == 0 and out.startswith("**Setlist poll** ") and "(last: 20" in out
-    code, out, _ = run(monkeypatch, capsys, ["poll", "--json"])
-    rec = one_json_line(out)
-    assert code == 0 and rec["ok"] is True and rec["ran"] is True and rec["rows"] == []
-    assert rec["sent"] == "NOT SENT: the poll report stays on the terminal"
-    code, out, _ = run(monkeypatch, capsys, ["queue"])
-    assert code == 0 and "\nLast poll: 20" in out
+def test_removed_subcommands_are_fix_lines(cli_env: Services, monkeypatch, capsys) -> None:
+    # The setlist poll, its queue and the standalone setlist lookup are gone (beads-h874).
+    for argv in [["poll"], ["queue"], ["setlist-find", "--artist", "Zed Fox", "--date", "2026-11-14"]]:
+        code, out, _ = run(monkeypatch, capsys, argv)
+        assert code == 1 and out.startswith("FIX: ")
 
 
 # --- healthcheck / config / migrate ----------------------------------------------------------------------------------
@@ -216,7 +198,7 @@ def test_migrate_dry_run_lists_no_legacy_rows(cli_env: Services, monkeypatch, ca
     code, out, err = run(monkeypatch, capsys, ["migrate", "--dry-run"])
     assert code == 0
     lines = out.rstrip("\n").splitlines()
-    assert len(lines) == 4
+    assert len(lines) == 3
     assert all(ln.startswith("skipped: no legacy") and " -> " in ln for ln in lines)
     assert_clean_stdout(out, err)
 
@@ -251,7 +233,7 @@ def test_argparse_errors_are_fix_lines_not_usage(cli_env: Services, monkeypatch,
         ["teaser", "--artist", "Zed Fox"],
         ["bogus-command"],
         ["spotify"],
-        ["queue", "--what"],
+        ["concerts", "--what"],
         ["--config-dir"],
     ]:
         code, out, err = run(monkeypatch, capsys, argv)
@@ -271,12 +253,12 @@ def test_keyboard_interrupt_is_130(cli_env: Services, monkeypatch, capsys) -> No
         raise KeyboardInterrupt
 
     monkeypatch.setattr(services, "build_services", interrupted)
-    code, out, _ = run(monkeypatch, capsys, ["queue"])
+    code, out, _ = run(monkeypatch, capsys, ["concerts"])
     assert code == 130 and out == ""
 
 
 def test_bad_log_level_is_not_a_traceback(cli_env: Services, monkeypatch, capsys) -> None:
-    code, out, err = run(monkeypatch, capsys, ["--log-level", "loud", "queue"])
+    code, out, err = run(monkeypatch, capsys, ["--log-level", "loud", "concerts"])
     assert code == 1 and out == ""
     assert err.startswith("[ERROR] ValueError:")
 

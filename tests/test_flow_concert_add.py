@@ -15,7 +15,6 @@ from concert_mcp.flows.concert_add import (
     add_concert,
     add_plain,
 )
-from concert_mcp.flows.queue import queue_list
 from concert_mcp.flows.services import Services
 from concert_mcp.result import NEED_USER, FixInput, Kind
 from fakes import (
@@ -162,7 +161,6 @@ class TestDuplicate:
         assert out.reply.endswith(f"[Open in Google Calendar]({event_url(e['id'])})")
         assert out.data["id"] == e["id"]
         assert out.to_json()["duplicate"] is True
-        assert queue_list(svc) == []  # no show is queued for a setlist check any more
 
 
 class TestShowTime:

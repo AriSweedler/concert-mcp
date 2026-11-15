@@ -1,4 +1,4 @@
-"""server.py: the twelve tools, their string-only schemas, the instructions, and the output contract on fake services."""
+"""server.py: the ten tools, their string-only schemas, the instructions, and the output contract on fake services."""
 
 from __future__ import annotations
 
@@ -19,24 +19,21 @@ from concert_mcp.server import (  # noqa: E402
     build_server,
     concert_add,
     healthcheck,
-    queue_status,
 )
 from concert_mcp.text.reply import NO_CANDIDATES_REPLY, WHICH_EVENT_REPLY  # noqa: E402
 from conftest import make_services  # noqa: E402
 from fakes import FakeCalendar  # noqa: E402
 
-TWELVE = {
+TEN = {
     "movie_add",
     "concert_add",
     "calendar_add",
     "event_delete",
     "teaser_playlist",
-    "setlist_find",
     "setlist_playlist",
     "lineup",
     "tickets_add",
     "partiful_login",
-    "queue_status",
     "healthcheck",
 }
 FIX_TAIL = "Call concert_add once more with only that change."
@@ -50,9 +47,9 @@ async def _tools(svc: Services) -> dict[str, Any]:
 # ---------- registration and schema ----------
 
 
-async def test_registers_exactly_the_twelve_tools(svc: Services) -> None:
-    assert set(await _tools(svc)) == TWELVE
-    assert {fn.__name__ for fn in TOOLS} == TWELVE
+async def test_registers_exactly_the_ten_tools(svc: Services) -> None:
+    assert set(await _tools(svc)) == TEN
+    assert {fn.__name__ for fn in TOOLS} == TEN
 
 
 async def test_every_parameter_is_a_described_string_with_a_default(svc: Services) -> None:
@@ -65,9 +62,8 @@ async def test_every_parameter_is_a_described_string_with_a_default(svc: Service
             assert prop.get("default") == "", (name, pname)
 
 
-async def test_queue_status_and_healthcheck_take_no_parameters(svc: Services) -> None:
+async def test_healthcheck_takes_no_parameters(svc: Services) -> None:
     tools = await _tools(svc)
-    assert tools["queue_status"].input_schema.get("properties", {}) == {}
     assert tools["healthcheck"].input_schema.get("properties", {}) == {}
 
 
@@ -80,10 +76,8 @@ async def test_descriptions_are_short_and_literal(svc: Services) -> None:
         "calendar_add",
         "event_delete",
         "teaser_playlist",
-        "setlist_find",
         "setlist_playlist",
         "lineup",
-        "queue_status",
     ):
         assert "NO_REPLY" in DESCRIPTIONS[name], name
 
@@ -92,7 +86,7 @@ async def test_annotations_as_designed(svc: Services) -> None:
     tools = await _tools(svc)
     read_only = {n for n, t in tools.items() if t.annotations is not None and t.annotations.read_only_hint}
     destructive = {n for n, t in tools.items() if t.annotations is not None and t.annotations.destructive_hint}
-    assert read_only == {"setlist_find", "queue_status", "healthcheck"}
+    assert read_only == {"healthcheck"}
     assert destructive == {"event_delete"}
 
 
@@ -177,7 +171,7 @@ def test_a_failure_to_build_services_is_a_reply_not_an_exception(monkeypatch: py
 
     build_server(None)
     monkeypatch.setattr(server, "build_services", explode)
-    text = queue_status()
+    text = healthcheck()
     assert text.startswith("Something broke inside the concert tool (OSError).")
     assert "NOT SENT" in text
 
@@ -196,13 +190,12 @@ def test_every_tool_body_runs_on_the_bound_services(svc_cli: Services, ticket_te
         film="Godzilla Minus Zero", start="2026-11-11 14:30", theater="AMC", source_text=""
     )
     assert server.teaser_playlist(artist="Zed Fox", date="2026-11-14").startswith("**Teaser")
-    assert server.setlist_find(artist="Zed Fox", date="2026-11-14").startswith("**Setlist**")
     assert server.setlist_playlist(url="https://open.spotify.com/x").startswith("FIX:")
     assert server.lineup(artist="Zed Fox", date="2026-11-14", venue="The Quarry").startswith("FIX:")
     listing = server.tool_listing(svc_cli, ["lineup", "nope", "healthcheck"])
     assert [t["name"] for t in listing] == ["lineup", "healthcheck"] and "inputSchema" in listing[0]
     assert server.call_tool("nope", {}) == "(the model called 'nope', which is not a tool)"
-    assert server.call_tool("queue_status", {"extra": "dropped"}).startswith("The setlist queue is empty.")
+    assert server.call_tool("healthcheck", {"extra": "dropped"}).startswith(("PASS ", "FAIL ", "SKIP "))
 
 
 def test_crash_text_without_settings_and_a_delivery_layer_crash(

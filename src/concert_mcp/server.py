@@ -1,4 +1,4 @@
-"""The MCP server: twelve coarse tools for a small model (unit server).
+"""The MCP server: ten coarse tools for a small model (unit server).
 
 Every parameter is a `Param`: a string with default "" whose validator runs `clean_param` before pydantic sees the
 value, so a number, a null or a quoted string from the model becomes a clean string and never a schema error (which
@@ -30,9 +30,7 @@ from concert_mcp.flows.healthcheck import healthcheck_outcome
 from concert_mcp.flows.lineup import lineup_outcome
 from concert_mcp.flows.movie_add import add_movie, is_movie_title
 from concert_mcp.flows.partiful import login_outcome, tickets_outcome
-from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services, build_services
-from concert_mcp.flows.setlist import setlist_outcome
 from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
 from concert_mcp.flows.teaser import teaser_outcome
 from concert_mcp.log import kv, log_info, log_warn, set_level
@@ -54,12 +52,10 @@ TOOL_NAMES = (
     "movie_add",
     "event_delete",
     "teaser_playlist",
-    "setlist_find",
     "setlist_playlist",
     "lineup",
     "tickets_add",
     "partiful_login",
-    "queue_status",
     "healthcheck",
 )
 DESCRIPTIONS = {name: load_prompt(f"tools/{name}") for name in TOOL_NAMES}
@@ -70,12 +66,10 @@ ANNOTATIONS = {
     "movie_add": ToolAnnotations(),
     "event_delete": ToolAnnotations(destructiveHint=True),
     "teaser_playlist": ToolAnnotations(),
-    "setlist_find": ToolAnnotations(readOnlyHint=True),
     "setlist_playlist": ToolAnnotations(),
     "lineup": ToolAnnotations(),
     "tickets_add": ToolAnnotations(),
     "partiful_login": ToolAnnotations(),
-    "queue_status": ToolAnnotations(readOnlyHint=True),
     "healthcheck": ToolAnnotations(readOnlyHint=True),
 }
 
@@ -336,21 +330,6 @@ def teaser_playlist(
     )
 
 
-def setlist_find(
-    artist: Annotated[Param, Field(description='Artist name, e.g. "Zed Fox".')] = "",
-    date: Annotated[Param, Field(description="Concert date as YYYY-MM-DD.")] = "",
-    venue: Annotated[Param, Field(description="Venue name to break ties.")] = "",
-) -> str:
-    """Look up one show on setlist.fm alone."""
-    return _run(
-        "setlist_find",
-        lambda svc, a: setlist_outcome(a["artist"], a["date"], a["venue"], svc),
-        artist=artist,
-        date=date,
-        venue=venue,
-    )
-
-
 def setlist_playlist(
     url: Annotated[
         Param,
@@ -427,11 +406,6 @@ def partiful_login(
     )
 
 
-def queue_status() -> str:
-    """List the concerts whose setlist.fm page the poll re-reads when asked."""
-    return _run("queue_status", lambda svc, a: queue_outcome(svc))
-
-
 def healthcheck() -> str:
     """Report which credentials and tools are present."""
     return _run("healthcheck", lambda svc, a: healthcheck_outcome(svc.settings, probe=False, svc=svc))
@@ -443,18 +417,16 @@ TOOLS: tuple[Callable[..., str], ...] = (
     movie_add,
     event_delete,
     teaser_playlist,
-    setlist_find,
     setlist_playlist,
     lineup,
     tickets_add,
     partiful_login,
-    queue_status,
     healthcheck,
 )
 
 
 def build_server(svc: Services | None = None) -> MCPServer:
-    """MCPServer('concert') with the twelve tools; services are built lazily on the first tool call."""
+    """MCPServer('concert') with the ten tools; services are built lazily on the first tool call."""
     global _svc
     _svc = svc
     mcp = MCPServer("concert", instructions=INSTRUCTIONS, version=__version__)

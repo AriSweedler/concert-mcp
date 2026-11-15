@@ -15,18 +15,16 @@ from mcp.client.stdio import stdio_client  # noqa: E402
 
 from concert_mcp.result import NEED_USER  # noqa: E402
 
-TWELVE = {
+TEN = {
     "movie_add",
     "concert_add",
     "calendar_add",
     "event_delete",
     "teaser_playlist",
-    "setlist_find",
     "setlist_playlist",
     "lineup",
     "tickets_add",
     "partiful_login",
-    "queue_status",
     "healthcheck",
 }
 
@@ -61,7 +59,7 @@ async def test_stdio_server_lists_and_calls_the_tools(tmp_path: Path) -> None:
 
                 tools = await s.list_tools()
                 by_name = {t.name: t for t in tools.tools}
-                assert set(by_name) == TWELVE
+                assert set(by_name) == TEN
                 for name, tool in by_name.items():
                     for pname, prop in tool.input_schema.get("properties", {}).items():
                         assert prop.get("type") == "string", (name, pname)

@@ -1,4 +1,4 @@
-"""text/setlists.py: setlist.fm row shaping, venue ranking, near-date fallback and the legacy records."""
+"""text/setlists.py: setlist.fm row shaping, venue ranking, near-date fallback and the lookup result."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from concert_mcp.text.setlists import (
     SetlistResult,
     near_date,
     rank_by_venue,
-    search_url,
     setlist_row,
     setlistfm_date,
 )
@@ -30,60 +29,27 @@ def api_row(
 
 
 def row(date: str, venue: str, id: str = "x") -> Setlist:
-    return Setlist(
-        id=id,
-        url=f"https://www.setlist.fm/{id}",
-        artist="Zed Fox",
-        date=date,
-        venue=venue,
-        city=None,
-        tour=None,
-        song_count=0,
-        songs=(),
-    )
+    return Setlist(id=id, url=f"https://www.setlist.fm/{id}", date=date, venue=venue)
 
 
 def test_setlists() -> None:
-    # setlist_row_flips_date_and_flattens_songs:
+    # setlist_row_flips_the_date_and_keeps_what_the_lookup_ranks_by:
     s = setlist_row(api_row())
-    assert s.date == "2026-11-14"
-    assert s.songs == ("First Light", "Second Wind")
-    assert s.song_count == 2
     assert s == Setlist(
         id="abc123",
         url="https://www.setlist.fm/setlist/zed-fox/2026/abc123.html",
-        artist="Zed Fox",
         date="2026-11-14",
         venue="The Quarry",
-        city="San Francisco",
-        tour="Cure Tour",
-        song_count=2,
-        songs=("First Light", "Second Wind"),
     )
 
-    # setlist_row_skips_unnamed_songs_and_tolerates_missing_parts:
-    s = setlist_row(
-        {
-            "id": "e",
-            "url": "u",
-            "eventDate": "01-02-2026",
-            "sets": {"set": [{"song": [{"name": ""}, {}, {"name": "Only"}]}]},
-        }
-    )
-    assert s.songs == ("Only",)
-    assert s.song_count == 1
-    assert (s.artist, s.venue, s.city, s.tour) == ("", "", None, None)
-    assert setlist_row({}).date == ""
+    # setlist_row_tolerates_missing_parts:
+    s = setlist_row({"id": "e", "url": "u", "eventDate": "01-02-2026"})
+    assert (s.id, s.url, s.date, s.venue) == ("e", "u", "2026-02-01", "")
+    assert setlist_row({}) == Setlist(id="", url="", date="", venue="")
 
     # setlistfm_date:
     assert setlistfm_date("2026-11-14") == "14-11-2026"
     assert setlistfm_date("2026-11-14T20:30:00") == "14-11-2026"
-
-    # setlist_to_json_with_and_without_songs:
-    s = setlist_row(api_row())
-    rec = s.to_json()
-    assert list(rec) == ["id", "url", "artist", "date", "venue", "city", "tour", "song_count"]
-    assert s.to_json(songs=True)["songs"] == ["First Light", "Second Wind"]
 
     # rank_by_venue_orders_by_shared_words_and_is_stable:
     rows = [
@@ -124,50 +90,11 @@ def test_setlists() -> None:
     assert near_date(rows, "2026-11-14", "The Quarry") == []
     assert [r.id for r in near_date(rows, "2026-11-12", None, max_days=3)] == ["exact", "one_off"]
 
-    # search_url_quotes_spaces:
-    assert search_url("Zed Fox") == "https://www.setlist.fm/search?query=Zed%20Fox"
-    assert search_url("Simon & Garfunkel") == "https://www.setlist.fm/search?query=Simon%20%26%20Garfunkel"
-
-    # setlist_result_found:
+    # setlist_result_url_only_when_found:
     s = setlist_row(api_row())
     res = SetlistResult(
         found=True, match="exact date", artist="Zed Fox", date="2026-11-14", venue="The Quarry", setlist=s
     )
     assert res.url == s.url
-    assert res.song_count == 2
-    rec = res.to_json()
-    assert rec == {"found": True, "match": "exact date", **s.to_json()}
-    assert res.to_json(songs=True)["songs"] == ["First Light", "Second Wind"]
-    assert "search_url" not in rec
-
-    # setlist_result_not_found:
-    res = SetlistResult(
-        found=False, match="none", artist="Zed Fox", date="2026-11-14", venue=None, search_url=search_url("Zed Fox")
-    )
+    res = SetlistResult(found=False, match="none", artist="Zed Fox", date="2026-11-14", venue=None)
     assert res.url is None
-    assert res.song_count == 0
-    assert res.to_json() == {
-        "found": False,
-        "artist": "Zed Fox",
-        "date": "2026-11-14",
-        "venue": None,
-        "match": "none",
-        "search_url": "https://www.setlist.fm/search?query=Zed%20Fox",
-    }
-    assert res.to_json(songs=True) == res.to_json()
-
-    # setlist_result_error_carries_reason:
-    for match in ["unavailable", "failed"]:
-        res = SetlistResult(
-            found=False,
-            match=match,
-            artist="Zed Fox",
-            date="2026-11-14",
-            venue="The Quarry",
-            reason="setlist.fm refused",
-        )
-        rec = res.to_json()
-        assert rec["found"] is False
-        assert rec["match"] == match
-        assert rec["error"] == "setlist.fm refused"
-        assert rec["search_url"] is None
