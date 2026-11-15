@@ -197,6 +197,7 @@ class SyncResult:
     teaser_url: str | None = None
     reason: str | None = None
     swapped: tuple[str, ...] = ()
+    rebuilt: bool = False  # the playlist held another page's songs and now holds only this page's
 
     @property
     def on_spotify(self) -> int:
@@ -215,6 +216,7 @@ class SyncResult:
             "already_there": self.already_there,
             "not_on_spotify": list(self.missing),
             "swapped": list(self.swapped),
+            "rebuilt": self.rebuilt,
             "teaser_url": self.teaser_url,
         }
         if self.reason is not None:

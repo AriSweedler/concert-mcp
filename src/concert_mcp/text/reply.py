@@ -337,7 +337,9 @@ def render_setlist_playlist(res: SyncResult, *, setlistfm_url: str, event: str |
     text = head + f"[{res.name}]({res.url}): {n} song{'s' if n != 1 else ''}"
     if res.missing:
         text += f", {len(res.missing)} not on Spotify"
-    if res.status == "updated":
+    if res.rebuilt:
+        text += " (rebuilt from this page)"
+    elif res.status == "updated":
         text += f" (already existed, {res.added} added)"
     text += "."
     if res.swapped:

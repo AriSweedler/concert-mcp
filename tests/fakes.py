@@ -369,6 +369,10 @@ class FakeSpotify:
                 p["items"] = {"total": len(rows)}
         self.added.append((playlist_id, list(uris)))
 
+    def remove_items(self, playlist_id: str, uris: Sequence[str]) -> None:
+        self._record("remove_items", playlist_id=playlist_id, uris=list(uris))
+        self.items[playlist_id] = [r for r in self.items.get(playlist_id, []) if r.get("uri") not in set(uris)]
+
     def replace_item(self, playlist_id: str, *, position: int, old_uri: str, new_uri: str) -> None:
         self._record("replace_item", playlist_id=playlist_id, position=position, old_uri=old_uri, new_uri=new_uri)
         rows = self.items.setdefault(playlist_id, [])

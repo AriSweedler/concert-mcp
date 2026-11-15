@@ -28,9 +28,8 @@ from concert_mcp.flows.topics import live_event, topic_event
 from concert_mcp.log import log_debug, log_info, log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
 from concert_mcp.text.artists import NoArtistMatch, find_playlist_named, new_uris
-from concert_mcp.text.candidates import missing_link_lines, patched_description
 from concert_mcp.text.dates import concert_date
-from concert_mcp.text.description import description_of, lines_of
+from concert_mcp.text.description import description_of, from_lines, lines_of
 from concert_mcp.text.naming import (
     SETLIST_LINK,
     has_dated_setlist_description,
@@ -38,7 +37,7 @@ from concert_mcp.text.naming import (
     playlist_name,
     setlist_description,
 )
-from concert_mcp.text.partiful import SETLISTFM_PREFIX, setlist_page
+from concert_mcp.text.partiful import SETLISTFM_PREFIX, setlist_page, with_line
 from concert_mcp.text.reply import provider_reply, render_setlist_playlist
 from concert_mcp.text.routes import chat_target, forum_target
 from concert_mcp.text.setlists import Song, SyncResult, page_artist_of, setlist_id_of, setlist_row, songs_of
@@ -169,6 +168,13 @@ def sync_setlist_playlist(
             log_info(f"setlist playlist created | name='{name}' id='{pl['id']}'")
         url = _url_of(pl)
         rows = api.playlist_items(pl["id"])
+        # Another page for the same show is a correction (an earlier night of the tour stood in until the show's own
+        # page existed): the playlist becomes this page's songs, in its order, and nothing of the old page stays.
+        rebuilt = bool(existing) and has_dated_setlist_description(pl) and setlistfm_url not in str(pl["description"])
+        if rebuilt:
+            api.remove_items(pl["id"], list(dict.fromkeys(r["uri"] for r in rows)))
+            log_info(f"setlist playlist rebuilt from another page | name='{name}' removed='{len(rows)}'")
+            rows = []
         # A row an earlier run filled with another version of a song (`Black Wave - Seattle Sessions` for `Black
         # Wave`) is swapped for the pick in its own slot, so the setlist order stands and the song is not added twice.
         swaps = stale_rows(rows, picks)
@@ -196,6 +202,7 @@ def sync_setlist_playlist(
             missing=tuple(missing),
             teaser_url=teaser_url,
             swapped=tuple(swapped),
+            rebuilt=rebuilt,
         )
     except ProviderError as e:
         return SyncResult("failed", name, len(songs), reason=str(e.error)[:REASON_LIMIT])
@@ -227,26 +234,27 @@ def event_for_show(artist: str, date: str, svc: Services, *, topic: str = "") ->
 
 
 def link_event(artist: str, date: str, page_url: str, url: str, svc: Services, *, topic: str = "") -> str | None:
-    """Write `setlist.fm: <page>` and `Setlist playlist: <url>` into the show's event once, then bring the show's
-    Partiful page, when it has one, up to the same links. None when no event was found; else the reply's note."""
+    """Write `setlist.fm: <page>` and `Setlist playlist: <url>` into the show's event, then bring the show's
+    Partiful page, when it has one, up to the same links. A page given after another one is a correction: it takes
+    the earlier page's place on the event and on the invite. None when no event was found; else the reply's note."""
     try:
         hit = event_for_show(artist, date, svc, topic=topic)
         if hit is None:
             return None
         cal_id, e = hit
         description = description_of(e)
-        # An event made before 2026-11-14 may carry the page under `Setlist:`; it is not linked a second time.
-        lines = [] if page_url in description else [f"{SETLISTFM_PREFIX}{page_url}"]
-        missing = missing_link_lines(description, [*lines, f"{SETLIST_LINK}{url}"])
+        had = lines_of(description)
+        # An event made before 2026-11-14 may carry this page under `Setlist:`; it is not linked a second time.
+        lines = had if page_url in description else with_line(had, SETLISTFM_PREFIX, page_url)
+        lines = with_line(lines, SETLIST_LINK, url)
         note = EVENT_HAD_LINK
-        if missing:
-            description = patched_description(description, missing)
-            svc.calendar.patch_event(cal_id, e["id"], description=description)
+        if lines != had:
+            svc.calendar.patch_event(cal_id, e["id"], description=from_lines(lines))
             note = EVENT_PATCHED
         # Imported here: flows/partiful.py finds a show's event through this module.
         from concert_mcp.flows.partiful import refresh_invite_links
 
-        page = refresh_invite_links(str(e.get("summary") or artist), lines_of(description), svc)
+        page = refresh_invite_links(str(e.get("summary") or artist), lines, svc)
         return f"{note} {page}" if page else note
     except ProviderError as e:
         log_warn(f"event not linked | error='{e.error[:200]}'")

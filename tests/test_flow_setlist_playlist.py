@@ -369,6 +369,63 @@ def test_setlist_with_no_link_refreshes_the_page_already_given_or_says_none_was(
     assert gone.kind is Kind.NEED_USER and gone.reply == NO_TOPIC_SHOW_REPLY
 
 
+def test_a_different_page_is_a_correction_that_replaces_the_interim_one(svc_cli: Services) -> None:
+    # An earlier night of the tour stands in until the show's own page exists; that page then replaces it everywhere.
+    own_id = "7c1d2e3"
+    own_url = f"https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-{own_id}.html"
+    own_page = {**page([{"name": "Third Rail"}, {"name": "First Light"}], event_date="14-11-2026"), "id": own_id}
+    wire(svc_cli)
+    svc_cli.setlistfm.setlists[own_id] = {**own_page, "url": own_url}  # type: ignore[union-attr]
+    topic = "-1001234567890:7"
+    start = datetime(2026, 11, 14, 20, 30, tzinfo=TZ)
+    tickets = "https://www.ticketweb.com/event/zed-fox/123"
+    e = svc_cli.calendar.seed_event(
+        "cal-concerts",
+        summary=ARTIST,
+        start=start,
+        description=f"Tickets: {tickets}\nPartiful: https://partiful.com/e/pf1",
+    )
+    topic_remember(
+        topic,
+        make_topic_entry(event_id=e["id"], calendar_id="cal-concerts", summary=ARTIST, start=start, now=start),
+        svc_cli,
+    )
+    partiful = FakePartiful()
+    partiful.events.append({"customFields": [{"icon": "link", "value": "Tickets", "url": tickets}]})
+    svc_cli.partiful = partiful
+
+    interim = setlist_playlist_outcome(PAGE_URL, "", "", "", svc_cli, topic=topic)
+    assert interim.kind is Kind.OK and interim.data["rebuilt"] is False
+    played = "https://open.spotify.com/playlist/pl1"
+    assert [r["uri"] for r in svc_cli.spotify.items["pl1"]] == [
+        "spotify:track:t1",
+        "spotify:track:c1",
+        "spotify:track:t3",
+    ]
+
+    fixed = setlist_playlist_outcome(own_url, "", "", "", svc_cli, topic=topic)
+    assert fixed.kind is Kind.OK and fixed.data["rebuilt"] is True
+    assert fixed.reply == (
+        f"**Setlist playlist** [2026-11-14 | Zed Fox]({played}): 2 songs (rebuilt from this page).\n"
+        "Calendar event updated with the links. The Partiful has the links too."
+    )
+    # The playlist is the show's own setlist, in its order; nothing of the other night stays.
+    assert [r["uri"] for r in svc_cli.spotify.items["pl1"]] == ["spotify:track:t3", "spotify:track:t1"]
+    assert len(svc_cli.spotify.created) == 1
+    # One setlist.fm link on the event and on the invite, and it is the new page.
+    assert svc_cli.calendar.events["cal-concerts"][0]["description"] == (
+        f"Tickets: {tickets}\nPartiful: https://partiful.com/e/pf1\nsetlist.fm: {own_url}\nSetlist playlist: {played}"
+    )
+    assert partiful.events[0]["customFields"] == [
+        {"icon": "link", "value": "Tickets", "url": tickets},
+        {"icon": "link", "value": "setlist.fm", "url": own_url},
+        {"icon": "music-note", "value": "Setlist playlist", "url": played},
+    ]
+    # The same page again is no correction: the playlist is topped up, not rebuilt.
+    same = setlist_playlist_outcome(own_url, "", "", "", svc_cli, topic=topic)
+    assert same.data["rebuilt"] is False and "(already existed, 0 added)" in same.reply
+
+
 def test_outcome_without_a_topic_finds_the_event_by_title_and_date(svc_cli: Services) -> None:
     wire(svc_cli)
     svc_cli.calendar.seed_event("cal-concerts", summary="Zed Fox", start=datetime(2026, 11, 14, 20, 30, tzinfo=TZ))

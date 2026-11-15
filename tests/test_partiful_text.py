@@ -28,6 +28,7 @@ from concert_mcp.text.partiful import (
     structured_location,
     ticket_link,
     ticket_link_in,
+    with_line,
 )
 from concert_mcp.text.reply import (
     PARTIFUL_NO_PHONE,
@@ -72,6 +73,9 @@ def test_lines_times_and_the_title() -> None:
     assert line_value(lines, "Teaser playlist: ") == PLAYLIST
     assert line_value(lines, "Partiful: ") is None
     assert line_value(lines, "Tickets: ") is None
+    # A fact gained goes last; a fact corrected takes the place of the first line of its kind.
+    assert with_line(lines, "Tickets: ", "https://t.example") == [*lines, "Tickets: https://t.example"]
+    assert with_line(lines, "Doors: ", "7:00 PM") == ["Doors: 7:00 PM", *lines[1:]]
     assert [short_clock(SHOW.replace(hour=h)) for h in (0, 12, 20)] == ["12:30", "12:30", "8:30"]
     assert invite_title("Zed Fox", "The Quarry", SHOW) == "Concert: Zed Fox at The Quarry 11/14"
     assert invite_title("Zed Fox", "", SHOW.replace(month=3, day=7)) == "Concert: Zed Fox 3/7"

@@ -103,6 +103,16 @@ def ticket_link_in(text: str) -> str | None:
     return ticket_link(found.group(1)) if found else None
 
 
+def with_line(lines: Sequence[str], prefix: str, value: str) -> list[str]:
+    """The lines with `<prefix><value>` as their one line of that kind: it takes the place of the first such line
+    (a fact corrected), else it goes last (a fact gained)."""
+    line = f"{prefix}{value}"
+    if any(ln.startswith(prefix) for ln in lines):
+        first = next(i for i, ln in enumerate(lines) if ln.startswith(prefix))
+        return [line if i == first else ln for i, ln in enumerate(lines)]
+    return [*lines, line]
+
+
 def line_value(lines: Sequence[str], prefix: str) -> str | None:
     """The value of the first line that starts with `prefix`; None when there is none or it is empty."""
     for ln in lines:

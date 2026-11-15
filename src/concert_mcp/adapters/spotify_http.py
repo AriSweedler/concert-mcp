@@ -299,6 +299,13 @@ class SpotifyClient:
         for i in range(0, len(uris), ADD_CHUNK):
             self.api("POST", f"/playlists/{playlist_id}/items", body={"uris": uris[i : i + ADD_CHUNK]})
 
+    def remove_items(self, playlist_id: str, uris: Sequence[str]) -> None:
+        """DELETE /playlists/<id>/items {items: [{uri}, …]} in chunks of 100: every row of each URI goes."""
+        uris = list(uris)
+        for i in range(0, len(uris), ADD_CHUNK):
+            items = [{"uri": u} for u in uris[i : i + ADD_CHUNK]]
+            self.api("DELETE", f"/playlists/{playlist_id}/items", body={"items": items})
+
     def replace_item(self, playlist_id: str, *, position: int, old_uri: str, new_uri: str) -> None:
         """Put `new_uri` where `old_uri` sits: DELETE /playlists/<id>/items {items: [{uri}]}, then POST
         /playlists/<id>/items {uris, position}. The Web API has no replace call (its PUT only reorders), and the

@@ -283,6 +283,16 @@ def test_rename_playlist(client: SpotifyClient, fake: FakeUrlopen) -> None:
     assert body_of(req) == {"name": "New Name"}
 
 
+def test_remove_items_in_chunks_of_100(client: SpotifyClient, fake: FakeUrlopen) -> None:
+    fake.add("DELETE", f"{API}/playlists/p1/items", b"")
+    uris = [f"spotify:track:t{i}" for i in range(101)]
+    client.remove_items("p1", uris)
+    first, second = fake.requests[-2:]
+    assert (first[0], first[1]) == ("DELETE", f"{API}/playlists/p1/items")
+    assert len(body_of(first)["items"]) == 100 and body_of(first)["items"][0] == {"uri": "spotify:track:t0"}
+    assert body_of(second) == {"items": [{"uri": "spotify:track:t100"}]}
+
+
 def test_unfollow_playlist(client: SpotifyClient, fake: FakeUrlopen) -> None:
     fake.add("DELETE", f"{API}/playlists/p1/followers", b"")
     client.unfollow_playlist("p1")
