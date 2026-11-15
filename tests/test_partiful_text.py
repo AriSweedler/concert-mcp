@@ -72,6 +72,11 @@ def test_lines_times_and_the_title() -> None:
     assert invite_description(lines, SHOW) == "Doors 7:30, show 8:30"
     assert invite_description(["Doors: 7 PM"], SHOW) == "Doors 7:00, show 8:30"
     assert invite_description(["Purchased: 2 tickets"], SHOW) == "Show 8:30"
+    # No doors time on the ticket: the announced one the lineup step wrote, when it has one.
+    expected = ["Expected: doors 6:00 PM, Zed Fox 7:00 PM"]
+    assert invite_description(expected, SHOW.replace(hour=19, minute=0)) == "Doors 6:00, show 7:00"
+    assert invite_description(["Doors: 7:30 PM", *expected], SHOW) == "Doors 7:30, show 8:30"
+    assert invite_description(["Expected: Zork 8:00 PM, Zed Fox 9:00 PM"], SHOW) == "Show 8:30"
 
 
 def test_link_fields_and_the_event_payload() -> None:

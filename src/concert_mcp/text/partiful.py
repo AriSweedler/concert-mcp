@@ -24,6 +24,7 @@ TICKETS_PREFIX = "Tickets: "
 PARTIFUL_PREFIX = "Partiful: "
 TEASER_PREFIX = "Teaser playlist: "
 DOORS_PREFIX = "Doors: "
+EXPECTED_PREFIX = "Expected: "
 EVENT_URL = "https://partiful.com/e/{id}"
 BUCKET = "getpartiful.appspot.com"
 STORAGE = f"https://firebasestorage.googleapis.com/v0/b/{BUCKET}/o"
@@ -32,6 +33,7 @@ _URL_RE = re.compile(r"https?://[^\s<>\"']+")
 # A line of chat or ticket text that names the ticket link: `tickets: <URL>`, nothing else on the line.
 _TICKETS_LINE_RE = re.compile(r"^[ \t]*tickets?[ \t]*:[ \t]*(https?://\S+)[ \t]*$", re.I | re.M)
 _CLOCK_RE = re.compile(r"^(\d{1,2})(?::(\d{2}))?\b")
+_EXPECTED_DOORS_RE = re.compile(r"^doors (\d{1,2})(?::(\d{2}))?\b")
 
 # What the create form on partiful.com saves besides the inputs (its defaults on 2026-11-14).
 EVENT_DEFAULTS: Mapping[str, Any] = {
@@ -112,8 +114,14 @@ def invite_title(artist: str, venue: str, start: datetime) -> str:
 
 
 def invite_description(lines: Sequence[str], start: datetime) -> str:
-    """'Doors 7:30, show 8:30' from the event's Doors line ('7:30 PM', '7 PM') and its start; else 'Show 8:30'."""
-    doors = _CLOCK_RE.match(line_value(lines, DOORS_PREFIX) or "")
+    """'Doors 7:30, show 8:30' from the event's doors time and its start; 'Show 8:30' when no doors time is known.
+
+    The doors time is the ticket's own (`Doors: 7:30 PM`, `Doors: 7 PM`), else the announced one the lineup step
+    found (`Expected: doors 6:00 PM, …`).
+    """
+    doors = _CLOCK_RE.match(line_value(lines, DOORS_PREFIX) or "") or _EXPECTED_DOORS_RE.match(
+        line_value(lines, EXPECTED_PREFIX) or ""
+    )
     show = short_clock(start)
     return f"Doors {int(doors.group(1))}:{doors.group(2) or '00'}, show {show}" if doors else f"Show {show}"
 
