@@ -232,8 +232,11 @@ class FakeSpotify:
         items: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
         fail: str | None = None,
         tracks: Sequence[Mapping[str, Any]] | None = None,
+        albums: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     ) -> None:
         self.artists: list[dict[str, Any]] = [dict(a) for a in (artists or [])]
+        # The albums `artist_albums` answers with, per artist id.
+        self.albums: dict[str, list[dict[str, Any]]] = {k: [dict(a) for a in v] for k, v in (albums or {}).items()}
         self.liked: list[dict[str, Any]] = [dict(r) for r in (liked or [])]
         # The catalogue `search_tracks` answers from: rows with name, artists (names) and uri.
         self.tracks: list[dict[str, Any]] = [dict(t) for t in (tracks or [])]
@@ -400,9 +403,102 @@ class FakeSpotify:
         self.playlists = [p for p in self.playlists if p.get("id") != playlist_id]
         self.unfollowed.append(playlist_id)
 
+    def artist_albums(self, artist_id: str) -> list[dict[str, Any]]:
+        self._record("artist_albums", artist_id=artist_id)
+        return [dict(a) for a in self.albums.get(artist_id, [])]
+
     @property
     def user_id(self) -> str | None:
         return "user1"
+
+
+PARTIFUL_REFUSED = "Partiful refused the request. Admin: check the host log."
+PARTIFUL_SIGNED_OUT = "Partiful is signed out. Ask me to log in to Partiful."
+PARTIFUL_BAD_CODE = "Partiful did not accept that code. Ask me to log in to Partiful for a new one."
+
+
+class FakePartiful:
+    """PartifulApi in memory: the pages created, the codes sent, the uploads made.
+
+    `fail` names a method that raises ProviderError('partiful'), `signed_out` one that raises
+    ProviderError('partiful-signed-out'), `crash` one that raises RuntimeError. `code` is the login code it accepts.
+    """
+
+    def __init__(
+        self,
+        *,
+        signed_in: bool = True,
+        place: Mapping[str, Any] | None = None,
+        fail: str | None = None,
+        signed_out: str | None = None,
+        crash: str | None = None,
+        name: str | None = "Pat Example",
+        code: str = "123456",
+    ) -> None:
+        self.session = signed_in
+        self.place = dict(place) if place else None
+        self.fail = fail
+        self.signed_out = signed_out
+        self.crash = crash
+        self.name = name
+        self.code = code
+        self.calls: list[str] = []
+        self.sent: list[str] = []
+        self.events: list[dict[str, Any]] = []
+        self.queries: list[str] = []
+        self.locations: list[tuple[str, dict[str, Any]]] = []
+        self.uploads: list[tuple[bytes, str]] = []
+        self.downloads: list[str] = []
+
+    def _record(self, method: str) -> None:
+        self.calls.append(method)
+        if self.fail == method:
+            raise ProviderError("partiful", f"Partiful refused | call='{method}' status='500'", PARTIFUL_REFUSED)
+        if self.signed_out == method:
+            raise ProviderError("partiful-signed-out", "Partiful is signed out | fake", PARTIFUL_SIGNED_OUT)
+        if self.crash == method:
+            raise RuntimeError(f"{method} blew up")
+
+    def signed_in(self) -> bool:
+        return self.session
+
+    def send_code(self, phone: str) -> None:
+        self._record("send_code")
+        self.sent.append(phone)
+
+    def login(self, phone: str, code: str) -> None:
+        self._record("login")
+        if code != self.code:
+            raise ProviderError("partiful-code", "Partiful refused | call='getLoginToken'", PARTIFUL_BAD_CODE)
+        self.session = True
+
+    def me(self) -> dict[str, Any]:
+        self._record("me")
+        return {"name": self.name} if self.name else {}
+
+    def create_event(self, event: Mapping[str, Any]) -> str:
+        self._record("create_event")
+        self.events.append(dict(event))
+        return f"pf{len(self.events)}"
+
+    def find_place(self, query: str) -> dict[str, Any] | None:
+        self._record("find_place")
+        self.queries.append(query)
+        return dict(self.place) if self.place else None
+
+    def set_location(self, event_id: str, location_info: Mapping[str, Any]) -> None:
+        self._record("set_location")
+        self.locations.append((event_id, dict(location_info)))
+
+    def upload_image(self, data: bytes, content_type: str) -> str:
+        self._record("upload_image")
+        self.uploads.append((data, content_type))
+        return f"external/user/u1/obj{len(self.uploads)}"
+
+    def download(self, url: str) -> bytes:
+        self._record("download")
+        self.downloads.append(url)
+        return b"JPEG-BYTES"
 
 
 class FakeSetlistFm:

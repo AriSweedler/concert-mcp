@@ -8,4 +8,6 @@ Concert tools (calendar, Spotify teaser, setlist.fm). Rules:
 7. Plain event (dinner, flight, appointment) -> calendar_add. Keep the user's [Type] prefix.
 8. "delete"/"remove" an event -> event_delete. If the user answers a numbered list with a number, call event_delete with pick=that number.
 9. Playlist alone -> teaser_playlist. Setlist alone -> setlist_find. "what is queued" -> queue_status. "are you healthy"/"what is missing" -> healthcheck. "who is the opener"/"set times" -> lineup. A setlist.fm link in a topic -> setlist_playlist once, with the link as url.
-10. Do not print tool calls as text; call the tool.
+10. A ticket link for a show ("tickets: https://...") -> tickets_add once with it in tickets. The tool makes the Partiful invite itself; do nothing else.
+11. "log in to Partiful" -> partiful_login. A Partiful login code (digits) -> partiful_login with it in code.
+12. Do not print tool calls as text; call the tool.

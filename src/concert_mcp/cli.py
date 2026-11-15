@@ -27,6 +27,7 @@ from concert_mcp.flows.deliver import deliver, render_tool_result, run_tool
 from concert_mcp.flows.event_delete import DELETE_ALIASES, DELETE_KNOWN, DeleteRequest, delete_event
 from concert_mcp.flows.healthcheck import run_healthcheck
 from concert_mcp.flows.lineup import lineup_outcome
+from concert_mcp.flows.partiful import login_outcome, tickets_outcome
 from concert_mcp.flows.poll import poll_outcome
 from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services
@@ -45,7 +46,16 @@ DEL_JSON_HINT = 'send exactly one JSON object, e.g. {"title": "Zed Fox", "date":
 # `add` and `del` take their request from the arguments argparse did not recognise.
 REQUEST_COMMANDS = frozenset({"add", "del"})
 # The tools a chat message reaches, offered to the model by try-image when OpenClaw's config has no toolFilter.
-CHAT_TOOLS = ("concert_add", "movie_add", "calendar_add", "event_delete", "setlist_playlist", "lineup")
+CHAT_TOOLS = (
+    "concert_add",
+    "movie_add",
+    "calendar_add",
+    "event_delete",
+    "setlist_playlist",
+    "lineup",
+    "tickets_add",
+    "partiful_login",
+)
 
 SPOTIFY_COMMANDS = (
     "auth",
@@ -165,6 +175,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--artist", default="", help="headliner; empty takes the live topic's show")
     p.add_argument("--date", default="", help="concert date, YYYY-MM-DD; empty takes the live topic's show")
     p.add_argument("--venue", default="", help="venue name, a hint for the search")
+
+    p = add("tickets", "record a show's ticket link: the show becomes a Partiful invite, the calendar event links both")
+    p.add_argument("--link", default="", help="the ticket page's address; empty uses the link the event already has")
+    p.add_argument("--artist", default="", help="headliner; empty takes the live topic's show")
+    p.add_argument("--date", default="", help="concert date, YYYY-MM-DD; empty takes the live topic's show")
+
+    p = add("partiful-login", "log in to Partiful: no --code texts one to CONCERT_MCP_PARTIFUL_PHONE")
+    p.add_argument("--code", default="", help="the code Partiful texted")
 
     gp = add("gemini", "Gemini maintenance commands")
     gsub = gp.add_subparsers(dest="gemini_command", metavar="<command>", required=True)
@@ -404,6 +422,24 @@ def _cmd_lineup(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     outcome, delivery, text = run_tool(
         lambda: lineup_outcome(args.artist, args.date, args.venue, svc), svc, send=not args.no_send
+    )
+    return emit(outcome, delivery, text, json_mode=args.json_mode)
+
+
+def _cmd_tickets(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    outcome, delivery, text = run_tool(
+        lambda: tickets_outcome(args.link, args.artist, args.date, svc, dry_run=args.dry_run),
+        svc,
+        send=not args.no_send,
+    )
+    return emit(outcome, delivery, text, json_mode=args.json_mode)
+
+
+def _cmd_partiful_login(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    outcome, delivery, text = run_tool(
+        lambda: login_outcome(args.code, svc, dry_run=args.dry_run), svc, send=not args.no_send
     )
     return emit(outcome, delivery, text, json_mode=args.json_mode)
 
@@ -660,6 +696,10 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_setlist_playlist(args, settings)
     if command == "lineup":
         return _cmd_lineup(args, settings)
+    if command == "tickets":
+        return _cmd_tickets(args, settings)
+    if command == "partiful-login":
+        return _cmd_partiful_login(args, settings)
     if command == "try-image":
         return _cmd_try_image(args, settings)
     if command == "failures":

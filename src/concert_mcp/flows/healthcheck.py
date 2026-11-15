@@ -41,6 +41,8 @@ CHECK_NAMES = (
     "setlistfm-auth",
     "places-key",
     "gemini-key",
+    "partiful-session",
+    "partiful-auth",
     "openclaw-binary",
     "openclaw-config",
     "openclaw-silent-reply",
@@ -316,6 +318,34 @@ def _check_gemini_key(ctx: _Ctx) -> Check:
     )
 
 
+PARTIFUL_LOGIN_FIX = "tell the bot to log in to Partiful, or run concert-mcp partiful-login"
+
+
+def _check_partiful_session(ctx: _Ctx) -> Check:
+    """Optional: SKIP while nobody has logged in (no invite is made), the credential-file rules otherwise."""
+    path = ctx.settings.partiful_credentials
+    if not path.exists():
+        return Check("partiful-session", "SKIP", f"optional: {PARTIFUL_LOGIN_FIX} (invites)")
+    return _credential_file(
+        "partiful-session", path, ("refresh_token",), legacy=False, anchor="partiful", auth_cmd=PARTIFUL_LOGIN_FIX
+    )
+
+
+def _check_partiful_auth(ctx: _Ctx) -> Check:
+    """Whether Partiful still takes the stored session. Only a signed call tells; the cause of a refusal is not
+    known here, so the evidence is the refusal itself."""
+    if not ctx.probe:
+        return Check("partiful-auth", "SKIP", SKIP_PROBE)
+    api = ctx.services().partiful
+    if api is None or not api.signed_in():
+        return Check("partiful-auth", "SKIP", "not signed in")
+    try:
+        me = api.me()
+    except Exception as e:  # noqa: BLE001
+        return Check("partiful-auth", "FAIL", _short(e), "partiful", PARTIFUL_LOGIN_FIX)
+    return Check("partiful-auth", "PASS", str(me.get("name") or "signed in"))
+
+
 def _check_openclaw_binary(ctx: _Ctx) -> Check:
     if not ctx.settings.send:
         return Check("openclaw-binary", "SKIP", SKIP_DELIVERY_OFF)
@@ -407,6 +437,8 @@ CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "setlistfm-auth": (_check_setlistfm_auth, "setlistfm"),
     "places-key": (_check_places_key, "configuration"),
     "gemini-key": (_check_gemini_key, "configuration"),
+    "partiful-session": (_check_partiful_session, "partiful"),
+    "partiful-auth": (_check_partiful_auth, "partiful"),
     "openclaw-binary": (_check_openclaw_binary, "openclaw"),
     "openclaw-config": (_check_openclaw_config, "openclaw"),
     "openclaw-silent-reply": (_check_openclaw_silent_reply, "openclaw"),

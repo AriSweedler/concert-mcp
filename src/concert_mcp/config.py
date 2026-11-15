@@ -70,6 +70,8 @@ class Settings:
     gemini_credentials: Path
     gemini_timeout_s: int
     op_gemini_item: str
+    partiful_credentials: Path
+    partiful_phone: str
     operator_name: str
     send: bool
     rename_topics: bool
@@ -158,6 +160,12 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ),
     ("gemini_timeout_s", "90", "cap on each Gemini call (a results page read takes thirty to seventy seconds)"),
     ("op_gemini_item", "Gemini - API key", "field credential, `gemini auth` only"),
+    (
+        "partiful_credentials",
+        "<config_dir>/partiful.json",
+        "the Partiful session (a refresh token), written by a login; without it no invite is made",
+    ),
+    ("partiful_phone", "", "the Partiful account's phone number, +1..., the one a login code is texted to"),
     ("operator_name", "Admin", "the name in 'Admin: check `gws auth` on the host.'"),
     ("send", "1", "0 disables reply delivery and topic renames everywhere"),
     ("rename_topics", "1", "0 keeps Telegram topic names as they are"),
@@ -381,6 +389,8 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         gemini_credentials=path_of("gemini_credentials", config_dir / "gemini.json"),
         gemini_timeout_s=int_of("gemini_timeout_s", 90),
         op_gemini_item=str_of("op_gemini_item", "Gemini - API key"),
+        partiful_credentials=path_of("partiful_credentials", config_dir / "partiful.json"),
+        partiful_phone=str_of("partiful_phone", ""),
         operator_name=str_of("operator_name", "Admin"),
         send=bool_of("send", True),
         rename_topics=bool_of("rename_topics", True),

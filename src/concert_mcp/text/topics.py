@@ -22,6 +22,8 @@ KEPT_LINE_PREFIXES = (
     "Venue: ",
     "Expected: ",
     "Opener setlist (recent): ",
+    "Tickets: ",
+    "Partiful: ",
 )
 
 

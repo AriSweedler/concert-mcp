@@ -200,16 +200,16 @@ def sync_setlist_playlist(
         return SyncResult("failed", name, len(songs), reason=f"{type(e).__name__}: {e}"[:REASON_LIMIT])
 
 
-def _topic_entry(svc: Services) -> TopicEntry | None:
+def live_topic_entry(svc: Services) -> TopicEntry | None:
     """The live topic's registry entry, when the call comes from a Telegram forum topic that owns an event."""
     _sid, route = svc.context.live_route(svc.clock.time())
     ft = forum_target(chat_target(route)) if route else None
     return topic_event(topic_key(ft[0], ft[1]), svc) if ft else None
 
 
-def _event_for_show(artist: str, date: str, svc: Services) -> tuple[str, dict[str, Any]] | None:
+def event_for_show(artist: str, date: str, svc: Services) -> tuple[str, dict[str, Any]] | None:
     """(calendar id, event) of the show: the live topic's event when there is one, else by title and date."""
-    entry = _topic_entry(svc)
+    entry = live_topic_entry(svc)
     if entry:
         e = live_event(entry, svc)
         if e:
@@ -225,7 +225,7 @@ def _event_for_show(artist: str, date: str, svc: Services) -> tuple[str, dict[st
 def link_event(artist: str, date: str, url: str, svc: Services) -> str | None:
     """Patch `Setlist playlist: <url>` into the show's event description once; None when no event was found."""
     try:
-        hit = _event_for_show(artist, date, svc)
+        hit = event_for_show(artist, date, svc)
         if hit is None:
             return None
         cal_id, e = hit
@@ -276,7 +276,7 @@ def setlist_playlist_outcome(
         if not url and not date:
             raise need("date")
         # In a topic the show's date is the event's: a pasted page may be another night of the same tour.
-        entry = _topic_entry(svc)
+        entry = live_topic_entry(svc)
         if not date and entry:
             date = entry.date
 

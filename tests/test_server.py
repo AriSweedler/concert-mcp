@@ -1,4 +1,4 @@
-"""server.py: the ten tools, their string-only schemas, the instructions, and the output contract on fake services."""
+"""server.py: the twelve tools, their string-only schemas, the instructions, and the output contract on fake services."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from concert_mcp.text.reply import NO_CANDIDATES_REPLY, WHICH_EVENT_REPLY  # noq
 from conftest import make_services  # noqa: E402
 from fakes import FakeCalendar  # noqa: E402
 
-TEN = {
+TWELVE = {
     "movie_add",
     "concert_add",
     "calendar_add",
@@ -34,6 +34,8 @@ TEN = {
     "setlist_find",
     "setlist_playlist",
     "lineup",
+    "tickets_add",
+    "partiful_login",
     "queue_status",
     "healthcheck",
 }
@@ -48,9 +50,9 @@ async def _tools(svc: Services) -> dict[str, Any]:
 # ---------- registration and schema ----------
 
 
-async def test_registers_exactly_the_ten_tools(svc: Services) -> None:
-    assert set(await _tools(svc)) == TEN
-    assert {fn.__name__ for fn in TOOLS} == TEN
+async def test_registers_exactly_the_twelve_tools(svc: Services) -> None:
+    assert set(await _tools(svc)) == TWELVE
+    assert {fn.__name__ for fn in TOOLS} == TWELVE
 
 
 async def test_every_parameter_is_a_described_string_with_a_default(svc: Services) -> None:

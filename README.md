@@ -61,6 +61,16 @@ uv run concert-mcp spotify setlist-auth --manual
 
 [Details](docs/credentials.md#setlistfm).
 
+### Partiful
+
+A concert whose ticket link is known becomes a public [Partiful](https://partiful.com) invite: send `tickets: <link>` in the show's topic. Partiful has no API, so the server signs in as you and makes the calls the site makes. Set the account's phone number once, on the host:
+
+```sh
+echo 'partiful_phone = "+15555550100"' >> ~/.config/concert-mcp/config.toml
+```
+
+Then tell the bot to log in to Partiful. Partiful texts a code to that number, and you send the code to the bot. [Details](docs/credentials.md#partiful).
+
 ### OpenClaw
 
 [OpenClaw](https://docs.openclaw.ai) is the Telegram gateway that calls this server from chat. On the OpenClaw host, register the server. Then allow its three tools:
@@ -83,7 +93,7 @@ Settings are `CONCERT_MCP_*` environment variables, or keys in `~/.config/concer
 
 | Document | What it holds |
 |---|---|
-| [Architecture and design](docs/architecture.md) | the ten tools, what the model sees, the small-model rule |
+| [Architecture and design](docs/architecture.md) | the twelve tools, what the model sees, the small-model rule |
 | [Credentials](docs/credentials.md) | each provider in full, and the OpenClaw entry explained |
 | [Configuration](docs/configuration.md) | every setting, and what the healthcheck prints |
 | [CLI](docs/cli.md) | every subcommand, flag and exit code |

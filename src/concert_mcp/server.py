@@ -1,4 +1,4 @@
-"""The MCP server: ten coarse tools for a small model (unit server).
+"""The MCP server: twelve coarse tools for a small model (unit server).
 
 Every parameter is a `Param`: a string with default "" whose validator runs `clean_param` before pydantic sees the
 value, so a number, a null or a quoted string from the model becomes a clean string and never a schema error (which
@@ -29,6 +29,7 @@ from concert_mcp.flows.failures import save_tool_failure
 from concert_mcp.flows.healthcheck import healthcheck_outcome
 from concert_mcp.flows.lineup import lineup_outcome
 from concert_mcp.flows.movie_add import add_movie, is_movie_title
+from concert_mcp.flows.partiful import login_outcome, tickets_outcome
 from concert_mcp.flows.queue import queue_outcome
 from concert_mcp.flows.services import Services, build_services
 from concert_mcp.flows.setlist import setlist_outcome
@@ -56,6 +57,8 @@ TOOL_NAMES = (
     "setlist_find",
     "setlist_playlist",
     "lineup",
+    "tickets_add",
+    "partiful_login",
     "queue_status",
     "healthcheck",
 )
@@ -70,6 +73,8 @@ ANNOTATIONS = {
     "setlist_find": ToolAnnotations(readOnlyHint=True),
     "setlist_playlist": ToolAnnotations(),
     "lineup": ToolAnnotations(),
+    "tickets_add": ToolAnnotations(),
+    "partiful_login": ToolAnnotations(),
     "queue_status": ToolAnnotations(readOnlyHint=True),
     "healthcheck": ToolAnnotations(readOnlyHint=True),
 }
@@ -387,6 +392,41 @@ def lineup(
     )
 
 
+def tickets_add(
+    tickets: Annotated[
+        Param,
+        Field(
+            description="The ticket link as the user sent it, e.g. "
+            '"https://www.ticketweb.com/event/zed-fox/123" or "tickets: https://www.ticketweb.com/event/zed-fox/123".'
+        ),
+    ] = "",
+    artist: Annotated[Param, Field(description='Headliner, e.g. "Zed Fox". Empty in a topic that has a show.')] = "",
+    date: Annotated[Param, Field(description="Concert date as YYYY-MM-DD. Empty in a topic that has a show.")] = "",
+) -> str:
+    """Record a show's ticket link; the show then becomes a Partiful invite and the calendar event links both."""
+    return _run(
+        "tickets_add",
+        lambda svc, a: tickets_outcome(a["tickets"], a["artist"], a["date"], svc, dry_run=svc.settings.dry_run),
+        tickets=tickets,
+        artist=artist,
+        date=date,
+    )
+
+
+def partiful_login(
+    code: Annotated[
+        Param,
+        Field(description='The login code Partiful texted, e.g. "447217". Leave empty to have a code texted.'),
+    ] = "",
+) -> str:
+    """Log in to Partiful: no code texts one to the configured number, a code stores the session."""
+    return _run(
+        "partiful_login",
+        lambda svc, a: login_outcome(a["code"], svc, dry_run=svc.settings.dry_run),
+        code=code,
+    )
+
+
 def queue_status() -> str:
     """List the concerts whose setlist.fm page the poll re-reads when asked."""
     return _run("queue_status", lambda svc, a: queue_outcome(svc))
@@ -406,13 +446,15 @@ TOOLS: tuple[Callable[..., str], ...] = (
     setlist_find,
     setlist_playlist,
     lineup,
+    tickets_add,
+    partiful_login,
     queue_status,
     healthcheck,
 )
 
 
 def build_server(svc: Services | None = None) -> MCPServer:
-    """MCPServer('concert') with the nine tools; services are built lazily on the first tool call."""
+    """MCPServer('concert') with the twelve tools; services are built lazily on the first tool call."""
     global _svc
     _svc = svc
     mcp = MCPServer("concert", instructions=INSTRUCTIONS, version=__version__)

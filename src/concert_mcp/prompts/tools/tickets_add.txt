@@ -1,0 +1,1 @@
+Record the ticket link of a concert on the calendar. The tool does the rest: it makes the Partiful invite and links both from the calendar event. Call once with the link in tickets, e.g. https://www.ticketweb.com/event/zed-fox/123. If the result starts with NO_REPLY, answer exactly NO_REPLY.

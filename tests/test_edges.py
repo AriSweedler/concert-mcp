@@ -699,7 +699,7 @@ def test_text_module_corners() -> None:
 
 
 def test_setlist_playlist_duplicate_songs_and_a_stale_topic(svc: Services, now: datetime) -> None:
-    from concert_mcp.flows.setlist_playlist import _event_for_show
+    from concert_mcp.flows.setlist_playlist import event_for_show
 
     svc.spotify.tracks = [{"name": "First Light", "artists": ["Zed Fox"], "uri": "spotify:track:t1"}]  # type: ignore[union-attr]
     songs = [Song(name="First Light"), Song(name="First Light")]
@@ -710,4 +710,4 @@ def test_setlist_playlist_duplicate_songs_and_a_stale_topic(svc: Services, now: 
         make_topic_entry(event_id="gone", calendar_id="cal-concerts", summary="S", start=now, now=now),
         svc,
     )
-    assert _event_for_show("Zed Fox", "2026-11-14", svc) is None
+    assert event_for_show("Zed Fox", "2026-11-14", svc) is None

@@ -1,8 +1,8 @@
-"""The ten side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
+"""The eleven side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
@@ -84,6 +84,8 @@ class SpotifyApi(Protocol):
 
     def unfollow_playlist(self, playlist_id: str) -> None: ...
 
+    def artist_albums(self, artist_id: str) -> list[dict[str, Any]]: ...
+
     @property
     def user_id(self) -> str | None: ...
 
@@ -101,6 +103,26 @@ class SetlistFmApi(Protocol):
     def get_setlist(self, setlist_id: str) -> dict[str, Any] | None: ...
 
     def latest_setlist(self, artist: str) -> dict[str, Any] | None: ...
+
+
+class PartifulApi(Protocol):
+    def signed_in(self) -> bool: ...
+
+    def send_code(self, phone: str) -> None: ...
+
+    def login(self, phone: str, code: str) -> None: ...
+
+    def me(self) -> dict[str, Any]: ...
+
+    def create_event(self, event: Mapping[str, Any]) -> str: ...
+
+    def find_place(self, query: str) -> dict[str, Any] | None: ...
+
+    def set_location(self, event_id: str, location_info: Mapping[str, Any]) -> None: ...
+
+    def upload_image(self, data: bytes, content_type: str) -> str: ...
+
+    def download(self, url: str) -> bytes: ...
 
 
 class VenueLookup(Protocol):

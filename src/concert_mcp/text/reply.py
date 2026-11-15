@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from concert_mcp.text.artists import TeaserResult
     from concert_mcp.text.candidates import Candidate
     from concert_mcp.text.lineup import Lineup
+    from concert_mcp.text.partiful import InviteResult
     from concert_mcp.text.setlists import SetlistResult, SyncResult
 
 __all__ = [
@@ -29,6 +30,8 @@ __all__ = [
     "bullets",
     "dropped_note",
     "event_link",
+    "partiful_note",
+    "partiful_problem",
     "provider_reply",
     "render_added",
     "render_body",
@@ -36,6 +39,9 @@ __all__ = [
     "render_dry_add",
     "render_lineup",
     "render_none_found",
+    "render_partiful",
+    "render_partiful_code_sent",
+    "render_partiful_signed_in",
     "render_poll",
     "render_queue",
     "render_removed",
@@ -54,6 +60,12 @@ SETLIST_PLAYLIST_LINE_PREFIX = "Setlist playlist: "
 NO_CANDIDATES_REPLY = (
     "I do not have a list to pick from any more. Tell me the event name and date and I will look again."
 )
+PARTIFUL_NEED_TICKETS = "I need the ticket link to make the Partiful. Reply with it and I will make it."
+PARTIFUL_NO_EVENT_REPLY = "I found no calendar event for that show. Add the concert first, then ask for the Partiful."
+PARTIFUL_NO_PHONE = (
+    "Partiful has no phone number to text a code to. {operator}: set CONCERT_MCP_PARTIFUL_PHONE (README.md#partiful)."
+)
+PARTIFUL_EVENT_LINKED = "The calendar event has the links."
 WHICH_EVENT_REPLY = "Which event? Tell me the artist or title (and the date if you know it) and I will remove it."
 
 EVENT_URL = "https://www.google.com/calendar/event?eid={eid}"  # the API htmlLink's form, without its ctz
@@ -192,6 +204,55 @@ def setlist_line(res: SetlistResult | None) -> str | None:
     if res is not None and res.found and res.url:
         return f"Setlist: {res.url}"
     return None
+
+
+def partiful_problem(res: InviteResult, operator: str) -> str:
+    """Why no invite was made, and the next step: the ticket link, the login code, or the operator.
+
+    A dead session is stated as it is ("Partiful is signed out"), never with a guess at what ended it.
+    """
+    if res.status == "need_tickets":
+        return PARTIFUL_NEED_TICKETS
+    if res.status == "signed_out" and res.phone_tail:
+        return (
+            f"Partiful is signed out. I texted a code to the number ending {res.phone_tail}. "
+            "Send me the code, then ask for the Partiful again."
+        )
+    if res.status == "signed_out":
+        return f"Partiful is signed out. {operator}: set CONCERT_MCP_PARTIFUL_PHONE, then ask me to log in to Partiful."
+    return f"Partiful failed: {(res.reason or 'unknown error')[:REASON_LEN]}"
+
+
+def partiful_note(res: InviteResult, operator: str) -> str | None:
+    """concert_add's note for an invite that was asked for and not made; None when there is one."""
+    if res.status in ("created", "exists"):
+        return None
+    return f"Partiful not made: {partiful_problem(res, operator)}"
+
+
+def render_partiful(res: InviteResult, operator: str, *, event_note: str = PARTIFUL_EVENT_LINKED) -> str:
+    """The partiful_add tool's reply: the page and its link fields, or why there is no page."""
+    rows = "".join("\n" + link_bullet(label, url) for label, url in res.links)
+    if res.status == "created":
+        cover = "the cover of the artist's latest album" if res.poster else "none, Partiful's default"
+        poster = bullet("Poster", cover)
+        head = f"**Partiful made:** [{res.title}]({res.url})"
+        return f"{head}{rows}\n{poster}\nNobody is invited yet. {event_note}"
+    if res.status == "exists":
+        return f"This show already has a Partiful: [Partiful]({res.url})"
+    if res.status == "dry_run":
+        return f"**Would make the Partiful** {res.title}{rows}"
+    return partiful_problem(res, operator)
+
+
+def render_partiful_code_sent(tail: str) -> str:
+    """The login's first half: a code is on its way."""
+    return f"I texted a Partiful code to the number ending {tail}. Send me the code."
+
+
+def render_partiful_signed_in(name: str | None) -> str:
+    """The login's second half."""
+    return f"Partiful is signed in as {name}." if name else "Partiful is signed in."
 
 
 def render_body(
@@ -384,6 +445,12 @@ def provider_reply(provider: str, operator: str, *, what: str = "request") -> st
             return f"Gemini is not set up on this machine. {operator}: run `concert-mcp gemini auth`."
         case "gemini":
             return f"The lineup lookup failed; the event keeps what the ticket said. {operator}: check the host log."
+        case "partiful":
+            return f"Partiful refused the request. {operator}: check the host log."
+        case "partiful-signed-out":
+            return "Partiful is signed out. Ask me to log in to Partiful."
+        case "partiful-code":
+            return "Partiful did not accept that code. Ask me to log in to Partiful for a new one."
         case "op":
             return f"1Password did not answer. {operator}: run the auth command with --manual."
         case _:

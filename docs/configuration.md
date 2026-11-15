@@ -52,6 +52,8 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_GEMINI_FALLBACKS` | `gemini-3.5-flash,gemini-3.8-flash` | tried in turn when the model answers 429 or 503 |
 | `CONCERT_MCP_GEMINI_GROUNDING` | `url` | `url`: the model reads the venue's pages (`url_context`, free); `search`: adds Google Search grounding, which needs a billed key |
 | `CONCERT_MCP_OP_GEMINI_ITEM` | `Gemini - API key` | field credential, `gemini auth` only |
+| `CONCERT_MCP_PARTIFUL_CREDENTIALS` | `<config_dir>/partiful.json` | the Partiful session (a refresh token), written by a login; without it no invite is made |
+| `CONCERT_MCP_PARTIFUL_PHONE` | (empty) | the Partiful account's phone number, `+1...`, the one a login code is texted to; without it nobody can log in |
 | `CONCERT_MCP_OPERATOR_NAME` | `Admin` | the name in 'Admin: check `gws auth` on the host.' |
 | `CONCERT_MCP_SEND` | `1` | 0 disables reply delivery and topic renames everywhere |
 | `CONCERT_MCP_RENAME_TOPICS` | `1` | 0 keeps Telegram topic names as they are |
@@ -99,6 +101,8 @@ FAIL  setlistfm-key    missing
 SKIP  setlistfm-auth   pass --probe
 SKIP  places-key       optional: concert-mcp venues auth stores a Google Places key
 SKIP  gemini-key       optional: concert-mcp gemini auth stores a Gemini key (openers, set times)
+SKIP  partiful-session optional: tell the bot to log in to Partiful, or run concert-mcp partiful-login (invites)
+SKIP  partiful-auth    pass --probe
 FAIL  openclaw-binary  openclaw not found
 SKIP  openclaw-config  absent
 SKIP  openclaw-silent-reply absent
@@ -111,4 +115,4 @@ PASS  setlist-queue    0 shows queued
 4 failing
 ```
 
-`--probe` makes one real call per provider (list calendars, resolve the Concerts calendar, Spotify `/me`, one setlist.fm search) in place of the `pass --probe` rows. With `CONCERT_MCP_SEND=0` the three `openclaw-*` rows read `SKIP ... delivery off (CONCERT_MCP_SEND=0)`, which is how a development machine without OpenClaw gets to `3 failing`. When everything passes the last line is `all good`. `--json` prints the same report as one JSON object.
+`--probe` makes one real call per provider (list calendars, resolve the Concerts calendar, Spotify `/me`, one setlist.fm search, Partiful's "who am I" when a session is stored) in place of the `pass --probe` rows. With `CONCERT_MCP_SEND=0` the three `openclaw-*` rows read `SKIP ... delivery off (CONCERT_MCP_SEND=0)`, which is how a development machine without OpenClaw gets to `3 failing`. When everything passes the last line is `all good`. `--json` prints the same report as one JSON object.

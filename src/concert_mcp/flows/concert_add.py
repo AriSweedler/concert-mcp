@@ -2,7 +2,8 @@
 
 `prepare_event` is the pure half (validation and derivation in the legacy `cal-add.py` order); `add_event` is the
 orchestration: teaser, setlist lookup, topic registry (a Telegram forum topic owns one event, so a repeat add there
-updates it), duplicate guard, insert, queue, topic rename. Flows return an Outcome and never raise, print or exit;
+updates it), duplicate guard, insert, lineup, the Partiful invite of a show whose ticket link is known, queue,
+topic rename. Flows return an Outcome and never raise, print or exit;
 `flows/deliver.py` turns the Outcome into text.
 """
 
@@ -48,9 +49,11 @@ from concert_mcp.text.derive import (
 )
 from concert_mcp.text.description import description_of, from_lines
 from concert_mcp.text.naming import topic_name
+from concert_mcp.text.partiful import PARTIFUL_PREFIX, TICKETS_PREFIX, ticket_link_in
 from concert_mcp.text.reply import (
     changed_note,
     dropped_note,
+    partiful_note,
     render_added,
     render_body,
     render_dry_add,
@@ -331,7 +334,10 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
     teaser = make_teaser(p.title, date, svc, dry_run=req.dry_run) if (req.concert and req.teaser) else None
     setlist = find_setlist(p.title, date, where, svc) if req.concert else None
     t_line, s_line, v_line = teaser_line(teaser), setlist_line(setlist), venue_line(venue)
-    lines = list(p.lines) + [ln for ln in (v_line, t_line, s_line) if ln]
+    # `tickets: <URL>` in the text is the ticket link, by rule; it is the fact that turns the show into an invite.
+    tickets = ticket_link_in(p.raw_source) if req.concert else None
+    tix_line = f"{TICKETS_PREFIX}{tickets}" if tickets else None
+    lines = list(p.lines) + [ln for ln in (v_line, tix_line, t_line, s_line) if ln]
 
     # An end the ticket did not state is the default length: the calendar needs one, the reply does not guess.
     when = fmt_start(p.start) if p.end_assumed else fmt_range(p.start, p.end)
@@ -401,6 +407,21 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 links["Expected"] = step.lineup.sources[0]  # the page the set times were read from
             common["lineup"] = step.lineup.to_json()
             common["description"] = [*common["description"], *extra]
+        if req.concert and event_id and any(ln.startswith(TICKETS_PREFIX) for ln in common["description"]):
+            # A show with a ticket link is expressed as a Partiful invite (flows/partiful.py); one that already
+            # has a page keeps it. Nothing here can fail the add. Imported here: flows/partiful.py finds a show's
+            # event through event_delete, which imports this module.
+            from concert_mcp.flows.partiful import invite_step
+
+            invite = invite_step(event_cal_id, event_id, tickets, svc)
+            common["partiful"] = invite.to_json()
+            note = partiful_note(invite, svc.operator)
+            if note:
+                more_notes.append(note)
+            if invite.url:
+                page = f"{PARTIFUL_PREFIX}{invite.url}"
+                extra = (*extra, page)
+                common["description"] = [ln for ln in common["description"] if ln != page] + [page]
         if updated:
             more_notes.append(changed_note(changed))
         if req.concert and event_id:

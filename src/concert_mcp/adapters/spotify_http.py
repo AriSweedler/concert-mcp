@@ -33,6 +33,8 @@ TOKEN_SLACK_S = 60
 # Spotify's Retry-After is honoured up to this many seconds; a longer wait is capped.
 MAX_RETRY_AFTER_S = 30
 ADD_CHUNK = 100
+# The most rows GET /artists/<id>/albums gives at once: a larger limit answers 400 "Invalid limit" (2026-11-14).
+ALBUMS_PAGE = 10
 
 
 @dataclass
@@ -316,6 +318,13 @@ class SpotifyClient:
     def unfollow_playlist(self, playlist_id: str) -> None:
         """DELETE /playlists/<id>/followers."""
         self.api("DELETE", f"/playlists/{playlist_id}/followers")
+
+    def artist_albums(self, artist_id: str) -> list[dict[str, Any]]:
+        """GET /artists/<id>/albums: the first page of the artist's own albums and singles, each with its covers.
+        Spotify lists the albums before the singles, newest first, so the page holds the newest albums."""
+        params = {"include_groups": "album,single", "limit": ALBUMS_PAGE}
+        res = self.api("GET", f"/artists/{artist_id}/albums", params=params) or {}
+        return list(res.get("items") or [])
 
 
 def _plain_playlist(pl: dict[str, Any]) -> dict[str, Any]:

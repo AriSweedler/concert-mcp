@@ -341,3 +341,11 @@ def test_a_playlist_description_comes_back_as_it_was_written(client: SpotifyClie
 
     fake.add("POST", f"{API}/me/playlists", {"id": "p9", "description": escaped})
     assert client.create_playlist(name="n", description=plain, public=False)["description"] == plain
+
+
+def test_artist_albums(client: SpotifyClient, fake: FakeUrlopen) -> None:
+    fake.add("GET", f"{API}/artists/a1/albums", {"items": [{"name": "Burrow"}]})
+    assert client.artist_albums("a1") == [{"name": "Burrow"}]
+    assert fake.requests[-1][1] == f"{API}/artists/a1/albums?include_groups=album%2Csingle&limit=10"
+    fake.add("GET", f"{API}/artists/a1/albums", b"")
+    assert client.artist_albums("a1") == []

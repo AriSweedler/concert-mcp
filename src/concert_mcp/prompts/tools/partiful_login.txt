@@ -1,0 +1,1 @@
+Log in to Partiful. Called with no code, it texts a login code to the owner's phone. Called with the code the user sent, e.g. 447217, it finishes the login. If the result starts with NO_REPLY, answer exactly NO_REPLY.
