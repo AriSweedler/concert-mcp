@@ -15,6 +15,7 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_SENT_LOG` | `<state_dir>/last-sent.json` | reply dedupe memory |
 | `CONCERT_MCP_FIX_LOG` | `<state_dir>/fix-log.json` | the retry-loop breaker's memory |
 | `CONCERT_MCP_TOPICS_FILE` | `<state_dir>/topics.json` | which event each Telegram forum topic owns; a repeat `concert_add` in a topic updates that event |
+| `CONCERT_MCP_CONCERTS_DIR` | `<state_dir>/concerts` | one JSON file per concert, `<YYYY-MM-DD>-<artist>.json` (`<YYYY-MM-DD>-<HHMM>-<artist>.json` for a second show by the artist that day): the facts known and the expressions made; `concert-mcp concerts` lists them |
 | `CONCERT_MCP_GWS_BIN` | `which gws, else /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, else gws` | the Google Workspace CLI |
 | `CONCERT_MCP_GWS_KEY_FILE` | `~/.config/gws/.encryption_key` | exists -> GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file on every gws call |
 | `CONCERT_MCP_GWS_TIMEOUT_S` | `60` | wall-clock cap per gws call |

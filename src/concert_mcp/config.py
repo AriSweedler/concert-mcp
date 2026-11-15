@@ -36,6 +36,7 @@ class Settings:
     sent_log: Path
     fix_log: Path
     topics_file: Path
+    concerts_dir: Path
     gws_bin: str
     gws_key_file: Path
     gws_timeout_s: int
@@ -102,6 +103,11 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
     ("sent_log", "<state_dir>/last-sent.json", "reply dedupe memory"),
     ("fix_log", "<state_dir>/fix-log.json", "the retry-loop breaker's memory"),
     ("topics_file", "<state_dir>/topics.json", "which event each Telegram topic owns"),
+    (
+        "concerts_dir",
+        "<state_dir>/concerts",
+        "one JSON file per concert, <YYYY-MM-DD>-<artist>.json: the facts known and the expressions made",
+    ),
     (
         "gws_bin",
         "which gws, else /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, else gws",
@@ -353,6 +359,7 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         sent_log=path_of("sent_log", state_dir / "last-sent.json"),
         fix_log=path_of("fix_log", state_dir / "fix-log.json"),
         topics_file=path_of("topics_file", state_dir / "topics.json"),
+        concerts_dir=path_of("concerts_dir", state_dir / "concerts"),
         gws_bin=which("gws_bin", "gws"),
         gws_key_file=path_of("gws_key_file", home / ".config/gws/.encryption_key"),
         gws_timeout_s=int_of("gws_timeout_s", 60),

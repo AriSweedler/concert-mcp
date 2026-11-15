@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any
 
 from concert_mcp.adapters.protocols import PartifulApi
+from concert_mcp.flows.records import find_record, forget_event, remember_concert, remember_invite
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist_playlist import event_for_show, live_topic_entry
 from concert_mcp.flows.teaser import resolve_artist
@@ -59,6 +60,8 @@ from concert_mcp.text.reply import (
     render_partiful_code_sent,
     render_partiful_signed_in,
 )
+from concert_mcp.text.routes import chat_target, forum_target
+from concert_mcp.text.topics import topic_key
 from concert_mcp.text.venues import venue_name_of
 
 REASON_LIMIT = 160
@@ -241,6 +244,13 @@ def invite_for_event(
     res = make_invite(req, svc, dry_run=dry_run)
     if res.status == "created":
         note = link_event(calendar_id, event["id"], [f"{PARTIFUL_PREFIX}{res.url}"], svc)
+        made = {
+            "url": res.url,
+            "title": res.title,
+            "description": invite_description(req.lines, req.start),
+            "links": [list(pair) for pair in res.links],
+        }
+        remember_invite(event["id"], made, svc)
     return res, note
 
 
@@ -253,6 +263,34 @@ def invite_step(calendar_id: str, event_id: str, link: str | None, svc: Services
     except Exception as e:  # noqa: BLE001 - the reply with the calendar link matters more than the invite
         log_warn(f"partiful step failed | error='{type(e).__name__}: {str(e)[:200]}'")
         return InviteResult("failed", reason=f"{type(e).__name__}: {e}"[:REASON_LIMIT])
+
+
+def live_topic_key(svc: Services) -> str | None:
+    """'<chat>:<thread>' of the Telegram forum topic the caller speaks from; None anywhere else."""
+    _sid, route = svc.context.live_route(svc.clock.time())
+    target = forum_target(chat_target(route)) if route else None
+    return topic_key(target[0], target[1]) if target else None
+
+
+def recorded_show(svc: Services, *, topic: str | None, artist: str, date: str) -> tuple[str, dict[str, Any]] | None:
+    """(calendar id, event) of the show the records know: the topic's, else the one named by artist and day.
+
+    The record says which event it is, with no search; one read of that event confirms it is still there and
+    brings in anything changed by hand (the read refreshes the record). A show the calendar no longer has is
+    forgotten, and so is not found.
+    """
+    record = find_record(svc, topic=topic, artist=artist, date=date)
+    if record is None:
+        return None
+    try:
+        event = svc.calendar.get_event(record.calendar_id, record.event_id)
+    except ProviderError as e:
+        log_warn(f"recorded show not read | error='{str(e.error)[:200]}'")
+        return None
+    if event.get("status") == "cancelled" or not event.get("id"):
+        forget_event(record.event_id, svc.state, svc.settings.concerts_dir)
+        return None
+    return record.calendar_id, event
 
 
 def _kind(res: InviteResult) -> Kind:
@@ -277,19 +315,29 @@ def tickets_outcome(tickets: str, artist: str, date: str, svc: Services, *, dry_
         link = ticket_link(tickets)
         if tickets and not link:
             raise FixInput(f"tickets holds no link: {tickets[:80]}", TICKETS_FIX)
-        entry = live_topic_entry(svc)
-        event = live_event(entry, svc) if entry else None
-        if entry and event:
-            calendar_id = entry.calendar_id
+        topic = live_topic_key(svc)
+        found = recorded_show(svc, topic=topic, artist=artist, date=concert_date(date) if date else "")
+        if found is None:
+            # No record of the show yet (it predates the records, or was added elsewhere): the topic registry and
+            # the calendar find it, and it is recorded for the next time.
+            entry = live_topic_entry(svc)
+            event = live_event(entry, svc) if entry else None
+            if entry and event:
+                calendar_id = entry.calendar_id
+            else:
+                if not artist:
+                    raise need("artist")
+                if not date:
+                    raise need("date")
+                hit = event_for_show(artist, concert_date(date), svc)
+                if hit is None:
+                    error = "no calendar event for the show"
+                    return Outcome(Kind.NEED_USER, reply=PARTIFUL_NO_EVENT_REPLY, error=error)
+                calendar_id, event = hit
+                topic = None  # found by name, not through the topic: the topic does not own it
+            remember_concert(event, calendar_id, svc, topic=topic)
         else:
-            if not artist:
-                raise need("artist")
-            if not date:
-                raise need("date")
-            hit = event_for_show(artist, concert_date(date), svc)
-            if hit is None:
-                return Outcome(Kind.NEED_USER, reply=PARTIFUL_NO_EVENT_REPLY, error="no calendar event for the show")
-            calendar_id, event = hit
+            calendar_id, event = found
         res, note = invite_for_event(calendar_id, event, link, svc, dry_run=dry_run)
         kind = _kind(res)
         error = None if kind in (Kind.OK, Kind.DRY_RUN) else (res.reason or res.status)

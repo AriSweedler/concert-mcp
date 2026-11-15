@@ -17,6 +17,7 @@ from typing import Any
 from concert_mcp.config import Settings
 from concert_mcp.flows.lineup import add_lineup_to_event
 from concert_mcp.flows.queue import make_entry, queue_add, queue_forget
+from concert_mcp.flows.records import remember_concert
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist
 from concert_mcp.flows.teaser import make_teaser
@@ -388,6 +389,23 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         more_notes = list(notes)
         extra: tuple[str, ...] = ()
         links: dict[str, str] = {}
+        if req.concert and event_id:
+            # The show's record (flows/records.py): written before the steps below, whose calendar writes keep it
+            # in step from here on.
+            remember_concert(
+                {
+                    "id": event_id,
+                    "summary": p.title,
+                    "start": {"dateTime": p.start.isoformat()},
+                    "end": {"dateTime": p.end.isoformat()},
+                    "location": location,
+                    "description": "\n".join(common["description"]),
+                    "htmlLink": html_link,
+                },
+                event_cal_id,
+                svc,
+                topic=key,
+            )
         if req.concert and event_id and svc.gemini is not None:
             # After the insert, so the link is never held hostage by the lookup; one grounded call, capped.
             step = add_lineup_to_event(

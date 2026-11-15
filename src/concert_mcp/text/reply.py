@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from concert_mcp.text.candidates import Candidate
     from concert_mcp.text.lineup import Lineup
     from concert_mcp.text.partiful import InviteResult
+    from concert_mcp.text.records import ConcertRecord
     from concert_mcp.text.setlists import SetlistResult, SyncResult
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "render_added",
     "render_body",
     "render_candidates",
+    "render_concerts",
     "render_dry_add",
     "render_lineup",
     "render_none_found",
@@ -244,6 +246,18 @@ def render_partiful(res: InviteResult, operator: str, *, event_note: str = PARTI
     if res.status == "dry_run":
         return f"**Would make the Partiful** {res.title}{rows}"
     return partiful_problem(res, operator)
+
+
+def render_concerts(rows: Sequence[tuple[ConcertRecord, Mapping[str, str]]]) -> str:
+    """`concert-mcp concerts`: each recorded show, soonest first, and where each of its expressions stands."""
+    if not rows:
+        return "No concerts recorded yet."
+    lines = [
+        f"• {r.date} {r.artist} @ {r.location.split(chr(10))[0].split(',')[0]} — "
+        + "; ".join(f"{name} {state}" for name, state in e.items())
+        for r, e in rows
+    ]
+    return f"**Concerts** ({len(rows)} shows)\n" + "\n".join(lines)
 
 
 def render_partiful_code_sent(tail: str) -> str:

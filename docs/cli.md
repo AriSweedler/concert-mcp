@@ -19,6 +19,7 @@ concert-mcp [--json] [--dry-run] [--no-send] [--config-dir PATH] [--log-level LE
 | `failures list` | `concert-mcp failures list` |
 | `failures replay` | `concert-mcp failures replay 1794080325` (try-image on a saved failure) |
 | `tickets` | `concert-mcp tickets --link https://www.ticketweb.com/event/zed-fox/123 --artist 'Zed Fox' --date 2026-11-14` (record the show's ticket link: the calendar event gains `Tickets`, the show becomes a Partiful invite and the event gains `Partiful`; without `--link` the event's own `Tickets` line is the link) |
+| `concerts` | `concert-mcp concerts` (every recorded concert, soonest first, and where each of its expressions stands: `calendar made; teaser playlist made; setlist playlist not made; partiful needs the ticket link`); `--json` prints the records |
 | `partiful-login` | `concert-mcp partiful-login`, then `concert-mcp partiful-login --code 123456` (the first texts a code to `CONCERT_MCP_PARTIFUL_PHONE`, the second stores the session) |
 | `queue` | `concert-mcp queue` (the shows waiting for the weekly setlist check, and `Last poll: <time>`) |
 | `poll` | `concert-mcp poll [--force]` (the weekly setlist check; see [poll](#poll)) |

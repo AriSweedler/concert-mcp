@@ -628,6 +628,9 @@ class MemoryState:
     def mtime(self, path: Path) -> float | None:
         return self.mtimes.get(Path(path))
 
+    def names(self, directory: Path) -> list[str]:
+        return sorted(p.name for p in self.files if p.parent == Path(directory) and p.suffix == ".json")
+
 
 class FakeClock:
     """Clock frozen at `now`; sleep() records the seconds and advances the clock."""

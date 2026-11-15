@@ -30,6 +30,7 @@ from concert_mcp.flows.lineup import lineup_outcome
 from concert_mcp.flows.partiful import login_outcome, tickets_outcome
 from concert_mcp.flows.poll import poll_outcome
 from concert_mcp.flows.queue import queue_outcome
+from concert_mcp.flows.records import concerts_outcome
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist import find_setlist, setlist_outcome
 from concert_mcp.flows.setlist_playlist import setlist_playlist_outcome
@@ -180,6 +181,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--link", default="", help="the ticket page's address; empty uses the link the event already has")
     p.add_argument("--artist", default="", help="headliner; empty takes the live topic's show")
     p.add_argument("--date", default="", help="concert date, YYYY-MM-DD; empty takes the live topic's show")
+
+    add("concerts", "every recorded concert and where each of its expressions stands (calendar, playlists, Partiful)")
 
     p = add("partiful-login", "log in to Partiful: no --code texts one to CONCERT_MCP_PARTIFUL_PHONE")
     p.add_argument("--code", default="", help="the code Partiful texted")
@@ -433,6 +436,12 @@ def _cmd_tickets(args: argparse.Namespace, settings: Settings) -> int:
         svc,
         send=not args.no_send,
     )
+    return emit(outcome, delivery, text, json_mode=args.json_mode)
+
+
+def _cmd_concerts(args: argparse.Namespace, settings: Settings) -> int:
+    svc = services.build_services(settings)
+    outcome, delivery, text = run_tool(lambda: concerts_outcome(svc), svc, send=False)
     return emit(outcome, delivery, text, json_mode=args.json_mode)
 
 
@@ -698,6 +707,8 @@ def _dispatch(argv: list[str], stdin: TextIO) -> int:
         return _cmd_lineup(args, settings)
     if command == "tickets":
         return _cmd_tickets(args, settings)
+    if command == "concerts":
+        return _cmd_concerts(args, settings)
     if command == "partiful-login":
         return _cmd_partiful_login(args, settings)
     if command == "try-image":

@@ -44,6 +44,13 @@ class JsonState:
         """Delete the file if it exists."""
         Path(path).unlink(missing_ok=True)
 
+    def names(self, directory: Path) -> list[str]:
+        """The names of the .json files in a directory, sorted; none when it does not exist."""
+        try:
+            return sorted(p.name for p in Path(directory).iterdir() if p.suffix == ".json" and p.is_file())
+        except OSError:
+            return []
+
     def mtime(self, path: Path) -> float | None:
         """Modification time, or None when missing."""
         try:

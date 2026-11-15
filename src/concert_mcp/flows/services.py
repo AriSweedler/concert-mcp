@@ -29,6 +29,7 @@ from concert_mcp.adapters.setlistfm_http import SetlistFmClient
 from concert_mcp.adapters.spotify_http import SpotifyClient
 from concert_mcp.adapters.state import JsonState
 from concert_mcp.config import Settings, load_settings
+from concert_mcp.flows.records import CachedCalendar
 from concert_mcp.log import set_level
 
 
@@ -140,7 +141,7 @@ def build_services(settings: Settings | None = None) -> Services:
     state = JsonState()
     return Services(
         settings=settings,
-        calendar=GwsCalendar(settings),
+        calendar=CachedCalendar(GwsCalendar(settings), state, settings.concerts_dir, clock),
         spotify_factory=lambda: SpotifyClient.if_configured(settings, clock, state),
         setlistfm_factory=lambda: SetlistFmClient.if_configured(settings, clock),
         places_factory=lambda: GooglePlacesClient.if_configured(settings),

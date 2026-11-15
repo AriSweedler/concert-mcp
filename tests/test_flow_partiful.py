@@ -313,6 +313,7 @@ def test_tickets_add_by_artist_and_date_dry_run_and_failures(svc_cli: Services) 
     crash = tickets_outcome("", "Zed Fox", "2026-11-14", svc_cli)
     assert crash.kind is Kind.ERROR and "(ValueError)" in crash.reply
     assert event["id"] == "evt1"
+    svc_cli.state.files.clear()  # no record of the show: it is searched for, and the calendar refuses the search
     svc_cli.calendar.fail = "list_events"
     refused = tickets_outcome(TICKETS, "Zed Fox", "2026-11-14", svc_cli)
     assert refused.kind is Kind.ERROR and refused.data == {"provider": "gws"}
