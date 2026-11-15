@@ -181,6 +181,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--link", default="", help="the ticket page's address; empty uses the link the event already has")
     p.add_argument("--artist", default="", help="headliner; empty takes the live topic's show")
     p.add_argument("--date", default="", help="concert date, YYYY-MM-DD; empty takes the live topic's show")
+    p.add_argument(
+        "--topic", default="", help="the Telegram topic that owns the show, <chat>:<thread>; empty is the live one"
+    )
 
     add("concerts", "every recorded concert and where each of its expressions stands (calendar, playlists, Partiful)")
 
@@ -432,7 +435,7 @@ def _cmd_lineup(args: argparse.Namespace, settings: Settings) -> int:
 def _cmd_tickets(args: argparse.Namespace, settings: Settings) -> int:
     svc = services.build_services(settings)
     outcome, delivery, text = run_tool(
-        lambda: tickets_outcome(args.link, args.artist, args.date, svc, dry_run=args.dry_run),
+        lambda: tickets_outcome(args.link, args.artist, args.date, svc, dry_run=args.dry_run, topic=args.topic),
         svc,
         send=not args.no_send,
     )

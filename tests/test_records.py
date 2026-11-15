@@ -41,7 +41,7 @@ from concert_mcp.text.records import (
     record_rows,
     same_show,
 )
-from concert_mcp.text.reply import render_concerts
+from concert_mcp.text.reply import PARTIFUL_NO_EVENT_REPLY, render_concerts
 from conftest import TICKET_TEXT, run
 from fakes import FakeCalendar, FakeClock, FakePartiful, MemoryState
 
@@ -341,6 +341,21 @@ def test_concert_add_records_the_show_and_a_ticket_link_finds_it_there(svc: Serv
     assert kept.invite["url"] == PAGE and kept.invite["title"] == "Concert: Zed Fox at The Quarry 11/14"
     assert kept.invite["description"].startswith("Doors 7:30, show 8:30")
     assert kept.invite["links"][0] == ["Tickets", TICKETS]
+
+
+def test_a_named_topic_finds_its_show_with_no_live_chat(svc_cli: Services, monkeypatch, capsys) -> None:
+    # A chat command knows the topic it was typed in; the CLI run has no live chat to ask.
+    with_partiful(svc_cli, FakePartiful())
+    event = svc_cli.calendar.seed_event(
+        "cal-concerts", summary="Zed Fox", start=SHOW, location="The Quarry", description="Doors: 7:30 PM"
+    )
+    remember_concert(event, "cal-concerts", svc_cli, topic=TOPIC)
+    assert tickets_outcome(TICKETS, "", "", svc_cli, dry_run=True).kind is Kind.NEED_USER  # which show?
+    named = tickets_outcome(TICKETS, "", "", svc_cli, dry_run=True, topic=TOPIC)
+    assert named.kind is Kind.DRY_RUN and named.reply.startswith("**Would make the Partiful** Concert: Zed Fox at")
+    # A named topic that owns no show: there is nothing to attach the link to, and the reply says so.
+    empty = tickets_outcome(TICKETS, "", "", svc_cli, topic="-1001234567890:99")
+    assert empty.kind is Kind.NEED_USER and empty.reply == PARTIFUL_NO_EVENT_REPLY
 
 
 def test_a_recorded_show_the_calendar_no_longer_has_is_forgotten(svc_cli: Services) -> None:

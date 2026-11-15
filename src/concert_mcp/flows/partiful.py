@@ -22,9 +22,9 @@ from typing import Any
 from concert_mcp.adapters.protocols import PartifulApi
 from concert_mcp.flows.records import find_record, forget_event, remember_concert, remember_invite
 from concert_mcp.flows.services import Services
-from concert_mcp.flows.setlist_playlist import event_for_show, live_topic_entry
+from concert_mcp.flows.setlist_playlist import event_for_show
 from concert_mcp.flows.teaser import resolve_artist
-from concert_mcp.flows.topics import live_event
+from concert_mcp.flows.topics import live_event, topic_event
 from concert_mcp.log import kv, log_info, log_warn
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, need, outcome_from
 from concert_mcp.text.candidates import missing_link_lines, patched_description
@@ -293,6 +293,15 @@ def recorded_show(svc: Services, *, topic: str | None, artist: str, date: str) -
     return record.calendar_id, event
 
 
+def _show_by_name(artist: str, date: str, svc: Services) -> tuple[str, dict[str, Any]] | None:
+    """(calendar id, event) of the show found on the calendar by artist and day; asks for whichever is missing."""
+    if not artist:
+        raise need("artist")
+    if not date:
+        raise need("date")
+    return event_for_show(artist, concert_date(date), svc)
+
+
 def _kind(res: InviteResult) -> Kind:
     if res.status in ("created", "exists"):
         return Kind.OK
@@ -303,33 +312,34 @@ def _kind(res: InviteResult) -> Kind:
     return Kind.ERROR
 
 
-def tickets_outcome(tickets: str, artist: str, date: str, svc: Services, *, dry_run: bool = False) -> Outcome:
+def tickets_outcome(
+    tickets: str, artist: str, date: str, svc: Services, *, dry_run: bool = False, topic: str = ""
+) -> Outcome:
     """The tickets_add tool: a show's ticket link arrived, so the show becomes a Partiful page.
 
-    The show is the live topic's event, else the one found by artist and date. `tickets` is the link as the user
-    sent it (`https://…` or `tickets: https://…`); empty means "use the link the event already has", which is how
-    the invite is asked for again after a login.
+    The show is the topic's event, else the one found by artist and date. The topic is the live chat's, unless the
+    caller names one (`<chat>:<thread>`): a chat command knows which topic it was typed in and need not rely on
+    which chat spoke last. `tickets` is the link as the user sent it (`https://…` or `tickets: https://…`); empty
+    means "use the link the event already has", which is how the invite is asked for again after a login.
     """
     try:
         tickets, artist, date = tickets.strip(), artist.strip(), date.strip()
         link = ticket_link(tickets)
         if tickets and not link:
             raise FixInput(f"tickets holds no link: {tickets[:80]}", TICKETS_FIX)
-        topic = live_topic_key(svc)
+        named_topic = bool(topic.strip())
+        topic = topic.strip() or live_topic_key(svc)
         found = recorded_show(svc, topic=topic, artist=artist, date=concert_date(date) if date else "")
         if found is None:
             # No record of the show yet (it predates the records, or was added elsewhere): the topic registry and
             # the calendar find it, and it is recorded for the next time.
-            entry = live_topic_entry(svc)
+            entry = topic_event(topic, svc) if topic else None
             event = live_event(entry, svc) if entry else None
             if entry and event:
                 calendar_id = entry.calendar_id
             else:
-                if not artist:
-                    raise need("artist")
-                if not date:
-                    raise need("date")
-                hit = event_for_show(artist, concert_date(date), svc)
+                # A caller that named the topic and nothing else meant "this topic's show": there is none.
+                hit = None if named_topic and not (artist and date) else _show_by_name(artist, date, svc)
                 if hit is None:
                     error = "no calendar event for the show"
                     return Outcome(Kind.NEED_USER, reply=PARTIFUL_NO_EVENT_REPLY, error=error)

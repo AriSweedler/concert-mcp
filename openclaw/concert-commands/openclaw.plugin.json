@@ -1,0 +1,37 @@
+{
+  "id": "concert-commands",
+  "name": "Concert Commands",
+  "description": "The /tickets chat command: a show's ticket link goes straight to concert-mcp, with no model turn.",
+  "version": "0.1.0",
+  "categories": [
+    "other"
+  ],
+  "activation": {
+    "onStartup": true
+  },
+  "commandAliases": [
+    {
+      "name": "tickets",
+      "kind": "runtime-slash"
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "command": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "description": "How to run the concert-mcp CLI, e.g. [\"uv\", \"run\", \"--project\", \"/path/to/concert-mcp\", \"concert-mcp\"]. Default: [\"concert-mcp\"]."
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "description": "How long one call may take. Default: 240000."
+      }
+    }
+  }
+}

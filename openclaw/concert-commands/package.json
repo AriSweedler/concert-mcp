@@ -1,0 +1,30 @@
+{
+  "name": "openclaw-plugin-concert-commands",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "The /tickets chat command: a show's ticket link goes straight to concert-mcp, with no model turn.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "files": [
+    "index.js",
+    "rules.js",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "openclaw": ">=2026.5.17"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.5.17"
+    },
+    "build": {
+      "openclawVersion": "2026.10.6"
+    }
+  }
+}

@@ -125,6 +125,10 @@ Partiful publishes no API. The server makes the calls partiful.com's own pages m
 
 What an invite holds, taken from the calendar event: the title `Concert: <artist> at <venue> <m/d>`; the doors and show times as the description, with `Created by github.com/AriSweedler/concert-mcp` as its last line (Partiful turns the address into a link); the venue as a Maps place found by Partiful's own venue search (the location as written when it finds none); the link fields under the venue, `Tickets`, `<Artist> songs I like` (the teaser playlist, when the event has one) and `Setlist` (the show's setlist.fm page, when the event has its `Setlist:` line at the time the invite is made); and, when Spotify is set up, the cover of the artist's newest album as the poster (the first page of `GET /artists/<id>/albums`, ten rows, albums before singles). The page is public; the server marks the account itself as going and invites nobody. An uploaded poster cannot be deleted from Partiful afterwards, so one is uploaded only for an invite about to be created.
 
+## The /tickets chat command
+
+Optional. `openclaw/concert-commands` in this repository is an OpenClaw plugin with one chat command: `/tickets <link>`, typed in a show's Telegram topic, records the show's ticket link with no model turn (the plugin runs `concert-mcp tickets --link=<link> --topic=<chat>:<thread>` and returns its reply). It registers nothing else and reads no other message. Install it on the OpenClaw host as its README says. Without it the model does the same job: a `tickets: <link>` message makes it call `tickets_add`.
+
 ## Registering the server with OpenClaw
 
 Register the server once on the gateway host; OpenClaw keeps a stdio server running and restarts it with backoff:
