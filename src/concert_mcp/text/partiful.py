@@ -2,9 +2,9 @@
 
 Pure: no I/O. An invite is a public Partiful event for one concert: the title `Concert: <artist> at <venue> <m/d>`,
 the doors and show times as its description, the venue as a Maps place, the cover of the artist's latest album as its
-poster, and two link fields under the venue, `Tickets` and `<Artist> songs I like` (Partiful's `customFields`, each
-`{icon, value, url}`). The shapes here were read from invites made on partiful.com and checked against the live API
-on 2026-11-14.
+poster, and link fields under the venue: `Tickets`, `<Artist> songs I like` and, when the show's setlist.fm page is
+known, `Setlist` (Partiful's `customFields`, each `{icon, value, url}`). The shapes here were read from invites made
+on partiful.com and checked against the live API on 2026-11-14.
 
 The ticket link is what turns a concert into an invite, and it is found here, by rule, not by a model: a line
 `tickets: <URL>` in the text.
@@ -23,6 +23,7 @@ from concert_mcp.text.venues import venue_key
 TICKETS_PREFIX = "Tickets: "
 PARTIFUL_PREFIX = "Partiful: "
 TEASER_PREFIX = "Teaser playlist: "
+SETLIST_PREFIX = "Setlist: "
 DOORS_PREFIX = "Doors: "
 EXPECTED_PREFIX = "Expected: "
 # The description's last line. Partiful shows a description as plain text and turns an address in it into a link
@@ -134,11 +135,14 @@ def invite_description(lines: Sequence[str], start: datetime) -> str:
     return f"{times}\n\n{CREATED_BY}"
 
 
-def link_fields(artist: str, tickets: str, playlist: str | None) -> list[dict[str, str]]:
-    """The link fields under the venue: Tickets, then '<Artist> songs I like' when there is a teaser playlist."""
+def link_fields(artist: str, tickets: str, playlist: str | None, setlist: str | None = None) -> list[dict[str, str]]:
+    """The link fields under the venue: Tickets, then '<Artist> songs I like' when there is a teaser playlist,
+    then Setlist when the show's setlist.fm page is known."""
     fields = [{"icon": "link", "value": "Tickets", "url": tickets}]
     if playlist:
         fields.append({"icon": "music-note", "value": f"{artist} songs I like", "url": playlist})
+    if setlist:
+        fields.append({"icon": "music-note", "value": "Setlist", "url": setlist})
     return fields
 
 

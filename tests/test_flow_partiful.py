@@ -143,6 +143,12 @@ def test_an_invite_carries_the_show_the_links_the_place_and_the_poster(svc: Serv
 def test_an_invite_is_made_once_only_with_a_ticket_link_and_never_on_a_dry_run(svc: Services) -> None:
     partiful = FakePartiful()
     with_partiful(svc, partiful)
+    # A show whose setlist.fm page is known links it as a third field; a show without one has two (above).
+    page = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-7b9c1a2e.html"
+    known = make_invite(request(lines=(f"Teaser playlist: {TEASER}", f"Setlist: {page}")), svc)
+    assert known.links[2] == ("Setlist", page)
+    assert partiful.events[0]["customFields"][2] == {"icon": "music-note", "value": "Setlist", "url": page}
+    partiful.calls.clear()
     exists = make_invite(request(lines=(f"Partiful: {PAGE}",)), svc)
     assert (exists.status, exists.url) == ("exists", PAGE)
     assert make_invite(request(tickets=None), svc).status == "need_tickets"

@@ -89,6 +89,12 @@ def test_link_fields_and_the_event_payload() -> None:
         {"icon": "music-note", "value": "Zed Fox songs I like", "url": PLAYLIST},
     ]
     assert link_fields("Zed Fox", TICKETS, None) == both[:1]
+    setlist = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-7b9c1a2e.html"
+    assert link_fields("Zed Fox", TICKETS, PLAYLIST, setlist) == [
+        *both,
+        {"icon": "music-note", "value": "Setlist", "url": setlist},
+    ]
+    assert link_fields("Zed Fox", TICKETS, None, setlist)[1]["value"] == "Setlist"
     event = event_payload(title="T", start=SHOW, tz="America/Los_Angeles", description="D", fields=both, image=None)
     assert event["startDate"] == "2026-11-15T04:30:00.000Z"
     assert (event["status"], event["visibility"], event["timezone"]) == ("UNSAVED", "public", "America/Los_Angeles")

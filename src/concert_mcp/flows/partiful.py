@@ -32,6 +32,7 @@ from concert_mcp.text.description import description_of, lines_of
 from concert_mcp.text.partiful import (
     EVENT_URL,
     PARTIFUL_PREFIX,
+    SETLIST_PREFIX,
     TEASER_PREFIX,
     TICKETS_PREFIX,
     InviteResult,
@@ -157,7 +158,9 @@ def make_invite(req: InviteRequest, svc: Services, *, dry_run: bool = False) -> 
     if not req.tickets:
         return InviteResult("need_tickets")
     title = invite_title(req.artist, venue_name_of(req.location), req.start)
-    fields = link_fields(req.artist, req.tickets, line_value(req.lines, TEASER_PREFIX))
+    fields = link_fields(
+        req.artist, req.tickets, line_value(req.lines, TEASER_PREFIX), line_value(req.lines, SETLIST_PREFIX)
+    )
     links = tuple((f["value"], f["url"]) for f in fields)
     if dry_run:
         return InviteResult("dry_run", title=title, links=links)
