@@ -236,11 +236,7 @@ def test_a_ticket_link_in_the_shows_topic_makes_the_invite_and_links_both(svc: S
     out = tickets_outcome(f"tickets: {TICKETS}", "", "", svc)
     assert out.kind is Kind.OK and out.error is None
     assert out.reply == (
-        f"**Partiful made:** [{TITLE}]({PAGE})\n"
-        f"• [Tickets]({TICKETS})\n"
-        f"• [Zed Fox songs I like]({TEASER})\n"
-        "• **Poster:** the cover of the artist's latest album\n"
-        "You are marked as going; nobody is invited yet. The calendar event has the links."
+        f"**Partiful made:** [{TITLE}]({PAGE})\n• [Tickets]({TICKETS})\n• [Zed Fox songs I like]({TEASER})"
     )
     assert description(svc, event["id"]) == (
         f"Doors: 7:30 PM\nTeaser playlist: {TEASER}\nTickets: {TICKETS}\nPartiful: {PAGE}"

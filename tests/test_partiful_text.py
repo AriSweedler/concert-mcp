@@ -201,18 +201,11 @@ def test_every_partiful_reply() -> None:
     title = "Concert: Zed Fox at The Quarry 11/14"
     created = InviteResult("created", url=PAGE, title=title, links=links, poster=True, going=True)
     assert render_partiful(created, "Admin") == (
-        f"**Partiful made:** [{title}]({PAGE})\n"
-        f"• [Tickets]({TICKETS})\n"
-        f"• [Zed Fox songs I like]({PLAYLIST})\n"
-        "• **Poster:** the cover of the artist's latest album\n"
-        "You are marked as going; nobody is invited yet. The calendar event has the links."
+        f"**Partiful made:** [{title}]({PAGE})\n• [Tickets]({TICKETS})\n• [Zed Fox songs I like]({PLAYLIST})"
     )
     plain = InviteResult("created", url=PAGE, title=title, links=links[:1])
     assert render_partiful(plain, "Admin", event_note="Calendar event not updated: x") == (
-        f"**Partiful made:** [{title}]({PAGE})\n"
-        f"• [Tickets]({TICKETS})\n"
-        "• **Poster:** none, Partiful's default\n"
-        "Nobody is invited yet. Calendar event not updated: x"
+        f"**Partiful made:** [{title}]({PAGE})\n• [Tickets]({TICKETS})\nCalendar event not updated: x"
     )
     exists = InviteResult("exists", url=PAGE)
     assert render_partiful(exists, "Admin") == f"This show already has a Partiful: [Partiful]({PAGE})"

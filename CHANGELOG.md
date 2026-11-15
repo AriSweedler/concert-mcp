@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The reply after a Partiful invite is made is the page and its link fields, nothing else (bead beads-p4b): the Poster bullet and the "You are marked as going; nobody is invited yet. The calendar event has the links." sentence are gone. A calendar event that could not be updated still says so.
 - `concert-mcp poll` runs the whole queue every time it is called and nothing schedules it (2026-11-10): the Monday launchd job is gone from the homelab, `--force` and the "skipped: last run less than 7 days ago" report with it, and no reply promises "checking weekly for 2 months" any more. A setlist playlist is made or topped up only when asked.
 - The test suite is 378 tests, down from 1270, and covers every line and every branch of the package (`pytest --cov`, `fail_under = 100` in pyproject; CI fails below it). Parametrized cases became one table-driven test each; the pure text parsers keep every case in one test per module; the flow, adapter and CLI files keep the tests that reach a line or a branch the others do not, plus every golden. Three sites are excluded with a reason: `python -m concert_mcp`, the stdio loop, and the two argparse-guarded `unknown command` raises. Along the way: `_check_mcp_sdk`, the dead placeholder check in `spotify auth` (op_read already refuses it), and an unreachable guard in `queue_list` were simplified, and the two retry loops in the Spotify and setlist.fm clients only return or raise.
 

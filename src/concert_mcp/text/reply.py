@@ -233,14 +233,15 @@ def partiful_note(res: InviteResult, operator: str) -> str | None:
 
 
 def render_partiful(res: InviteResult, operator: str, *, event_note: str = PARTIFUL_EVENT_LINKED) -> str:
-    """The partiful_add tool's reply: the page and its link fields, or why there is no page."""
+    """The tickets_add reply: the page and its link fields, or why there is no page.
+
+    A made invite is the page and its links and nothing more (2026-11-14: the poster, the RSVP and the calendar
+    lines were noise). The one thing added is a calendar event that could not be updated, which is a failure.
+    """
     rows = "".join("\n" + link_bullet(label, url) for label, url in res.links)
     if res.status == "created":
-        cover = "the cover of the artist's latest album" if res.poster else "none, Partiful's default"
-        poster = bullet("Poster", cover)
-        head = f"**Partiful made:** [{res.title}]({res.url})"
-        guests = "You are marked as going; nobody is invited yet." if res.going else "Nobody is invited yet."
-        return f"{head}{rows}\n{poster}\n{guests} {event_note}"
+        failure = "" if event_note == PARTIFUL_EVENT_LINKED else f"\n{event_note}"
+        return f"**Partiful made:** [{res.title}]({res.url}){rows}{failure}"
     if res.status == "exists":
         return f"This show already has a Partiful: [Partiful]({res.url})"
     if res.status == "dry_run":
