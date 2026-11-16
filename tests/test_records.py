@@ -48,6 +48,7 @@ from fakes import FakeCalendar, FakeClock, FakePartiful, MemoryState
 LA = ZoneInfo("America/Los_Angeles")
 SHOW = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
 NOW = "2026-10-25T12:00:00-07:00"
+AT = datetime.fromisoformat(NOW)
 TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
 TEASER = "https://open.spotify.com/playlist/pl1"
 PAGE = "https://partiful.com/e/pf1"
@@ -149,11 +150,12 @@ def test_facts_and_expressions_come_from_the_record_alone() -> None:
         "openers": ["Zork", "Zap"],
     }
     assert invite_plan(plain) is None
-    assert expressions(plain) == {
+    assert expressions(plain, now=AT) == {
         "calendar": "made",
         "teaser playlist": "not made",
         "setlist playlist": "not made",
         "partiful": "needs the ticket link",
+        "invite to-do": "needs the Partiful page",
     }
 
     ticketed = record(lines=("Doors: 7:30 PM", f"Teaser playlist: {TEASER}", f"Tickets: {TICKETS}"))
@@ -164,28 +166,29 @@ def test_facts_and_expressions_come_from_the_record_alone() -> None:
         "description": "Doors 7:30, show 8:30" + TAIL,
         "links": [["Tickets", TICKETS], ["Zed Fox songs I like", TEASER]],
     }
-    assert expressions(ticketed)["partiful"] == "can be made" and expressions(ticketed)["teaser playlist"] == "made"
+    assert expressions(ticketed, now=AT)["partiful"] == "can be made"
+    assert expressions(ticketed, now=AT)["teaser playlist"] == "made"
 
     lines = (*ticketed.lines, f"Partiful: {PAGE}", "Setlist playlist: https://open.spotify.com/playlist/pl2")
     # An invite the record did not see made (no snapshot) is simply made; one made from these facts is made too.
-    assert expressions(replace(ticketed, lines=lines))["partiful"] == "made"
-    assert expressions(replace(ticketed, lines=lines))["setlist playlist"] == "made"
+    assert expressions(replace(ticketed, lines=lines), now=AT)["partiful"] == "made"
+    assert expressions(replace(ticketed, lines=lines), now=AT)["setlist playlist"] == "made"
     made = replace(ticketed, lines=lines)
     made = replace(made, invite={"url": PAGE, **invite_plan(made)})
-    assert expressions(made)["partiful"] == "made"
+    assert expressions(made, now=AT)["partiful"] == "made"
     # The page was made before the show had its setlist playlist: the links it was made with are now short one.
-    assert expressions(replace(made, invite={"url": PAGE, **plan}))["partiful"] == "out of date"
+    assert expressions(replace(made, invite={"url": PAGE, **plan}), now=AT)["partiful"] == "out of date"
     # A fact that changes what the invite would say (a doors time corrected) makes the invite out of date.
     later = replace(made, lines=("Doors: 7:00 PM", *lines[1:]))
-    assert expressions(later)["partiful"] == "out of date"
+    assert expressions(later, now=AT)["partiful"] == "out of date"
 
     assert same_show(ticketed, "zed fox", "2026-11-14") and not same_show(ticketed, "Zed Fox", "2026-11-15")
-    rows = record_rows([replace(plain, start="2027-01-01T20:00:00-08:00"), ticketed])
+    rows = record_rows([replace(plain, start="2027-01-01T20:00:00-08:00"), ticketed], now=AT)
     assert [r.start[:4] for r, _e in rows] == ["2026", "2027"]
     assert render_concerts(rows[:1]) == (
         "**Concerts** (1 shows)\n"
         "• 2026-11-14 Zed Fox @ The Quarry — calendar made; teaser playlist made; setlist playlist not made; "
-        "partiful can be made"
+        "partiful can be made; invite to-do needs the Partiful page"
     )
     assert render_concerts([]) == "No concerts recorded yet."
 
@@ -364,7 +367,7 @@ def test_concert_add_records_the_show_and_a_ticket_link_finds_it_there(svc: Serv
     assert path.name == "2026-11-14-zed-fox.json"
     assert (saved.event_id, saved.calendar_id, saved.topic) == (out.data["id"], "cal-concerts", TOPIC)
     assert f"Teaser playlist: {TEASER}" in saved.lines and saved.html_link == out.data["htmlLink"]
-    assert expressions(saved)["partiful"] == "needs the ticket link"
+    assert expressions(saved, now=svc.clock.now())["partiful"] == "needs the ticket link"
 
     # The ticket link arrives: the show comes from its record. The calendar is read once, never searched.
     with_partiful(svc, FakePartiful())

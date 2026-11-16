@@ -1,7 +1,8 @@
-"""Google Calendar through the gws CLI (unit adapter-gws).
+"""Google Calendar and Google Tasks through the gws CLI (unit adapter-gws).
 
-Ported from cal-add.py's gws(), gws_env() and keychain_reachable() and cal-del.py's delete_event(). Every argv is the
-legacy one; the only change is that failures raise ProviderError instead of printing a record and exiting.
+Ported from cal-add.py's gws(), gws_env() and keychain_reachable() and cal-del.py's delete_event(). Every calendar
+argv is the legacy one; the only change is that failures raise ProviderError instead of printing a record and exiting.
+The Tasks calls (the invite to-do) share the same runner, environment and keychain guard.
 """
 
 from __future__ import annotations
@@ -27,8 +28,8 @@ KEYRING_ENV = "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND"
 DELETE_OUT = "gws-del.out"
 
 
-class GwsCalendar:
-    """Calendar implemented by shelling out to gws, exactly the legacy argv."""
+class Gws:
+    """One gws CLI: its environment, its keychain guard, and a call that maps every failure to a ProviderError."""
 
     def __init__(
         self,
@@ -100,6 +101,50 @@ class GwsCalendar:
         except ValueError:
             op = self.settings.operator_name
             raise ProviderError("gws-nojson", "gws returned no JSON", provider_reply("gws-nojson", op)) from None
+
+    def in_temp_dir(self, *args: str) -> None:
+        """raw() from a fresh temp cwd with `-o DELETE_OUT`, for a gws delete, which writes its empty response to a
+        file in cwd (legacy ran from /tmp); the temp dir keeps concurrent deletes apart and is removed afterwards
+        along with the file."""
+        d = tempfile.mkdtemp(prefix="concert-mcp-gws-")
+        try:
+            self.raw(*args[:3], "-o", DELETE_OUT, *args[3:], cwd=d)
+        finally:
+            Path(d, DELETE_OUT).unlink(missing_ok=True)
+            shutil.rmtree(d, ignore_errors=True)
+
+
+class GwsTasks(Gws):
+    """Google Tasks through gws: the invite to-do is made, read, deleted; its list is read by the healthcheck."""
+
+    def insert_task(self, task_list: str, *, title: str, notes: str, due: str) -> dict[str, Any]:
+        """gws tasks tasks insert; ProviderError('gws-nojson') when the answer names no task."""
+        params = {"tasklist": task_list}
+        body = {"title": title, "notes": notes, "due": due}
+        task = self.json("tasks", "tasks", "insert", "--params", _json.dumps(params), "--json", _json.dumps(body))
+        if not isinstance(task, Mapping) or not task.get("id"):
+            op = self.settings.operator_name
+            raise ProviderError("gws-nojson", "gws tasks insert named no task", provider_reply("gws-nojson", op))
+        return dict(task)
+
+    def get_task(self, task_list: str, task_id: str) -> dict[str, Any]:
+        """gws tasks tasks get; {} for an answer that is not a task."""
+        params = {"tasklist": task_list, "task": task_id}
+        task = self.json("tasks", "tasks", "get", "--params", _json.dumps(params))
+        return dict(task) if isinstance(task, Mapping) else {}
+
+    def delete_task(self, task_list: str, task_id: str) -> None:
+        """gws tasks tasks delete, run from a temp cwd as the calendar delete is."""
+        self.in_temp_dir("tasks", "tasks", "delete", "--params", _json.dumps({"tasklist": task_list, "task": task_id}))
+
+    def get_task_list(self, task_list: str) -> dict[str, Any]:
+        """gws tasks tasklists get; {} for an answer that is not a list."""
+        answer = self.json("tasks", "tasklists", "get", "--params", _json.dumps({"tasklist": task_list}))
+        return dict(answer) if isinstance(answer, Mapping) else {}
+
+
+class GwsCalendar(Gws):
+    """Calendar implemented by shelling out to gws, exactly the legacy argv."""
 
     def _items(self, answer: Any) -> list[dict[str, Any]]:
         if not isinstance(answer, Mapping):
@@ -199,18 +244,9 @@ class GwsCalendar:
         self.raw("calendar", "events", "patch", "--params", _json.dumps(params), "--json", _json.dumps(body))
 
     def delete_event(self, calendar_id: str, event_id: str) -> None:
-        """gws calendar events delete, run from a temp cwd because it writes an output file.
-
-        gws events delete writes its empty response to a file in cwd (legacy ran from /tmp); a fresh temp dir keeps
-        concurrent deletes apart and is removed afterwards along with the file.
-        """
+        """gws calendar events delete, run from a temp cwd because it writes an output file (`in_temp_dir`)."""
         params = {"calendarId": calendar_id, "eventId": event_id}
-        d = tempfile.mkdtemp(prefix="concert-mcp-gws-")
-        try:
-            self.raw("calendar", "events", "delete", "-o", DELETE_OUT, "--params", _json.dumps(params), cwd=d)
-        finally:
-            Path(d, DELETE_OUT).unlink(missing_ok=True)
-            shutil.rmtree(d, ignore_errors=True)
+        self.in_temp_dir("calendar", "events", "delete", "--params", _json.dumps(params))
 
 
 def _plain(event: Any) -> dict[str, Any]:

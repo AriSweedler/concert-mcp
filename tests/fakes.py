@@ -520,6 +520,58 @@ class FakePartiful:
         return b"JPEG-BYTES"
 
 
+class FakeTasks:
+    """TasksApi in memory: tasks per list, as Google Tasks returns them.
+
+    `fail` names a method that raises ProviderError(`provider`, default 'gws'), `crash` one that raises RuntimeError.
+    `link` False makes an insert answer without a webViewLink.
+    """
+
+    def __init__(
+        self, *, fail: str | None = None, provider: str = "gws", crash: str | None = None, link: bool = True
+    ) -> None:
+        self.fail = fail
+        self.provider = provider
+        self.crash = crash
+        self.link = link
+        self.tasks: dict[str, list[dict[str, Any]]] = {}
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.deleted: list[tuple[str, str]] = []
+
+    def _record(self, method: str, **args: Any) -> None:
+        self.calls.append((method, args))
+        if self.fail == method:
+            raise ProviderError(self.provider, f"gws tasks exited 1: fake {method} failure", GWS_REFUSED)
+        if self.crash == method:
+            raise RuntimeError(f"{method} blew up")
+
+    def insert_task(self, task_list: str, *, title: str, notes: str, due: str) -> dict[str, Any]:
+        self._record("insert_task", task_list=task_list, title=title, notes=notes, due=due)
+        rows = self.tasks.setdefault(task_list, [])
+        task_id = f"task{sum(len(v) for v in self.tasks.values()) + 1}"
+        task = {"id": task_id, "title": title, "notes": notes, "due": due, "status": "needsAction"}
+        if self.link:
+            task["webViewLink"] = f"https://tasks.google.com/task/{task_id}"
+        rows.append(task)
+        return copy.deepcopy(task)
+
+    def get_task(self, task_list: str, task_id: str) -> dict[str, Any]:
+        self._record("get_task", task_list=task_list, task_id=task_id)
+        for t in self.tasks.get(task_list, []):
+            if t["id"] == task_id:
+                return copy.deepcopy(t)
+        raise ProviderError("gws", f"gws tasks tasks exited 1: no such task {task_id}", GWS_REFUSED)
+
+    def delete_task(self, task_list: str, task_id: str) -> None:
+        self._record("delete_task", task_list=task_list, task_id=task_id)
+        self.tasks[task_list] = [t for t in self.tasks.get(task_list, []) if t["id"] != task_id]
+        self.deleted.append((task_list, task_id))
+
+    def get_task_list(self, task_list: str) -> dict[str, Any]:
+        self._record("get_task_list", task_list=task_list)
+        return {"id": task_list, "title": "My Tasks"}
+
+
 class FakeSetlistFm:
     """SetlistFmApi with responses keyed (artist, date, year); a missing key is a 404 (None)."""
 

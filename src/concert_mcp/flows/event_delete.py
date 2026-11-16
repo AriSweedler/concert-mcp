@@ -13,6 +13,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from concert_mcp.flows.concert_add import resolve_calendar
+from concert_mcp.flows.invite_todo import drop_todo, todo_of
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.topics import topic_forget_event
 from concert_mcp.result import FixInput, Kind, NeedUser, Outcome, ProviderError, crash_outcome, outcome_from
@@ -121,13 +122,16 @@ def find_candidates(req: DeleteRequest, svc: Services) -> list[Candidate]:
 
 
 def remove(c: Candidate, svc: Services, *, dry_run: bool) -> None:
-    """Delete the event and forget it in the topic registry, so the topic that owned it can own the next one."""
+    """Delete the event and forget it in the topic registry, so the topic that owned it can own the next one; a
+    concert's invite to-do goes with it unless it is done."""
     if dry_run:
         return
+    todo = todo_of(c.id, svc)  # read first: the delete forgets the show's record
     svc.calendar.delete_event(c.calendar_id, c.id)
     # The event is gone; a state-file hiccup must not turn that into a failure.
     with contextlib.suppress(Exception):
         topic_forget_event(c.id, svc)
+    drop_todo(todo, svc)
 
 
 def removed_outcome(c: Candidate, dry: bool) -> Outcome:

@@ -14,10 +14,11 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from concert_mcp.text.partiful import (
+    CREATED_BY,
     DOORS_PREFIX,
     EXPECTED_PREFIX,
     PARTIFUL_PREFIX,
@@ -32,8 +33,11 @@ from concert_mcp.text.partiful import (
     show_links,
     ticket_link,
 )
+from concert_mcp.text.reply import event_link
 from concert_mcp.text.venues import venue_name_of
 
+# The invite to-do is made only for a show more than this many days away, and is due this many days before it.
+TODO_LEAD_DAYS = 30
 PURCHASED_PREFIX = "Purchased: "
 OPENER_PREFIX = "Opener: "
 VENUE_PREFIX = "Venue: "
@@ -67,6 +71,8 @@ class ConcertRecord:
     # A guess at where the setlist will be (the artist's latest setlist.fm page when the concert was added). It is
     # not the show's page: that is the `setlist.fm:` line among `lines`, which the user gives.
     setlist_guess: str | None = None
+    # The Google Task that reminds the owner to invite people: {id, link, task_list}; None until it is made.
+    todo: Mapping[str, Any] | None = None
     updated: str = ""
 
     @property
@@ -84,6 +90,7 @@ class ConcertRecord:
             "topic": self.topic,
             "invite": dict(self.invite) if self.invite else None,
             "setlist_guess": self.setlist_guess,
+            "todo": dict(self.todo) if self.todo else None,
             "updated": self.updated,
         }
 
@@ -91,6 +98,7 @@ class ConcertRecord:
     def from_json(cls, d: Mapping[str, Any]) -> ConcertRecord:
         calendar = d.get("calendar") if isinstance(d.get("calendar"), Mapping) else {}
         invite = d.get("invite")
+        todo = d.get("todo")
         return cls(
             artist=str(d.get("artist") or ""),
             start=str(d.get("start") or ""),
@@ -103,6 +111,7 @@ class ConcertRecord:
             topic=str(d["topic"]) if d.get("topic") else None,
             invite=dict(invite) if isinstance(invite, Mapping) else None,
             setlist_guess=str(d["setlist_guess"]) if d.get("setlist_guess") else None,
+            todo=dict(todo) if isinstance(todo, Mapping) else None,
             updated=str(d.get("updated") or ""),
         )
 
@@ -126,7 +135,7 @@ def record_of_event(
     event: Mapping[str, Any], calendar_id: str, *, now: str, known: ConcertRecord | None = None
 ) -> ConcertRecord:
     """The record of a calendar event as the calendar returned it. What the calendar does not hold (the topic, what
-    the invite was made from, the setlist guess) is kept from the record already known for the event."""
+    the invite was made from, the setlist guess, the to-do) is kept from the record already known for the event."""
     return ConcertRecord(
         artist=str(event.get("summary") or ""),
         start=_when(event.get("start")),
@@ -139,6 +148,7 @@ def record_of_event(
         topic=known.topic if known else None,
         invite=known.invite if known else None,
         setlist_guess=known.setlist_guess if known else None,
+        todo=known.todo if known else None,
         updated=now,
     )
 
@@ -218,11 +228,65 @@ def _same_plan(made: Mapping[str, Any], plan: Mapping[str, Any]) -> bool:
     return all(made.get(k) == plan[k] for k in ("title", "description", "links"))
 
 
-def expressions(record: ConcertRecord) -> dict[str, str]:
-    """Every expression of the show and where it stands, from the record alone.
+@dataclass(frozen=True)
+class TodoPlan:
+    """The Google Task that reminds the owner to invite people to a show."""
+
+    title: str
+    notes: str
+    due: str  # RFC 3339 at midnight UTC: the Tasks API keeps only the date of `due`
+
+
+def todo_title(artist: str) -> str:
+    """'invite people to Zed Fox', the owner's wording (2026-11-15)."""
+    return f"invite people to {artist}"
+
+
+def todo_notes(partiful: str, calendar: str) -> str:
+    """The task's notes: plain text, since a task carries no labelled links; bare URLs are clickable there."""
+    return f"Partiful: {partiful}\nCalendar: {calendar}\n\n{CREATED_BY}"
+
+
+def todo_due(show_date: str) -> str:
+    """The show's local day less TODO_LEAD_DAYS, as the Tasks API takes a date: '2026-12-16T00:00:00.000Z'."""
+    day = date.fromisoformat(show_date) - timedelta(days=TODO_LEAD_DAYS)
+    return f"{day.isoformat()}T00:00:00.000Z"
+
+
+def todo_state(record: ConcertRecord, *, now: datetime) -> str:
+    """Where the show's invite to-do stands: `made`, `can be made`, `needs the Partiful page`, `needs the calendar
+    link`, or `not needed` when the show starts TODO_LEAD_DAYS days from `now` or sooner (or has passed)."""
+    if record.todo:
+        return "made"
+    if "partiful" not in facts(record):
+        return "needs the Partiful page"
+    if not record.html_link:
+        return "needs the calendar link"
+    start = datetime.fromisoformat(record.start)
+    if start.tzinfo is None:  # an all-day event: its day starts at midnight UTC as far as this rule cares
+        start = start.replace(tzinfo=UTC)
+    if start - now <= timedelta(days=TODO_LEAD_DAYS):
+        return f"not needed ({TODO_LEAD_DAYS} days or less to go)"
+    return "can be made"
+
+
+def todo_plan(record: ConcertRecord, *, now: datetime) -> TodoPlan | None:
+    """The invite to-do to make now, by rule: the show has a calendar event and a Partiful page, starts more than
+    TODO_LEAD_DAYS days after `now`, and has no to-do yet. None otherwise."""
+    if todo_state(record, now=now) != "can be made":
+        return None
+    return TodoPlan(
+        title=todo_title(record.artist),
+        notes=todo_notes(str(facts(record)["partiful"]), str(event_link(record.html_link))),
+        due=todo_due(record.date),
+    )
+
+
+def expressions(record: ConcertRecord, *, now: datetime) -> dict[str, str]:
+    """Every expression of the show and where it stands, from the record alone (and, for the to-do, the time).
 
     `made`, `not made`, `can be made` (the facts it needs are here), `needs the ticket link`, or `out of date` (it was
-    made from facts that have since changed).
+    made from facts that have since changed); the invite to-do as `todo_state` says.
     """
     known = facts(record)
     out = {
@@ -236,6 +300,7 @@ def expressions(record: ConcertRecord) -> dict[str, str]:
         out["partiful"] = "out of date" if stale else "made"
     else:
         out["partiful"] = "can be made" if plan else "needs the ticket link"
+    out["invite to-do"] = todo_state(record, now=now)
     return out
 
 
@@ -244,6 +309,6 @@ def same_show(record: ConcertRecord, artist: str, date: str) -> bool:
     return record.date == date and artist_slug(record.artist) == artist_slug(artist)
 
 
-def record_rows(records: Sequence[ConcertRecord]) -> list[tuple[ConcertRecord, dict[str, str]]]:
+def record_rows(records: Sequence[ConcertRecord], *, now: datetime) -> list[tuple[ConcertRecord, dict[str, str]]]:
     """Each record with its expressions, soonest show first."""
-    return [(r, expressions(r)) for r in sorted(records, key=lambda r: r.start)]
+    return [(r, expressions(r, now=now)) for r in sorted(records, key=lambda r: r.start)]

@@ -1,4 +1,5 @@
-"""GwsCalendar on a FakeRunner: the legacy argv, the keychain guard, and every failure mapped to a ProviderError."""
+"""GwsCalendar and GwsTasks on a FakeRunner: the legacy argv, the keychain guard, and every failure mapped to a
+ProviderError."""
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from concert_mcp.adapters.gws import GwsCalendar
+from concert_mcp.adapters.gws import GwsCalendar, GwsTasks
 from concert_mcp.config import Settings
 from concert_mcp.result import ProviderError
 from fakes import FakeRunner
@@ -222,3 +223,85 @@ def test_a_description_comes_back_plain_whichever_way_google_holds_it(settings: 
 def test_an_answer_that_is_not_an_event_is_an_empty_event(settings: Settings) -> None:
     cal = make(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps(["not", "an", "event"]), "")}))
     assert cal.get_event("cal-concerts", "e1") == {}
+
+
+# --- Google Tasks (the invite to-do) -----------------------------------------------------------------------------
+
+TASK = {
+    "id": "task1",
+    "title": "invite people to Zed Fox",
+    "status": "needsAction",
+    "due": "2026-12-16T00:00:00.000Z",
+    "webViewLink": "https://tasks.google.com/task/task1",
+    "notes": "Partiful: https://partiful.com/e/pf1",
+}
+
+
+def tasks(settings: Settings, runner: FakeRunner) -> GwsTasks:
+    settings.gws_key_file.write_text("k", encoding="utf-8")
+    return GwsTasks(settings, runner, platform="linux", environ={"PATH": "/usr/bin", "HOME": "/nonexistent"})
+
+
+def test_tasks_insert_get_and_list_read_have_the_exact_argv(settings: Settings) -> None:
+    runner = FakeRunner({(settings.gws_bin,): (0, json.dumps(TASK), "")})
+    api = tasks(settings, runner)
+    made = api.insert_task("@default", title=TASK["title"], notes="N", due=TASK["due"])
+    assert made == TASK
+    assert api.get_task("@default", "task1") == TASK
+    runner.add((settings.gws_bin,), (0, json.dumps({"id": "@default", "title": "My Tasks"}), ""))
+    assert api.get_task_list("@default") == {"id": "@default", "title": "My Tasks"}
+    argvs = [list(c[0]) for c in gws_calls(runner, settings)]
+    assert argvs[0][:6] == [settings.gws_bin, "tasks", "tasks", "insert", "--params", '{"tasklist": "@default"}']
+    assert argvs[0][6] == "--json"
+    assert json.loads(argvs[0][7]) == {"title": TASK["title"], "notes": "N", "due": TASK["due"]}
+    assert argvs[1] == [
+        settings.gws_bin,
+        "tasks",
+        "tasks",
+        "get",
+        "--params",
+        '{"tasklist": "@default", "task": "task1"}',
+    ]
+    assert argvs[2] == [settings.gws_bin, "tasks", "tasklists", "get", "--params", '{"tasklist": "@default"}']
+    # The keyring and the keychain guard are the calendar's: the file backend, no `security` call on Linux.
+    assert gws_calls(runner, settings)[0][1]["GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND"] == "file"
+
+
+def test_a_tasks_answer_that_is_not_a_task(settings: Settings) -> None:
+    api = tasks(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps(["not", "a", "task"]), "")}))
+    assert api.get_task("@default", "task1") == {} and api.get_task_list("@default") == {}
+    for answer in (["not", "a", "task"], {"title": "no id"}):
+        api = tasks(settings, FakeRunner({(settings.gws_bin,): (0, json.dumps(answer), "")}))
+        with pytest.raises(ProviderError) as ei:
+            api.insert_task("@default", title="t", notes="n", due="d")
+        assert (ei.value.provider, ei.value.error) == ("gws-nojson", "gws tasks insert named no task")
+    refused = tasks(settings, FakeRunner({(settings.gws_bin,): (1, "", "Error: insufficient scopes")}))
+    with pytest.raises(ProviderError) as ei:
+        refused.insert_task("@default", title="t", notes="n", due="d")
+    assert ei.value.provider == "gws" and ei.value.error == "gws tasks tasks exited 1: Error: insufficient scopes"
+
+
+def test_tasks_delete_runs_in_a_temp_cwd_that_is_removed(settings: Settings) -> None:
+    seen: dict[str, Path] = {}
+
+    def fake_delete(argv: list[str], kw: dict) -> object:
+        from concert_mcp.proc import RunResult
+
+        seen["cwd"] = Path(str(kw["cwd"]))
+        (seen["cwd"] / "gws-del.out").write_text("", encoding="utf-8")
+        return RunResult(0, "", "")
+
+    runner = FakeRunner({(settings.gws_bin,): fake_delete})
+    assert tasks(settings, runner).delete_task("@default", "task1") is None
+    argv = list(gws_calls(runner, settings)[0][0])
+    assert argv == [
+        settings.gws_bin,
+        "tasks",
+        "tasks",
+        "delete",
+        "-o",
+        "gws-del.out",
+        "--params",
+        '{"tasklist": "@default", "task": "task1"}',
+    ]
+    assert seen["cwd"].name.startswith("concert-mcp-gws-") and not seen["cwd"].exists()

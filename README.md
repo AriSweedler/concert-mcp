@@ -28,10 +28,10 @@ uv run concert-mcp add --concert --dry-run --no-send --title 'ZZZ Test Band' --s
    ```sh
    echo 'export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file' >> ~/.zprofile   # or your shell's profile
    export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file
-   gws auth login -s calendar
+   gws auth login -s calendar,tasks
    ```
 
-   `-s calendar` asks Google for the Calendar scope alone, which is all this package uses; add the services your other tools need (`-s calendar,docs,drive`), not every scope the picker offers. The OAuth app behind the login must be published (Google Auth Platform › Audience › In production): a refresh token from an app left in Testing expires after seven days, and every add then answers "Google Calendar refused the request".
+   `-s calendar,tasks` asks Google for the Calendar and Tasks scopes, which is all this package uses (Tasks holds the to-do that reminds you to invite people to a show); add the services your other tools need (`-s calendar,tasks,docs,drive`), not every scope the picker offers. Without the Tasks scope everything else works, and a reply that would have made the to-do says `To-do not made: Google Tasks refused the request.` The OAuth app behind the login must be published (Google Auth Platform › Audience › In production): a refresh token from an app left in Testing expires after seven days, and every add then answers "Google Calendar refused the request".
 
 3. Create a calendar named `Concerts` in Google Calendar.
 
@@ -70,6 +70,8 @@ echo 'partiful_phone = "+15555550100"' >> ~/.config/concert-mcp/config.toml
 ```
 
 Then tell the bot to log in to Partiful. Partiful texts a code to that number, and you send the code to the bot. [Details](docs/credentials.md#partiful).
+
+A show that has its invite and starts more than 30 days from now also gets one Google Task, `invite people to <artist>`, due 30 days before the show, with the Partiful page and the calendar event in its notes. It goes on your first task list; `CONCERT_MCP_TASK_LIST` names another.
 
 ### OpenClaw
 

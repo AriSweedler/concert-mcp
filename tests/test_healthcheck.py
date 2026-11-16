@@ -254,7 +254,7 @@ def test_openclaw_silent_reply_rows(bare: Settings) -> None:
 
 def test_check_names_and_registry_agree() -> None:
     assert tuple(mod.CHECKS) == CHECK_NAMES
-    assert len(CHECK_NAMES) == 21
+    assert len(CHECK_NAMES) == 22
 
 
 # ---------- the outcome ----------

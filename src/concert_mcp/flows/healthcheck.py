@@ -33,6 +33,7 @@ CHECK_NAMES = (
     "gws-keyfile",
     "gws-auth",
     "concerts-calendar",
+    "tasks-auth",
     "spotify-credentials",
     "spotify-auth",
     "liked-cache",
@@ -53,6 +54,7 @@ SKIP_DELIVERY_OFF = "delivery off (CONCERT_MCP_SEND=0)"
 SKIP_GWS_AUTH_FAILED = "gws-auth failed"
 KEYFILE_FIX = "create the file keyring key: GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file gws auth login"
 GWS_AUTH_FIX = "gws auth login"
+TASKS_AUTH_FIX = "gws auth login -s calendar,tasks"
 SILENT_REPLY_FIX = "openclaw config set agents.defaults.silentReply.group allow"
 # The artist one setlist.fm probe searches for; any well-documented act works, the count is only evidence of auth.
 PROBE_ARTIST = "Radiohead"
@@ -210,6 +212,24 @@ def _check_concerts_calendar(ctx: _Ctx) -> Check:
         return Check("concerts-calendar", "FAIL", _short(e), "google-calendar", _gws_fix(e))
     # The calendar id is personal data: only the name is evidence.
     return Check("concerts-calendar", "PASS", f"found {name}")
+
+
+def _check_tasks_auth(ctx: _Ctx) -> Check:
+    """Whether gws may read the invite to-do's task list: one read, no task made. A login without the Tasks scope
+    fails here, and the add that would make a to-do only says `To-do not made`."""
+    if not ctx.probe:
+        return Check("tasks-auth", "SKIP", SKIP_PROBE)
+    if ctx.failed("gws-auth"):
+        return Check("tasks-auth", "SKIP", SKIP_GWS_AUTH_FAILED)
+    api = ctx.services().tasks
+    if api is None:
+        return Check("tasks-auth", "SKIP", "no Google Tasks adapter")
+    try:
+        found = api.get_task_list(ctx.settings.task_list)
+    except Exception as e:  # noqa: BLE001
+        fix = KEYFILE_FIX if isinstance(e, ProviderError) and e.provider == "gws-keychain" else TASKS_AUTH_FIX
+        return Check("tasks-auth", "FAIL", _short(e), "google-calendar", fix)
+    return Check("tasks-auth", "PASS", f"found {found.get('title') or ctx.settings.task_list}")
 
 
 def _credential_file(name: str, path: Path, keys: Sequence[str], *, legacy: bool, anchor: str, auth_cmd: str) -> Check:
@@ -414,6 +434,7 @@ CHECKS: dict[str, tuple[Callable[[_Ctx], Check], str]] = {
     "gws-keyfile": (_check_gws_keyfile, "google-calendar"),
     "gws-auth": (_check_gws_auth, "google-calendar"),
     "concerts-calendar": (_check_concerts_calendar, "google-calendar"),
+    "tasks-auth": (_check_tasks_auth, "google-calendar"),
     "spotify-credentials": (_check_spotify_credentials, "spotify"),
     "spotify-auth": (_check_spotify_auth, "spotify"),
     "liked-cache": (_check_liked_cache, "spotify"),

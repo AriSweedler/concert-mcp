@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from concert_mcp.config import Settings
+from concert_mcp.flows.invite_todo import todo_step
 from concert_mcp.flows.lineup import add_lineup_to_event
 from concert_mcp.flows.records import remember_concert, remember_setlist_guess
 from concert_mcp.flows.services import Services
@@ -384,8 +385,8 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
         updated: bool = False,
         changed: Sequence[str] = (),
     ) -> Outcome:
-        """The show's record, the lineup step and the Partiful invite, then register the topic's event, rename the
-        topic, build the reply."""
+        """The show's record, the lineup step, the Partiful invite and the invite to-do, then register the topic's
+        event, rename the topic, build the reply."""
         more_notes = list(notes)
         extra: tuple[str, ...] = ()
         links: dict[str, str] = {}
@@ -440,6 +441,12 @@ def _add_event(req: AddRequest, svc: Services) -> Outcome:
                 page = f"{PARTIFUL_PREFIX}{invite.url}"
                 extra = (*extra, page)
                 common["description"] = ordered_lines([ln for ln in common["description"] if ln != page] + [page])
+        if req.concert and event_id:
+            # A show with an event and a Partiful page, more than 30 days out, gets one invite to-do
+            # (flows/invite_todo.py); its record says whether it is due. Nothing here can fail the add.
+            todo = todo_step(event_id, svc)
+            if todo:
+                more_notes.append(todo)
         if req.concert and event_id and setlist_page(common["description"]) is None:
             # Until the user gives the show's own setlist.fm page, a guess at where it will be: said and recorded,
             # never acted on (flows/setlist_guess.py).

@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any
 
 from concert_mcp.adapters.protocols import PartifulApi
+from concert_mcp.flows.invite_todo import todo_step
 from concert_mcp.flows.records import find_record, forget_event, remember_concert, remember_invite
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist_playlist import event_for_show
@@ -381,7 +382,12 @@ def tickets_outcome(
         res, note = invite_for_event(calendar_id, event, link, svc, dry_run=dry_run)
         kind = _kind(res)
         error = None if kind in (Kind.OK, Kind.DRY_RUN) else (res.reason or res.status)
-        return Outcome(kind, reply=render_partiful(res, svc.operator, event_note=note), error=error, data=res.to_json())
+        reply = render_partiful(res, svc.operator, event_note=note)
+        # The step that completes the pair (event and page) makes the invite to-do; the record says if one is due.
+        todo = None if dry_run else todo_step(event["id"], svc)
+        if todo:
+            reply = f"{reply}\n{todo}"
+        return Outcome(kind, reply=reply, error=error, data=res.to_json())
     except (FixInput, NeedUser, ProviderError) as e:
         return outcome_from(e)
     except Exception as e:  # noqa: BLE001 - a tool never raises

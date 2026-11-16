@@ -39,6 +39,7 @@ class Settings:
     gws_bin: str
     gws_key_file: Path
     gws_timeout_s: int
+    task_list: str
     openclaw_bin: str
     openclaw_home: Path
     openclaw_config: Path
@@ -111,6 +112,7 @@ FIELD_DOCS: tuple[tuple[str, str, str], ...] = (
         "exists -> GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file on every gws call",
     ),
     ("gws_timeout_s", "60", "wall-clock cap per gws call"),
+    ("task_list", "@default", "the Google Tasks list the invite to-do goes on (@default is the account's first list)"),
     (
         "openclaw_bin",
         "which openclaw, else /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, else openclaw",
@@ -345,6 +347,7 @@ def load_settings(env: Mapping[str, str] | None = None, home: Path | None = None
         gws_bin=which("gws_bin", "gws"),
         gws_key_file=path_of("gws_key_file", home / ".config/gws/.encryption_key"),
         gws_timeout_s=int_of("gws_timeout_s", 60),
+        task_list=str_of("task_list", "@default"),
         openclaw_bin=which("openclaw_bin", "openclaw"),
         openclaw_home=openclaw_home,
         openclaw_config=path_of("openclaw_config", openclaw_home / "openclaw.json"),

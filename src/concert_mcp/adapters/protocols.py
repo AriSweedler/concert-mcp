@@ -1,4 +1,4 @@
-"""The eleven side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
+"""The twelve side-effect boundaries. Flows depend on these; adapters implement them; tests/fakes.py fakes them."""
 
 from __future__ import annotations
 
@@ -55,6 +55,16 @@ class Calendar(Protocol):
     ) -> None: ...
 
     def delete_event(self, calendar_id: str, event_id: str) -> None: ...
+
+
+class TasksApi(Protocol):
+    def insert_task(self, task_list: str, *, title: str, notes: str, due: str) -> dict[str, Any]: ...
+
+    def get_task(self, task_list: str, task_id: str) -> dict[str, Any]: ...
+
+    def delete_task(self, task_list: str, task_id: str) -> None: ...
+
+    def get_task_list(self, task_list: str) -> dict[str, Any]: ...
 
 
 class SpotifyApi(Protocol):

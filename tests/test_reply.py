@@ -27,6 +27,8 @@ from concert_mcp.text.reply import (
     render_would_look,
     teaser_bullet,
     teaser_line,
+    todo_failed_note,
+    todo_note,
 )
 
 ZED = Artist(name="Zed Fox", id="artist-zedfox", url="https://open.spotify.com/artist/artist-zedfox")
@@ -381,3 +383,16 @@ def test_a_key_named_in_links_is_a_link_to_that_page() -> None:
         "• [Expected](https://src.example/x): doors 7:30 PM, Zed Fox 9:00 PM"
     )
     assert bullets("A", "B", "C", [line]).split("\n")[-1] == "• **Expected:** doors 7:30 PM, Zed Fox 9:00 PM"
+
+
+def test_the_invite_to_do_lines() -> None:
+    link = "https://tasks.google.com/task/task1"
+    assert todo_note("invite people to Zed Fox", link) == f"To-do: [invite people to Zed Fox]({link})"
+    assert todo_note("invite people to Zed Fox", None) == "To-do: invite people to Zed Fox"
+    assert todo_failed_note("Google Tasks refused the request") == "To-do not made: Google Tasks refused the request."
+    assert reply.TODO_WHY == {
+        "gws": "Google Tasks refused the request",
+        "gws-nojson": "Google Tasks gave an unreadable answer",
+        "gws-keychain": "the login keychain is locked",
+        "gws-missing": "gws did not run",
+    }

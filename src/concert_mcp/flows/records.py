@@ -115,6 +115,12 @@ def remember_setlist_guess(event_id: str, url: str, svc: Services) -> None:
     _amend(event_id, svc, setlist_guess=url)
 
 
+def remember_todo(event_id: str, todo: Mapping[str, Any], svc: Services) -> None:
+    """Keep the show's invite to-do ({id, link, task_list}), so it is made once and found again for a delete.
+    Never raises."""
+    _amend(event_id, svc, todo=dict(todo))
+
+
 def find_record(svc: Services, *, topic: str | None = None, artist: str = "", date: str = "") -> ConcertRecord | None:
     """The show a caller means: the one the Telegram topic owns, else the one named by artist and day."""
     try:
@@ -133,7 +139,7 @@ def find_record(svc: Services, *, topic: str | None = None, artist: str = "", da
 
 def concerts_outcome(svc: Services) -> Outcome:
     """`concert-mcp concerts`: every recorded show and where each of its expressions stands."""
-    rows = record_rows([r for _path, r in all_records(svc.state, svc.settings.concerts_dir)])
+    rows = record_rows([r for _path, r in all_records(svc.state, svc.settings.concerts_dir)], now=svc.clock.now())
     data = {"concerts": [{**r.to_json(), "expressions": e} for r, e in rows]}
     return Outcome(Kind.OK, reply=render_concerts(rows), data=data)
 

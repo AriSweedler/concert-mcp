@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from concert_mcp.adapters.clock import SystemClock
 from concert_mcp.adapters.gemini_http import GeminiClient
-from concert_mcp.adapters.gws import GwsCalendar
+from concert_mcp.adapters.gws import GwsCalendar, GwsTasks
 from concert_mcp.adapters.letterboxd_http import LetterboxdClient
 from concert_mcp.adapters.openclaw import OpenClawChat, OpenClawContext
 from concert_mcp.adapters.partiful_http import PartifulClient
@@ -23,6 +23,7 @@ from concert_mcp.adapters.protocols import (
     SetlistFmApi,
     SpotifyApi,
     StateStore,
+    TasksApi,
     VenueLookup,
 )
 from concert_mcp.adapters.setlistfm_http import SetlistFmClient
@@ -39,7 +40,8 @@ class Services:
     `spotify`, `setlistfm`, `places` and `gemini` are None while their provider is not set up; `geocoder` is the keyless
     Nominatim lookup, None when venue lookups are off; `films` finds a movie's Letterboxd page, None in tests that
     want no lookup; `partiful` is always built by `build_services` (a login needs it before any session exists) and
-    None only in tests that want no Partiful. When a factory is given, a None is
+    None only in tests that want no Partiful; `tasks` (Google Tasks, the invite to-do) is likewise always built and
+    None only in tests that want no to-do. When a factory is given, a None is
     re-resolved on every read, so a long-running server picks up `concert-mcp spotify auth` (or `setlist-auth`)
     without a restart: the factory is one `Path.exists()` until the credentials file appears, then the client is
     kept. Tests pass fakes (or None) and no factory.
@@ -65,6 +67,7 @@ class Services:
         gemini_factory: Callable[[], GroundedModel | None] | None = None,
         films: FilmLookup | None = None,
         partiful: PartifulApi | None = None,
+        tasks: TasksApi | None = None,
     ) -> None:
         self.settings = settings
         self.calendar = calendar
@@ -83,6 +86,7 @@ class Services:
         self._gemini_factory = gemini_factory
         self.films = films
         self.partiful = partiful
+        self.tasks = tasks
 
     @property
     def spotify(self) -> SpotifyApi | None:
@@ -149,6 +153,7 @@ def build_services(settings: Settings | None = None) -> Services:
         geocoder=NominatimClient(settings) if settings.venue_lookup else None,
         films=LetterboxdClient(settings),
         partiful=PartifulClient(settings, clock, state),
+        tasks=GwsTasks(settings),
         chat=OpenClawChat(settings, clock),
         context=OpenClawContext(settings),
         state=state,

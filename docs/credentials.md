@@ -11,10 +11,10 @@ The package shells out to the [gws](https://github.com/googleworkspace/cli) CLI 
    ```sh
    echo 'export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file' >> ~/.zprofile   # or ~/.profile, ~/.bashrc
    export GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file
-   gws auth login -s calendar
+   gws auth login -s calendar,tasks
    ```
 
-   `-s calendar` asks Google for the Calendar scope alone, which is all this package uses; add the services your other tools need (`-s calendar,docs,drive`), not every scope the picker offers. The OAuth app behind the login must be published (Google Auth Platform › Audience › In production): a refresh token from an app left in Testing expires after seven days, and every add then answers "Google Calendar refused the request".
+   `-s calendar,tasks` asks Google for the Calendar and Tasks scopes, which is all this package uses: Tasks holds the invite to-do (`invite people to <artist>`, made once a show has its Partiful page and starts more than 30 days out, on the list `CONCERT_MCP_TASK_LIST` names, `@default` being the account's first). Add the services your other tools need (`-s calendar,tasks,docs,drive`), not every scope the picker offers. A login made with `-s calendar` alone keeps working for everything else: the reply that would have made the to-do says `To-do not made: Google Tasks refused the request.`, the show's record holds no task, and the next `tickets_add` or `/tickets` for the show tries again once you have logged in again with both scopes. `healthcheck --probe` reads the task list on its `tasks-auth` row (fix `gws auth login -s calendar,tasks`); it makes no task. The OAuth app behind the login must be published (Google Auth Platform › Audience › In production): a refresh token from an app left in Testing expires after seven days, and every add then answers "Google Calendar refused the request".
 
    `gws` creates `~/.config/gws/.encryption_key` itself (base64 of 32 random bytes, mode 600) and stores its credentials encrypted with it. When that file exists, every `gws` call from this package runs with `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file`, so headless runs (the gateway, a launchd job, plain `ssh`) never touch the macOS keychain. A key you made by hand (`head -c 32 /dev/urandom | base64 > ~/.config/gws/.encryption_key; chmod 600 ...`) is compatible but not needed.
 
@@ -22,7 +22,7 @@ The package shells out to the [gws](https://github.com/googleworkspace/cli) CLI 
 2. The keychain guard: without the file backend, on macOS, the package first runs `security show-keychain-info` on the login keychain and refuses to call `gws` at all when the keychain is unreachable, because `gws` would delete its credentials in that session. The reply is `The login keychain is locked in this session, so I did not touch Google Calendar. Admin: create the gws file keyring key (README.md#google-calendar) or run this from a session with keychain access.` and `healthcheck --probe` reports the same fix on its `gws-auth` row (its `concerts-calendar` row is then `SKIP gws-auth failed` rather than a second FAIL for the one fault).
 3. Create a calendar named `Concerts` (or set `CONCERT_MCP_CONCERTS_CALENDAR`). The name is resolved through `gws calendar calendarList list`; a name matching zero or several calendars is a `FIX: use one of: ...` line. Plain events go to `primary`.
 
-`gws calendar events delete` writes its empty response to a file in the current directory, so the package runs it in a fresh temporary directory with `-o gws-del.out` and removes both afterwards. `gws` stderr is keyring chatter and is never parsed.
+`gws calendar events delete` writes its empty response to a file in the current directory, so the package runs it in a fresh temporary directory with `-o gws-del.out` and removes both afterwards; `gws tasks tasks delete` (a deleted show's open to-do) runs the same way. `gws` stderr is keyring chatter and is never parsed.
 
 ## Spotify
 

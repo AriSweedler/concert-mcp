@@ -18,6 +18,7 @@ Precedence: a `CONCERT_MCP_<FIELD>` environment variable wins over the same key,
 | `CONCERT_MCP_GWS_BIN` | `which gws, else /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, else gws` | the Google Workspace CLI |
 | `CONCERT_MCP_GWS_KEY_FILE` | `~/.config/gws/.encryption_key` | exists -> GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file on every gws call |
 | `CONCERT_MCP_GWS_TIMEOUT_S` | `60` | wall-clock cap per gws call |
+| `CONCERT_MCP_TASK_LIST` | `@default` | the Google Tasks list the invite to-do goes on (`@default` is the account's first list; another is named by its id) |
 | `CONCERT_MCP_OPENCLAW_BIN` | `which openclaw, else /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, else openclaw` | the OpenClaw CLI |
 | `CONCERT_MCP_OPENCLAW_HOME` | `~/.openclaw` | base for openclaw_config, session_db and ocr_last |
 | `CONCERT_MCP_OPENCLAW_CONFIG` | `<openclaw_home>/openclaw.json` | read for channels.telegram.botToken only |
@@ -92,6 +93,7 @@ PASS  gws-binary       /opt/homebrew/bin/gws
 FAIL  gws-keyfile      missing
 SKIP  gws-auth         pass --probe
 SKIP  concerts-calendar pass --probe
+SKIP  tasks-auth       pass --probe
 FAIL  spotify-credentials missing
 SKIP  spotify-auth     pass --probe
 SKIP  liked-cache      absent: the first teaser will be slow (~40 s)
@@ -112,4 +114,4 @@ SKIP  openclaw-session-db absent or unreadable: replies are not delivered
 4 failing
 ```
 
-`--probe` makes one real call per provider (list calendars, resolve the Concerts calendar, Spotify `/me`, one setlist.fm search, Partiful's "who am I" when a session is stored) in place of the `pass --probe` rows. With `CONCERT_MCP_SEND=0` the three `openclaw-*` rows read `SKIP ... delivery off (CONCERT_MCP_SEND=0)`, which is how a development machine without OpenClaw gets to `3 failing`. When everything passes the last line is `all good`. `--json` prints the same report as one JSON object.
+`--probe` makes one real call per provider (list calendars, resolve the Concerts calendar, read the Google Tasks list of `CONCERT_MCP_TASK_LIST`, Spotify `/me`, one setlist.fm search, Partiful's "who am I" when a session is stored) in place of the `pass --probe` rows. With `CONCERT_MCP_SEND=0` the three `openclaw-*` rows read `SKIP ... delivery off (CONCERT_MCP_SEND=0)`, which is how a development machine without OpenClaw gets to `3 failing`. When everything passes the last line is `all good`. `--json` prints the same report as one JSON object.

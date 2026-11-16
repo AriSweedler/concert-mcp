@@ -48,6 +48,8 @@ __all__ = [
     "setlist_guess_note",
     "teaser_bullet",
     "teaser_line",
+    "todo_failed_note",
+    "todo_note",
 ]
 
 LINK_LINE_PREFIXES = ("Teaser playlist: ", "Setlist: ", "setlist.fm: ", "Setlist playlist: ")
@@ -157,6 +159,26 @@ def setlist_guess_note(url: str) -> str:
     """'possible setlist.fm link', the last three words linked: a guess at where the show's setlist will be (the
     artist's most recent page), in the owner's own wording (2026-11-15). 'possible' is the whole claim."""
     return f"possible [setlist.fm link]({url})"
+
+
+def todo_note(title: str, link: str | None) -> str:
+    """The one line a reply gains when the invite to-do is made: 'To-do: [invite people to Zed Fox](<link>)', or
+    the title alone when Google Tasks gave no link."""
+    return f"To-do: [{title}]({link})" if link else f"To-do: {title}"
+
+
+# Why a to-do was not made, by the ProviderError the gws call raised: a few words, never gws's own text.
+TODO_WHY: Mapping[str, str] = {
+    "gws": "Google Tasks refused the request",
+    "gws-nojson": "Google Tasks gave an unreadable answer",
+    "gws-keychain": "the login keychain is locked",
+    "gws-missing": "gws did not run",
+}
+
+
+def todo_failed_note(why: str) -> str:
+    """'To-do not made: Google Tasks refused the request.': the line a reply gains when the to-do call failed."""
+    return f"To-do not made: {why}."
 
 
 def teaser_bullet(res: TeaserResult | None, *, timeout_s: int, dry: bool) -> str | None:
