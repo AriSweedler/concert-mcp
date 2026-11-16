@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -17,6 +16,7 @@ from concert_mcp.flows.concert_add import (
 )
 from concert_mcp.flows.services import Services
 from concert_mcp.result import NEED_USER, FixInput, Kind
+from conftest import LA, TEASER_URL
 from fakes import (
     FakeCalendar,
     FakeChat,
@@ -29,13 +29,9 @@ from fakes import (
     ms,
 )
 
-LA = ZoneInfo("America/Los_Angeles")
 ARTIST = "Zed Fox with special guest Zork."
 START = "2026-11-14 20:30"
 VENUE = "The Quarry, San Francisco"
-TEASER_URL = "https://open.spotify.com/playlist/pl1"
-SETLIST_URL = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-7b9c1a2e.html"
-GWS_REFUSED = "Google Calendar refused the request. Admin: check `gws auth` on the host."
 
 ZED_FOX = {
     "name": "Zed Fox",
@@ -119,6 +115,8 @@ class TestHappyPath:
     def test_reply_is_the_golden_byte_for_byte(self, svc, ticket_text):
         out = concert(svc, source_text=ticket_text)
         assert out.reply == golden_added()
+        # The fixture has no model: no lineup is asked for, and the event is written once.
+        assert "lineup" not in out.data and svc.calendar.patched == []
 
     def test_context_text_alone_is_enough_for_the_derived_lines(self, svc):
         # svc's FakeContext carries the ticket text as the recent OCR / chat text; source_text is empty.
@@ -358,9 +356,3 @@ class TestLineup:
         assert out.kind is Kind.OK
         assert out.reply == golden_added()
         assert out.data["lineup"]["status"] == "failed"
-
-    def test_without_a_model_nothing_is_asked(self, svc, ticket_text):
-        out = concert(svc, source_text=ticket_text)
-        assert out.reply == golden_added()
-        assert "lineup" not in out.data
-        assert svc.calendar.patched == []

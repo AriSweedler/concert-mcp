@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 from concert_mcp.text.partiful import (
     CREATED_BY,
@@ -39,12 +38,9 @@ from concert_mcp.text.reply import (
     render_partiful_code_sent,
     render_partiful_signed_in,
 )
+from conftest import PAGE, SHOW, TICKETS
+from conftest import TEASER_URL as PLAYLIST
 
-LA = ZoneInfo("America/Los_Angeles")
-SHOW = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
-TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
-PLAYLIST = "https://open.spotify.com/playlist/pl1"
-PAGE = "https://partiful.com/e/pf1"
 TAIL = "\n\nCreated by github.com/AriSweedler/concert-mcp"
 PLACE = {
     "id": "I1",

@@ -7,12 +7,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pytest
 
 from concert_mcp.adapters.state import JsonState
-from concert_mcp.flows.concert_add import add_concert
 from concert_mcp.flows.partiful import tickets_outcome
 from concert_mcp.flows.records import (
     CachedCalendar,
@@ -42,19 +40,14 @@ from concert_mcp.text.records import (
     same_show,
 )
 from concert_mcp.text.reply import PARTIFUL_NO_EVENT_REPLY, render_concerts
-from conftest import TICKET_TEXT, run
+from conftest import LA, PAGE, PHONE, SHOW, TICKETS, add_zed_fox, run
+from conftest import TEASER_URL as TEASER
 from fakes import FakeCalendar, FakeClock, FakePartiful, MemoryState
 
-LA = ZoneInfo("America/Los_Angeles")
-SHOW = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
 NOW = "2026-10-25T12:00:00-07:00"
 AT = datetime.fromisoformat(NOW)
-TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
-TEASER = "https://open.spotify.com/playlist/pl1"
-PAGE = "https://partiful.com/e/pf1"
 TAIL = "\n\nCreated by github.com/AriSweedler/concert-mcp"
 TOPIC = "-1001234567890:7"
-PHONE = "+15555550100"
 
 
 def record(**over: Any) -> ConcertRecord:
@@ -355,13 +348,7 @@ def with_partiful(svc: Services, partiful: FakePartiful) -> Services:
 
 
 def test_concert_add_records_the_show_and_a_ticket_link_finds_it_there(svc: Services, monkeypatch) -> None:
-    out = add_concert(
-        artist="Zed Fox with special guest Zork.",
-        start="2026-11-14 20:30",
-        venue="The Quarry, San Francisco",
-        source_text=TICKET_TEXT,
-        svc=svc,
-    )
+    out = add_zed_fox(svc)
     assert out.kind is Kind.OK
     [(path, saved)] = all_records(svc.state, svc.settings.concerts_dir)
     assert path.name == "2026-11-14-zed-fox.json"

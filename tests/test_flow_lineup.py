@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -13,15 +12,13 @@ from concert_mcp.flows.lineup import add_lineup_to_event, find_lineup, lineup_ou
 from concert_mcp.flows.topics import make_topic_entry, topic_remember
 from concert_mcp.result import NEED_USER, Kind
 from concert_mcp.text.lineup import Lineup, Opener
-from conftest import make_services
+from conftest import LA, make_services
 from fakes import FakeGemini, FakeSetlistFm
 
-LA = ZoneInfo("America/Los_Angeles")
 PAGE = "https://www.setlist.fm/setlist/zork/2026/the-hollow-oakland-ca-1a2b3c4d.html"
 FULL = json.dumps(
     {"openers": ["Zork", "Zed Fox"], "doors": "7:00 PM", "opener_on_stage": "8:00 PM", "headliner_on_stage": "9pm"}
 )
-PARTIAL = json.dumps({"openers": [], "doors": "7:30 PM", "opener_on_stage": None, "headliner_on_stage": None})
 SOURCES = ("https://venue.example/events/zed-fox",)
 ZORK_ROW = {
     "id": "1a2b3c4d",

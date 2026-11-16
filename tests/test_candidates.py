@@ -20,9 +20,8 @@ from concert_mcp.text.candidates import (
     search_window,
     teaser_url_in,
 )
-
-TZ = ZoneInfo("America/Los_Angeles")
-TEASER_URL = "https://open.spotify.com/playlist/pl1"
+from conftest import LA as TZ
+from conftest import TEASER_URL
 
 
 def event(summary: str | None, *, status: str = "confirmed", **kw: Any) -> dict[str, Any]:

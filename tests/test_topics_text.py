@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from concert_mcp.text.topics import TopicEntry, carry_lines, changed_fields, ordered_lines, topic_key
-
-LA = ZoneInfo("America/Los_Angeles")
-START = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
+from conftest import LA
+from conftest import SHOW as START
 
 
 def test_topics_text() -> None:

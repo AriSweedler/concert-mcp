@@ -8,13 +8,11 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pytest
 
 from concert_mcp import server
 from concert_mcp.config import Settings
-from concert_mcp.flows.concert_add import add_concert
 from concert_mcp.flows.healthcheck import run_healthcheck
 from concert_mcp.flows.partiful import (
     InviteRequest,
@@ -30,17 +28,13 @@ from concert_mcp.flows.topics import make_topic_entry, topic_remember
 from concert_mcp.result import NEED_USER, Kind
 from concert_mcp.text.health import Check
 from concert_mcp.text.reply import PARTIFUL_NO_EVENT_REPLY
-from conftest import TICKET_TEXT, make_services, run
+from conftest import PAGE, PHONE, SHOW, TICKET_TEXT, TICKETS, make_services, run
+from conftest import TEASER_URL as TEASER
+from conftest import add_zed_fox as concert
 from fakes import FakeCalendar, FakePartiful
 
 pytest.importorskip("mcp")
 
-LA = ZoneInfo("America/Los_Angeles")
-SHOW = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
-PHONE = "+15555550100"
-TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
-TEASER = "https://open.spotify.com/playlist/pl1"
-PAGE = "https://partiful.com/e/pf1"
 TITLE = "Concert: Zed Fox at The Quarry 11/14"
 LOCATION = "The Quarry\n1 Main St\nSan Francisco, CA 94100"
 PLACE = {
@@ -382,16 +376,6 @@ def test_login_without_a_number_on_a_dry_run_and_through_a_crash(svc: Services) 
 
 
 # ---------- concert_add ----------
-
-
-def concert(svc: Services, text: str) -> Any:
-    return add_concert(
-        artist="Zed Fox with special guest Zork.",
-        start="2026-11-14 20:30",
-        venue="The Quarry, San Francisco",
-        source_text=text,
-        svc=svc,
-    )
 
 
 def test_concert_add_with_a_tickets_line_expresses_the_show_as_an_invite(

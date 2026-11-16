@@ -12,26 +12,6 @@ ARTIST = "Zed Fox"
 DATE = "2026-11-14"
 
 
-def api_row(
-    setlist_id: str,
-    event_date: str,
-    venue: str = "The Quarry",
-    city: str = "San Francisco",
-    songs: tuple[str, ...] = ("First Light", "Second Wind", "Third Rail"),
-) -> dict[str, Any]:
-    """One setlist as the setlist.fm API returns it (eventDate is dd-MM-yyyy)."""
-    slug = venue.lower().replace(" ", "-")
-    return {
-        "id": setlist_id,
-        "url": f"https://www.setlist.fm/setlist/zed-fox/2026/{slug}-{setlist_id}.html",
-        "eventDate": event_date,
-        "artist": {"name": ARTIST},
-        "venue": {"name": venue, "city": {"name": city}},
-        "tour": {"name": "Fall Tour"},
-        "sets": {"set": [{"song": [{"name": s} for s in songs]}]},
-    }
-
-
 def with_setlistfm(svc: Services, fake: FakeSetlistFm | None) -> FakeSetlistFm | None:
     svc.setlistfm = fake
     return fake

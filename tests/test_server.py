@@ -153,7 +153,7 @@ class _ExplodingCalendar(FakeCalendar):
         raise RuntimeError("boom")
 
 
-def test_a_crash_inside_the_flow_is_a_reply_not_an_exception(
+def test_a_crash_inside_the_flow_is_a_reply_not_an_exception_and_is_saved(
     settings: Settings, now: datetime, ticket_text: str
 ) -> None:
     svc = make_services(settings, now, route=None, text=ticket_text)
@@ -161,6 +161,8 @@ def test_a_crash_inside_the_flow_is_a_reply_not_an_exception(
     build_server(svc)
     text = concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
     assert text.startswith("Something broke inside the concert tool (RuntimeError). Admin: check the gateway log.")
+    (meta,) = _kept(settings)
+    assert meta["tool"] == "concert_add" and "RuntimeError" in meta["error"]
 
 
 def test_a_failure_to_build_services_is_a_reply_not_an_exception(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -240,16 +242,6 @@ def test_a_calendar_refusal_is_saved_with_the_call_and_the_reply(
     import json
 
     assert json.loads((folder / "args.json").read_text(encoding="utf-8"))["artist"] == "Zed Fox"
-
-
-def test_a_crash_inside_the_flow_is_saved_too(settings: Settings, now: datetime, ticket_text: str) -> None:
-    svc = make_services(settings, now, route=None, text=ticket_text)
-    svc.calendar = _ExplodingCalendar(calendars=[{"id": "cal-concerts", "summary": "Concerts"}])
-    build_server(svc)
-    concert_add(artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry", source_text=ticket_text)
-    (meta,) = _kept(settings)
-    assert meta["tool"] == "concert_add"
-    assert "RuntimeError" in meta["error"]
 
 
 def test_a_successful_call_saves_nothing(svc_cli: Services, ticket_text: str) -> None:

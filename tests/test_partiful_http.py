@@ -13,19 +13,15 @@ from concert_mcp.adapters.partiful_http import API, COMMIT, CUSTOM_TOKEN, SECURE
 from concert_mcp.config import Settings
 from concert_mcp.result import ProviderError
 from concert_mcp.text.partiful import STORAGE
-from fakes import FakeClock, FakeUrlopen, MemoryState, http_error
+from conftest import PHONE
+from fakes import FakeClock, FakeUrlopen, MemoryState, body_of, http_error
 
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
-PHONE = "+15555550100"
 RENEWED = {"id_token": "idt-new", "user_id": "u1", "expires_in": "3600", "refresh_token": "rt-1"}
 
 
 def result(data: Any) -> dict[str, Any]:
     return {"result": {"data": data}}
-
-
-def body_of(request: tuple[str, str, dict[str, str], bytes | None]) -> Any:
-    return json.loads((request[3] or b"{}").decode("utf-8"))
 
 
 @pytest.fixture

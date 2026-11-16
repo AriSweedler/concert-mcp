@@ -769,6 +769,11 @@ def http_error(
     return urllib.error.HTTPError(url, code, f"HTTP {code}", msg, io.BytesIO(data))
 
 
+def body_of(request: tuple[str, str, dict[str, str], bytes | None]) -> Any:
+    """The JSON body of a request FakeUrlopen recorded ({} when it had none)."""
+    return json.loads((request[3] or b"{}").decode("utf-8"))
+
+
 class FakeResponse:
     """What FakeUrlopen returns: a context manager with read(), headers and status."""
 

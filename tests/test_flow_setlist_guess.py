@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from concert_mcp.flows.concert_add import add_concert
 from concert_mcp.flows.records import all_records, record_for_event
 from concert_mcp.flows.services import Services
 from concert_mcp.flows.setlist_guess import guess_setlist_page
 from concert_mcp.result import Kind
 from concert_mcp.text.records import ConcertRecord, facts
 from concert_mcp.text.reply import setlist_guess_note
-from conftest import TICKET_TEXT
+from conftest import add_zed_fox as concert
 from fakes import FakeSetlistFm
 
 # An earlier night of the tour: the artist's most recent page when the concert is added.
@@ -23,12 +22,6 @@ ROWS = {
         {"id": "1a2b3c4d", "url": EARLIER, "sets": {"set": [{"song": [{"name": "First Light"}]}]}},
     ]
 }
-
-
-def concert(svc: Services, text: str = TICKET_TEXT):
-    return add_concert(
-        artist="Zed Fox", start="2026-11-14 20:30", venue="The Quarry, San Francisco", source_text=text, svc=svc
-    )
 
 
 def test_the_guess_is_the_artists_most_recent_page_or_nothing(svc: Services) -> None:

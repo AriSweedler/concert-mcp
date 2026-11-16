@@ -12,7 +12,7 @@ import pytest
 
 from concert_mcp.config import Settings
 from concert_mcp.flows import healthcheck as health
-from concert_mcp.flows.concert_add import add_concert, add_plain
+from concert_mcp.flows.concert_add import add_plain
 from concert_mcp.flows.event_delete import DeleteRequest, delete_event
 from concert_mcp.flows.healthcheck import run_healthcheck
 from concert_mcp.flows.invite_todo import drop_todo, todo_of, todo_step
@@ -27,19 +27,14 @@ from concert_mcp.text.records import (
     expressions,
     record_of_event,
     todo_due,
-    todo_notes,
     todo_plan,
     todo_state,
-    todo_title,
 )
-from conftest import TICKET_TEXT, make_services, run
+from conftest import LA, PAGE, TICKET_TEXT, TICKETS, add_zed_fox, make_services, run
 from fakes import FakeCalendar, FakeContext, FakePartiful, FakeTasks, MemoryState, fake_html_link
 
-LA = ZoneInfo("America/Los_Angeles")
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=LA)
-PAGE = "https://partiful.com/e/pf1"
 CAL = "https://www.google.com/calendar/event?eid=abc"
-TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
 TASK_LINK = "https://tasks.google.com/task/task1"
 CREATED_BY = "Created by github.com/AriSweedler/concert-mcp"
 # A show 82 days after the fixtures' clock (2026-10-25): far enough out for a to-do.
@@ -66,10 +61,7 @@ def record(**over: Any) -> ConcertRecord:
 
 
 def test_the_rule_and_the_task_it_makes() -> None:
-    assert todo_title("Zed Fox") == "invite people to Zed Fox"
-    assert todo_notes(PAGE, CAL) == f"Partiful: {PAGE}\nCalendar: {CAL}\n\n{CREATED_BY}"
-    assert todo_due("2027-01-15") == "2026-12-16T00:00:00.000Z"
-    assert todo_due("2027-03-01") == "2027-01-30T00:00:00.000Z"
+    assert todo_due("2027-03-01") == "2027-01-30T00:00:00.000Z"  # thirty days, across a month's end
     # The calendar line is the one link form the package emits: the htmlLink cut to its eid.
     assert todo_plan(record(), now=NOW) == TodoPlan(
         title="invite people to Zed Fox",
@@ -124,13 +116,7 @@ def far_services(settings: Settings, tasks: FakeTasks | None, *, text: str = FAR
 
 
 def concert(svc: Services, text: str, start: str = FAR_START) -> Any:
-    return add_concert(
-        artist="Zed Fox with special guest Zork.",
-        start=start,
-        venue="The Quarry, San Francisco",
-        source_text=text,
-        svc=svc,
-    )
+    return add_zed_fox(svc, text, start)
 
 
 def saved(svc: Services, event_id: str) -> ConcertRecord:

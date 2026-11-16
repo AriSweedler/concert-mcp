@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -13,11 +12,10 @@ from concert_mcp.flows.topics import topic_event, topic_remember
 from concert_mcp.result import FixInput, Kind
 from concert_mcp.text.reply import NO_CANDIDATES_REPLY
 from concert_mcp.text.topics import TopicEntry
+from conftest import LA, TEASER_URL
 
-LA = ZoneInfo("America/Los_Angeles")
 QUARRY = "The Quarry, San Francisco"
 ANNEX = "The Annex, San Francisco"
-TEASER_URL = "https://open.spotify.com/playlist/pl1"
 CANDIDATE_KEYS = {"id", "calendarId", "calendar", "summary", "when", "start", "location", "htmlLink", "description"}
 
 REMOVED_GOLDEN = (

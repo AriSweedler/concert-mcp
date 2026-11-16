@@ -17,7 +17,6 @@ from concert_mcp.flows.healthcheck import CHECK_NAMES, run_healthcheck
 from concert_mcp.text.health import Check, HealthReport, render_health
 from conftest import make_services, settings_env
 
-ROW_RE = re.compile(r"^(PASS|FAIL|SKIP)  \S+\s+.+$")
 TOKEN = "123456789:FAKE-bot-token-for-tests"
 
 

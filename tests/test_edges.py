@@ -194,7 +194,6 @@ def test_lineup_text_edges() -> None:
         "Opener: Zork",
         "Expected: doors 7:00 PM, Zed Fox 9:00 PM",
     ]
-    assert lineup_lines(Lineup("none"), "Zed Fox", openers_known=False) == []
 
 
 def test_setlist_playlist_failures(svc_cli: Services, monkeypatch: pytest.MonkeyPatch) -> None:

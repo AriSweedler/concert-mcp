@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from concert_mcp.config import Settings
 from concert_mcp.flows.services import Services
@@ -15,9 +14,9 @@ from concert_mcp.flows.venues import (
     venues_outcome,
 )
 from concert_mcp.text.venues import VenueHit
+from conftest import LA
 from fakes import FakeCalendar, FakeChat, FakeClock, FakeContext, FakeVenueLookup, MemoryState
 
-LA = ZoneInfo("America/Los_Angeles")
 HIT = VenueHit(
     "Cafe Du Nord",
     ("2174 Market St", "San Francisco CA 94114", "United States"),

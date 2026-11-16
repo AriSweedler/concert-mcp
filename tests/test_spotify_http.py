@@ -12,7 +12,7 @@ import pytest
 from concert_mcp.adapters.spotify_http import ACCOUNTS, API, SpotifyClient, SpotifyCredentials
 from concert_mcp.config import Settings
 from concert_mcp.result import ProviderError
-from fakes import FakeClock, FakeUrlopen, MemoryState, http_error
+from fakes import FakeClock, FakeUrlopen, MemoryState, body_of, http_error
 
 TOKEN_URL = f"{ACCOUNTS}/api/token"
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
@@ -33,17 +33,6 @@ def creds(**over: Any) -> SpotifyCredentials:
 
 def token_ok(_req: Any = None) -> dict[str, Any]:
     return {"access_token": "at-new", "expires_in": 3600, "refresh_token": "rt-new", "scope": "x"}
-
-
-def body_of(request: tuple[str, str, dict[str, str], bytes | None]) -> Any:
-    return json.loads((request[3] or b"{}").decode("utf-8"))
-
-
-def header(request: tuple[str, str, dict[str, str], bytes | None], name: str) -> str | None:
-    for k, v in request[2].items():
-        if k.lower() == name.lower():
-            return v
-    return None
 
 
 def track(name: str, uri: str, artist: str = "Zed Fox", artist_id: str = "artist-zedfox") -> dict[str, Any]:

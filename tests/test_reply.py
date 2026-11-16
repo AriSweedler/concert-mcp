@@ -30,9 +30,9 @@ from concert_mcp.text.reply import (
     todo_failed_note,
     todo_note,
 )
+from conftest import TEASER_URL
 
 ZED = Artist(name="Zed Fox", id="artist-zedfox", url="https://open.spotify.com/artist/artist-zedfox")
-TEASER_URL = "https://open.spotify.com/playlist/pl1"
 SETLIST_URL = "https://www.setlist.fm/setlist/zed-fox/2026/the-quarry-san-francisco-ca-1.html"
 WHEN = "Sat Nov 14, 8:30 PM – 10:30 PM PST"
 

@@ -10,7 +10,6 @@ from concert_mcp.result import Kind
 from fakes import FakeSpotify
 
 DATE = "2026-11-14"
-NAME = "2026-11-14 | Zed Fox"
 URIS = ["spotify:track:t1", "spotify:track:t2", "spotify:track:t3"]
 
 ZED_FOX = {

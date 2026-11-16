@@ -21,13 +21,6 @@ NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
 SEARCH = f"{SETLISTFM_API}/search/setlists"
 
 
-def header(request: tuple[str, str, dict[str, str], bytes | None], name: str) -> str | None:
-    for k, v in request[2].items():
-        if k.lower() == name.lower():
-            return v
-    return None
-
-
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock(NOW)

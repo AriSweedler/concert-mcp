@@ -7,16 +7,26 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from concert_mcp import cli, config
 from concert_mcp.config import Settings, load_settings
 from concert_mcp.flows import services
+from concert_mcp.flows.concert_add import add_concert
 from concert_mcp.flows.services import Services
 from fakes import FakeCalendar, FakeChat, FakeClock, FakeContext, FakeSetlistFm, FakeSpotify, MemoryState, ms, plain
 
 NOW = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone(timedelta(hours=-7)))
+
+# The one fictional show every test file talks about: where, when, and the pages it links to.
+LA = ZoneInfo("America/Los_Angeles")
+SHOW = datetime(2026, 11, 14, 20, 30, tzinfo=LA)
+TICKETS = "https://www.ticketweb.com/event/zed-fox/123"
+TEASER_URL = "https://open.spotify.com/playlist/pl1"
+PAGE = "https://partiful.com/e/pf1"  # its Partiful invite
+PHONE = "+15555550100"  # the Partiful account's number
 
 TICKET_TEXT = (
     "ZED FOX\n"
@@ -87,11 +97,6 @@ def settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def settings_nosend(tmp_path: Path) -> Settings:
-    return load_settings(settings_env(tmp_path, send="0"), home=tmp_path)
-
-
-@pytest.fixture
 def ticket_text() -> str:
     return TICKET_TEXT
 
@@ -133,6 +138,18 @@ def svc(settings: Settings, now: datetime, forum_route: dict[str, Any], ticket_t
 def svc_cli(settings: Settings, now: datetime, ticket_text: str) -> Services:
     """Services on fakes with no live chat, as a CLI run sees it."""
     return make_services(settings, now, route=None, text=ticket_text)
+
+
+def add_zed_fox(svc: Services, text: str = TICKET_TEXT, start: str = "2026-11-14 20:30") -> Any:
+    """concert_add for the fictional show, as the model calls it: the artist line as the ticket has it, a start,
+    the venue and the ticket's text."""
+    return add_concert(
+        artist="Zed Fox with special guest Zork.",
+        start=start,
+        venue="The Quarry, San Francisco",
+        source_text=text,
+        svc=svc,
+    )
 
 
 # ---------- the CLI harness (test_cli.py, test_cli_commands.py) ----------

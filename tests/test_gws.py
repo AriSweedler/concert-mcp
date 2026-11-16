@@ -23,7 +23,6 @@ KEYCHAIN = (
     "The login keychain is locked in this session, so I did not touch Google Calendar. "
     "Admin: create the gws file keyring key (README.md#google-calendar) or run this from a session with keychain access."
 )
-MISSING = "The calendar tool is not reachable right now. Try again in a minute."
 NOJSON = "Google Calendar gave an unreadable answer. Admin: check the host."
 
 
