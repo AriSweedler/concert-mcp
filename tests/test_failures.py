@@ -23,14 +23,15 @@ CAPTION = "This is not a concert, but a movie."
 OCR = "Godzilla Minus Zero (2026)\nR, 2 hr 15 min"
 
 
-def shot(eid: str, image: str, caption: str = CAPTION) -> dict[str, Any]:
-    """A screenshot turn as OpenClaw writes it."""
+def shot(eid: str, image: str, caption: str | None = CAPTION) -> dict[str, Any]:
+    """A screenshot turn as OpenClaw writes it; caption None is one sent with no caption."""
+    user_text = "" if caption is None else f"\nUser text:\n{caption}"
     return {
         "type": "message",
         "id": eid,
         "message": {
             "role": "user",
-            "content": f"[Image]\nUser text:\n{caption}\nDescription:\n{OCR}",
+            "content": f"[Image]{user_text}\nDescription:\n{OCR}",
             "__openclaw": {
                 "transport": {"channel": "telegram", "conversationRef": "conv_x", "threadId": "56", "messageId": "57"},
                 "media": [{"path": image, "kind": "image", "contentType": "image/jpeg"}],
@@ -51,6 +52,16 @@ def test_silence_is_a_failure_only_after_the_grace() -> None:
     assert find_failures(rows, now_ms=T0 + GRACE_MS - 1, grace_ms=GRACE_MS) == []
     (f,) = find_failures(rows, now_ms=T0 + GRACE_MS + 1, grace_ms=GRACE_MS)
     assert f.error == "no reply"
+
+
+def test_a_screenshot_sent_with_no_caption_is_a_failure_too() -> None:
+    rows = [
+        ("s1", T0, shot("e1", "/i.jpg", caption=None)),
+        ("s1", T0 + 63_000, assistant("error", "Connection error.")),
+    ]
+    (f,) = find_failures(rows, now_ms=T0 + 70_000, grace_ms=GRACE_MS)
+    assert (f.caption, f.ocr, f.error) == ("", OCR, "Connection error.")
+    assert f.request == f"[Image]\nDescription:\n{OCR}"
 
 
 def test_collect_saves_each_failure_once_under_its_epoch(settings: Settings, tmp_path: Path) -> None:

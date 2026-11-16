@@ -1,10 +1,10 @@
 """Screenshot turns the bot failed, found in OpenClaw's transcript (unit text-failures).
 
-Pure. A screenshot turn is a user message whose text OpenClaw built as `[Image] / User text: / Description:` and
-whose `__openclaw.media` names the image. It failed when the model never answered it: the next assistant message in
-the session stopped with `error` (the Orin unreachable: "Connection error."), or none came within the grace period.
-OpenClaw re-queues an unanswered message as text items ("[Earlier unanswered user message...]"); those are retries
-of the same turn, not new ones.
+Pure. A screenshot turn is a user message whose text OpenClaw built as `[Image] / User text: / Description:` (no
+`User text:` when it came with no caption) and whose `__openclaw.media` names the image. It failed when the model
+never answered it: the next assistant message in the session stopped with `error` (the Orin unreachable:
+"Connection error."), or none came within the grace period. OpenClaw re-queues an unanswered message as text items
+("[Earlier unanswered user message...]"); those are retries of the same turn, not new ones.
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 ANSWERED = frozenset({"toolUse", "stop"})
-_REQUEST_RE = re.compile(r"^\[Image\]\nUser text:\n(?P<caption>.*?)\nDescription:\n(?P<ocr>.*)$", re.DOTALL)
+# A screenshot sent with no caption has no `User text:` part, and one OpenClaw read nothing from no `Description:`
+_REQUEST_RE = re.compile(r"^\[Image\](?:\nUser text:\n(?P<caption>.*?))?(?:\nDescription:\n(?P<ocr>.*))?$", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ def _screenshot(msg: Mapping[str, Any]) -> tuple[str, str, str, str] | None:
     media = [x for x in msg.get("__openclaw", {}).get("media", []) if x.get("kind") == "image" and x.get("path")]
     if not m or not media:
         return None
-    return content, m.group("caption"), m.group("ocr"), str(media[0]["path"])
+    return content, m.group("caption") or "", m.group("ocr") or "", str(media[0]["path"])
 
 
 def _chat(msg: Mapping[str, Any]) -> str:
