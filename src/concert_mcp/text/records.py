@@ -17,8 +17,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from concert_mcp.text.credit import CREATED_BY
 from concert_mcp.text.partiful import (
-    CREATED_BY,
     DOORS_PREFIX,
     EXPECTED_PREFIX,
     PARTIFUL_PREFIX,

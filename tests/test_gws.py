@@ -17,6 +17,7 @@ from fakes import FakeRunner
 PDT = timezone(timedelta(hours=-7))
 START = datetime(2026, 11, 14, 20, 30, tzinfo=PDT)
 END = START + timedelta(hours=2)
+CREDIT_HTML = '<a href="https://github.com/AriSweedler/concert-mcp">Created by github.com/AriSweedler/concert-mcp</a>'
 
 REFUSED = "Google Calendar refused the request. Admin: check `gws auth` on the host."
 KEYCHAIN = (
@@ -105,7 +106,7 @@ def test_insert_event_exact_argv_and_parsed_json(settings: Settings) -> None:
         "--location",
         "The Quarry, San Francisco",
         "--description",
-        "Doors: 7:30 PM<br>Opener: Zork.",  # the plain lines go to Google as HTML
+        f"Doors: 7:30 PM<br>Opener: Zork.<br><br>{CREDIT_HTML}",  # the plain lines go to Google as HTML
         "--attendee",
         "a@example.com",
         "--attendee",
@@ -121,7 +122,9 @@ def test_patch_event_passes_only_the_given_fields_as_json(settings: Settings) ->
     assert argv[:5] == [settings.gws_bin, "calendar", "events", "patch", "--params"]
     assert json.loads(argv[5]) == {"calendarId": "cal-concerts", "eventId": "e1"}
     assert argv[6] == "--json"
-    assert json.loads(argv[7]) == {"description": 'Doors: 7:30 PM<br><a href="https://x">Teaser playlist</a>'}
+    assert json.loads(argv[7]) == {
+        "description": f'Doors: 7:30 PM<br><a href="https://x">Teaser playlist</a><br><br>{CREDIT_HTML}'
+    }
     assert len(argv) == 8
 
 

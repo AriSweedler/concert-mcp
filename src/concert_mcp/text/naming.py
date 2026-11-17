@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from concert_mcp.text.credit import CREATED_BY
+
 # The house form for the Concerts folders (Teasers and Setlists alike): "YYYY-MM-DD | Artist".
 CONCERT_NAME = "{date} | {artist}"
 # An older dated name: "2026/11/14 - Artist", "2026-11-14 Artist", "2026-11-14 | Artist".
@@ -35,12 +37,11 @@ def topic_name(start: datetime, title: str, location: str) -> str:
 # are set apart by a dot and it ends with where the playlist came from, for whoever it is shared with. The name
 # already carries the artist and the date; the description says only what the name does not.
 SEPARATOR = " · "
-CREDIT = "Created by AriSweedler/concert-mcp"
 
 
 def teaser_description(artist: str, owner: str) -> str:
     """The teaser playlist's description: whose liked songs these are."""
-    return f"{owner}'s liked songs from {artist}{SEPARATOR}{CREDIT}"
+    return f"{owner}'s liked songs from {artist}{SEPARATOR}{CREATED_BY}"
 
 
 # The two playlists of one show share the name; the description's first word tells them apart. A setlist
@@ -53,7 +54,7 @@ SETLIST_LINK = "Setlist playlist: "  # the calendar event's line, not a playlist
 def setlist_description(setlistfm_url: str, read_date: str) -> str:
     """The setlist playlist's description: the page the songs came from and the day it was read. The page fills in
     over weeks, so the day moves forward each time the playlist is brought up to date."""
-    return f"{SETLIST_READ}{setlistfm_url} on {read_date}{SEPARATOR}{CREDIT}"
+    return f"{SETLIST_READ}{setlistfm_url} on {read_date}{SEPARATOR}{CREATED_BY}"
 
 
 def is_setlist_playlist(pl: Mapping[str, Any]) -> bool:

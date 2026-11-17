@@ -194,7 +194,8 @@ class GwsCalendar(Gws):
         description: PlainDescription | None,
         attendees: Sequence[str],
     ) -> dict[str, Any]:
-        """gws calendar +insert; the description goes to Google as HTML."""
+        """gws calendar +insert; the description goes to Google as HTML, and one is always sent, since even an
+        event with no lines carries the credit."""
         cmd = [
             "calendar",
             "+insert",
@@ -208,9 +209,9 @@ class GwsCalendar(Gws):
             end.isoformat(),
             "--location",
             location,
+            "--description",
+            to_html(description or PlainDescription("")),
         ]
-        if description:
-            cmd += ["--description", to_html(description)]
         for a in attendees:
             cmd += ["--attendee", str(a)]
         return _plain(self.json(*cmd))

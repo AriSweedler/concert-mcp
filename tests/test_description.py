@@ -39,21 +39,41 @@ MOVIE = from_lines(
 )
 
 
+CREDIT_HTML = '<a href="https://github.com/AriSweedler/concert-mcp">Created by github.com/AriSweedler/concert-mcp</a>'
+
+
 def test_a_link_line_is_an_anchor_with_the_label_as_its_text() -> None:
     html = to_html(from_lines(["Doors: 7:00 PM", f"Teaser playlist: {TEASER}"]))
-    assert html == f'Doors: 7:00 PM<br><a href="{TEASER}">Teaser playlist</a>'
+    assert html == f'Doors: 7:00 PM<br><a href="{TEASER}">Teaser playlist</a><br><br>{CREDIT_HTML}'
+
+
+def test_the_stored_form_ends_with_the_credit_and_the_plain_form_never_holds_it() -> None:
+    assert to_html(from_lines([])) == CREDIT_HTML
+    assert to_plain(HtmlDescription(f"Doors: 7:00 PM<br><br>{CREDIT_HTML}")) == "Doors: 7:00 PM"
+    # As a person left it in the editor: unlinked, mid-description, or twice.
+    typed = (
+        "Created by github.com/AriSweedler/concert-mcp<br>Doors: 7:00 PM<br><br>" + CREDIT_HTML + "<br>" + CREDIT_HTML
+    )
+    assert to_plain(HtmlDescription(typed)) == "Doors: 7:00 PM"
+    assert to_html(to_plain(HtmlDescription(typed))) == f"Doors: 7:00 PM<br><br>{CREDIT_HTML}"
 
 
 def test_only_a_line_that_is_one_url_becomes_a_link() -> None:
     two = "Opener setlist (recent): A https://a.example/1; B https://b.example/2"
-    assert to_html(from_lines([two, "Note: see https://x.example now"])) == f"{two}<br>Note: see https://x.example now"
+    assert (
+        to_html(from_lines([two, "Note: see https://x.example now"]))
+        == f"{two}<br>Note: see https://x.example now<br><br>{CREDIT_HTML}"
+    )
     assert is_link_line(f"Teaser playlist: {TEASER}") and is_link_line("Opener setlist (recent): https://a.example/1")
     assert not is_link_line(two) and not is_link_line("Doors: 7:00 PM") and not is_link_line(TEASER)
 
 
 def test_text_and_urls_are_escaped() -> None:
     html = to_html(from_lines(["Seats: 5 & 6 <GA>", "Setlist: https://s.example/p?a=1&b=2"]))
-    assert html == 'Seats: 5 &amp; 6 &lt;GA&gt;<br><a href="https://s.example/p?a=1&amp;b=2">Setlist</a>'
+    assert (
+        html
+        == f'Seats: 5 &amp; 6 &lt;GA&gt;<br><a href="https://s.example/p?a=1&amp;b=2">Setlist</a><br><br>{CREDIT_HTML}'
+    )
 
 
 @pytest.mark.parametrize("plain", [CONCERT, MOVIE, from_lines(["One", "", "Two"]), from_lines([])])

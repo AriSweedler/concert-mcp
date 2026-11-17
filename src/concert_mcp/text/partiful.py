@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from concert_mcp.text.credit import CREATED_BY
 from concert_mcp.text.venues import venue_key
 
 TICKETS_PREFIX = "Tickets: "
@@ -28,10 +29,6 @@ SETLISTFM_PREFIX = "setlist.fm: "
 SETLIST_PLAYLIST_PREFIX = "Setlist playlist: "
 DOORS_PREFIX = "Doors: "
 EXPECTED_PREFIX = "Expected: "
-# The description's last line. Partiful shows a description as plain text and turns an address in it into a link
-# (checked on a page, 2026-11-14: `[text](url)` stays as typed, `github.com/…` becomes a link), so the address is
-# the link text.
-CREATED_BY = "Created by github.com/AriSweedler/concert-mcp"
 EVENT_URL = "https://partiful.com/e/{id}"
 BUCKET = "getpartiful.appspot.com"
 STORAGE = f"https://firebasestorage.googleapis.com/v0/b/{BUCKET}/o"
@@ -134,7 +131,9 @@ def invite_title(artist: str, venue: str, start: datetime) -> str:
 
 def invite_description(lines: Sequence[str], start: datetime) -> str:
     """'Doors 7:30, show 8:30' from the event's doors time and its start ('Show 8:30' when no doors time is known),
-    then, after a blank line, the line that says what made the page.
+    then, after a blank line, the line that says what made the page. Partiful shows a description as plain text and
+    turns an address in it into a link (checked on a page, 2026-11-14: `[text](url)` stays as typed, `github.com/…`
+    becomes a link), so the address is the link text.
 
     The doors time is the ticket's own (`Doors: 7:30 PM`, `Doors: 7 PM`), else the announced one the lineup step
     found (`Expected: doors 6:00 PM, …`).

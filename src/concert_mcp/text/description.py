@@ -18,11 +18,17 @@ from html import escape
 from html.parser import HTMLParser
 from typing import Any, NewType
 
+from concert_mcp.text.credit import CREATED_BY, PROJECT_URL
+
 PlainDescription = NewType("PlainDescription", str)
 HtmlDescription = NewType("HtmlDescription", str)
 
 # `Label: https://one.url` and nothing else on the line: the label becomes the link text.
 _LINK_LINE_RE = re.compile(r"^(?P<label>[^:\n]+(?::[^ \n][^:\n]*)*): (?P<url>https?://\S+)$")
+# The credit is the stored form's alone: `to_html` adds it and `to_plain` drops it (linked, or as a person left it
+# in plain text), so a flow never reads it as a fact, never orders it among the links and never writes it twice.
+CREDIT_LINE = f"{CREATED_BY}: {PROJECT_URL}"
+_CREDIT_FORMS = frozenset({CREDIT_LINE, CREATED_BY})
 _BREAKS = frozenset({"br"})
 _BLOCKS = frozenset({"p", "div", "li", "ul", "ol", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"})
 
@@ -55,8 +61,10 @@ def _line_html(line: str) -> str:
 
 
 def to_html(plain: PlainDescription) -> HtmlDescription:
-    """The form Google Calendar stores: link lines as anchors, the rest escaped, lines joined by <br>."""
-    return HtmlDescription("<br>".join(_line_html(ln) for ln in plain.split("\n")))
+    """The form Google Calendar stores: link lines as anchors, the rest escaped, lines joined by <br>, and last,
+    after a blank line, the credit as a link to the project."""
+    lines = [*plain.split("\n"), "", CREDIT_LINE] if plain else [CREDIT_LINE]
+    return HtmlDescription("<br>".join(_line_html(ln) for ln in lines))
 
 
 class _Lines(HTMLParser):
@@ -127,7 +135,7 @@ def to_plain(stored: HtmlDescription | None) -> PlainDescription:
     parser = _Lines()
     parser.feed(stored)
     parser.close()
-    lines = [_line_plain(parts) for parts in parser.lines]
+    lines = [ln for ln in (_line_plain(parts) for parts in parser.lines) if ln not in _CREDIT_FORMS]
     while lines and not lines[-1]:
         lines.pop()
     return from_lines(lines)
