@@ -36,7 +36,4 @@ def test_naming() -> None:
     assert topic_name(start, "Zed Fox", "  The Quarry ") == "2026-11-14 | Zed Fox | The Quarry"
 
     # teaser_description:
-    assert (
-        teaser_description("Zed Fox", "Ari")
-        == "Ari's liked songs from Zed Fox · Created by github.com/AriSweedler/concert-mcp"
-    )
+    assert teaser_description("Zed Fox", "Ari") == "Ari's liked songs from Zed Fox · Created by AriSweedler/concert-mcp"

@@ -103,12 +103,9 @@ def today(svc: Services) -> str:
 def test_the_descriptions_say_what_the_name_does_not() -> None:
     # One line (Spotify refuses a newline), no link to the other playlist (it cannot be clicked), the repo last.
     assert setlist_description(PAGE_URL, "2026-11-20") == (
-        f"Setlist, according to {PAGE_URL} on 2026-11-20 · Created by github.com/AriSweedler/concert-mcp"
+        f"Setlist, according to {PAGE_URL} on 2026-11-20 · Created by AriSweedler/concert-mcp"
     )
-    assert (
-        teaser_description(ARTIST, "Ari")
-        == "Ari's liked songs from Zed Fox · Created by github.com/AriSweedler/concert-mcp"
-    )
+    assert teaser_description(ARTIST, "Ari") == "Ari's liked songs from Zed Fox · Created by AriSweedler/concert-mcp"
     # Both playlists of a show share a name; the description's start tells them apart, in either form.
     assert is_setlist_playlist({"description": setlist_description(PAGE_URL, "2026-11-20")})
     assert is_setlist_playlist({"description": OLD_SETLIST})

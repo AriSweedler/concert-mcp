@@ -18,7 +18,7 @@ from html import escape
 from html.parser import HTMLParser
 from typing import Any, NewType
 
-from concert_mcp.text.credit import CREATED_BY, PROJECT_URL
+from concert_mcp.text.credit import CREATED_BY, CREATED_BY_SHORT, PROJECT_URL
 
 PlainDescription = NewType("PlainDescription", str)
 HtmlDescription = NewType("HtmlDescription", str)
@@ -26,9 +26,10 @@ HtmlDescription = NewType("HtmlDescription", str)
 # `Label: https://one.url` and nothing else on the line: the label becomes the link text.
 _LINK_LINE_RE = re.compile(r"^(?P<label>[^:\n]+(?::[^ \n][^:\n]*)*): (?P<url>https?://\S+)$")
 # The credit is the stored form's alone: `to_html` adds it and `to_plain` drops it (linked, or as a person left it
-# in plain text), so a flow never reads it as a fact, never orders it among the links and never writes it twice.
-CREDIT_LINE = f"{CREATED_BY}: {PROJECT_URL}"
-_CREDIT_FORMS = frozenset({CREDIT_LINE, CREATED_BY})
+# in plain text, in either form), so a flow never reads it as a fact, never orders it among the links and never
+# writes it twice. The link text is the short form: the link already says where it goes.
+CREDIT_LINE = f"{CREATED_BY_SHORT}: {PROJECT_URL}"
+_CREDIT_FORMS = frozenset({CREDIT_LINE, CREATED_BY_SHORT, f"{CREATED_BY}: {PROJECT_URL}", CREATED_BY})
 _BREAKS = frozenset({"br"})
 _BLOCKS = frozenset({"p", "div", "li", "ul", "ol", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"})
 

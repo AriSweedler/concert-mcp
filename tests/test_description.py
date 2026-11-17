@@ -39,7 +39,10 @@ MOVIE = from_lines(
 )
 
 
-CREDIT_HTML = '<a href="https://github.com/AriSweedler/concert-mcp">Created by github.com/AriSweedler/concert-mcp</a>'
+CREDIT_HTML = '<a href="https://github.com/AriSweedler/concert-mcp">Created by AriSweedler/concert-mcp</a>'
+LONG_CREDIT_HTML = (
+    '<a href="https://github.com/AriSweedler/concert-mcp">Created by github.com/AriSweedler/concert-mcp</a>'
+)
 
 
 def test_a_link_line_is_an_anchor_with_the_label_as_its_text() -> None:
@@ -50,9 +53,14 @@ def test_a_link_line_is_an_anchor_with_the_label_as_its_text() -> None:
 def test_the_stored_form_ends_with_the_credit_and_the_plain_form_never_holds_it() -> None:
     assert to_html(from_lines([])) == CREDIT_HTML
     assert to_plain(HtmlDescription(f"Doors: 7:00 PM<br><br>{CREDIT_HTML}")) == "Doors: 7:00 PM"
-    # As a person left it in the editor: unlinked, mid-description, or twice.
+    # As a person left it in the editor (unlinked, mid-description, twice), or in the long form.
     typed = (
-        "Created by github.com/AriSweedler/concert-mcp<br>Doors: 7:00 PM<br><br>" + CREDIT_HTML + "<br>" + CREDIT_HTML
+        "Created by github.com/AriSweedler/concert-mcp<br>Created by AriSweedler/concert-mcp<br>Doors: 7:00 PM<br><br>"
+        + LONG_CREDIT_HTML
+        + "<br>"
+        + CREDIT_HTML
+        + "<br>"
+        + CREDIT_HTML
     )
     assert to_plain(HtmlDescription(typed)) == "Doors: 7:00 PM"
     assert to_html(to_plain(HtmlDescription(typed))) == f"Doors: 7:00 PM<br><br>{CREDIT_HTML}"

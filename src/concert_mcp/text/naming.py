@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from concert_mcp.text.credit import CREATED_BY
+from concert_mcp.text.credit import CREATED_BY_SHORT
 
 # The house form for the Concerts folders (Teasers and Setlists alike): "YYYY-MM-DD | Artist".
 CONCERT_NAME = "{date} | {artist}"
@@ -41,7 +41,7 @@ SEPARATOR = " · "
 
 def teaser_description(artist: str, owner: str) -> str:
     """The teaser playlist's description: whose liked songs these are."""
-    return f"{owner}'s liked songs from {artist}{SEPARATOR}{CREATED_BY}"
+    return f"{owner}'s liked songs from {artist}{SEPARATOR}{CREATED_BY_SHORT}"
 
 
 # The two playlists of one show share the name; the description's first word tells them apart. A setlist
@@ -54,7 +54,7 @@ SETLIST_LINK = "Setlist playlist: "  # the calendar event's line, not a playlist
 def setlist_description(setlistfm_url: str, read_date: str) -> str:
     """The setlist playlist's description: the page the songs came from and the day it was read. The page fills in
     over weeks, so the day moves forward each time the playlist is brought up to date."""
-    return f"{SETLIST_READ}{setlistfm_url} on {read_date}{SEPARATOR}{CREATED_BY}"
+    return f"{SETLIST_READ}{setlistfm_url} on {read_date}{SEPARATOR}{CREATED_BY_SHORT}"
 
 
 def is_setlist_playlist(pl: Mapping[str, Any]) -> bool:

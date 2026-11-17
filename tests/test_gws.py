@@ -17,7 +17,7 @@ from fakes import FakeRunner
 PDT = timezone(timedelta(hours=-7))
 START = datetime(2026, 11, 14, 20, 30, tzinfo=PDT)
 END = START + timedelta(hours=2)
-CREDIT_HTML = '<a href="https://github.com/AriSweedler/concert-mcp">Created by github.com/AriSweedler/concert-mcp</a>'
+CREDIT_HTML = '<a href="https://github.com/AriSweedler/concert-mcp">Created by AriSweedler/concert-mcp</a>'
 
 REFUSED = "Google Calendar refused the request. Admin: check `gws auth` on the host."
 KEYCHAIN = (
